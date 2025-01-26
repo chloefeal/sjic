@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      args:
+        PYTHON_VERSION: "3.10"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URL=sqlite:///app.db
+      - PYTHONUNBUFFERED=1  # 确保Python输出不被缓存
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]  # 如果有GPU可用
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+
+  db:
+    image: sqlite:latest
+    volumes:
+      - ./data:/data
+
+volumes:
+  postgres_data: 

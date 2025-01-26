@@ -1,0 +1,43 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import Layout from './components/Layout';
+import VideoStreams from './pages/VideoStreams';
+import Models from './pages/Models';
+import AlgorithmSettings from './pages/AlgorithmSettings';
+import Training from './pages/Training';
+import Alerts from './pages/Alerts';
+
+const theme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+  },
+});
+
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<VideoStreams />} />
+            <Route path="/models" element={<Models />} />
+            <Route path="/settings" element={<AlgorithmSettings />} />
+            <Route path="/training" element={<Training />} />
+            <Route path="/alerts" element={<Alerts />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </ThemeProvider>
+  );
+}
+
+export default App; 
