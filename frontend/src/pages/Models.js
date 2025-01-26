@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Card, CardContent, Typography, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material';
+import { 
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
+  Paper, IconButton, Box
+} from '@mui/material';
 import { Delete, Upload } from '@mui/icons-material';
 import axios from '../utils/axios';
 
@@ -16,7 +20,7 @@ function Models() {
   const fetchModels = async () => {
     try {
       const response = await axios.get('/api/models');
-      setModels(response || []);  // 确保始终是数组
+      setModels(response || []);
       console.log('Models:', response);
     } catch (error) {
       console.error('Error fetching models:', error);
@@ -36,7 +40,7 @@ function Models() {
     try {
       await axios.post('/api/models/upload', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'  // 重要：设置正确的 Content-Type
+          'Content-Type': 'multipart/form-data'
         }
       });
       setOpenUpload(false);
@@ -48,37 +52,61 @@ function Models() {
     }
   };
 
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(`/api/models/${id}`);
+      fetchModels();
+    } catch (error) {
+      console.error('Error deleting model:', error);
+    }
+  };
+
   return (
-    <>
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Button
-            variant="contained"
-            startIcon={<Upload />}
-            onClick={() => setOpenUpload(true)}
-          >
-            上传模型
-          </Button>
-        </Grid>
-        {models.map((model) => (
-          <Grid item xs={12} md={6} lg={4} key={model.id}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6">{model.name}</Typography>
-                <Typography variant="body2" color="textSecondary">
-                  {model.description}
-                </Typography>
-                <IconButton
-                  color="error"
-                  onClick={() => {/* 删除模型 */}}
-                >
-                  <Delete />
-                </IconButton>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+    <Box>
+      <Box sx={{ mb: 2 }}>
+        <Button
+          variant="contained"
+          startIcon={<Upload />}
+          onClick={() => setOpenUpload(true)}
+        >
+          上传模型
+        </Button>
+      </Box>
+
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>ID</TableCell>
+              <TableCell>名称</TableCell>
+              <TableCell>路径</TableCell>
+              <TableCell>描述</TableCell>
+              <TableCell>创建时间</TableCell>
+              <TableCell>操作</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {models.map((model) => (
+              <TableRow key={model.id}>
+                <TableCell>{model.id}</TableCell>
+                <TableCell>{model.name}</TableCell>
+                <TableCell>{model.path}</TableCell>
+                <TableCell>{model.description}</TableCell>
+                <TableCell>{new Date(model.created_at).toLocaleString()}</TableCell>
+                <TableCell>
+                  <IconButton
+                    color="error"
+                    onClick={() => handleDelete(model.id)}
+                    title="删除"
+                  >
+                    <Delete />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       <Dialog open={openUpload} onClose={() => setOpenUpload(false)}>
         <DialogTitle>上传模型</DialogTitle>
@@ -105,7 +133,7 @@ function Models() {
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Box>
   );
 }
 
