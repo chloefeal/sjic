@@ -4,11 +4,11 @@ class Settings(db.Model):
     __tablename__ = 'settings'
     
     id = db.Column(db.Integer, primary_key=True)
-    confidence_threshold = db.Column(db.Float, default=0.5)
-    alert_interval = db.Column(db.Integer, default=5)  # 告警间隔（秒）
-    detection_regions = db.Column(db.JSON)  # 检测区域设置
-    notification_enabled = db.Column(db.Boolean, default=True)
-    detection_model_id = db.Column(db.Integer, db.ForeignKey('detection_models.id'))
+    confidence = db.Column(db.Float, default=0.5)
+    alertThreshold = db.Column(db.Integer, default=5)  # 告警间隔（秒）
+    regions = db.Column(db.JSON)  # 检测区域设置
+    notificationEnabled = db.Column(db.Boolean, default=True)
+    modelId = db.Column(db.Integer, db.ForeignKey('detection_models.id'))
 
     def to_dict(self):
         return {
