@@ -203,6 +203,14 @@ def update_settings(setting_id):
     db.session.commit()
     return jsonify(setting.to_dict())
 
+@app.route('/api/settings/<int:setting_id>', methods=['DELETE'])
+def delete_settings(setting_id):
+    """删除算法设置"""
+    setting = Settings.query.get_or_404(setting_id)
+    db.session.delete(setting)
+    db.session.commit()
+    return '', 204
+
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
     """获取系统日志"""
