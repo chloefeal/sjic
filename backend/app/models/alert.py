@@ -1,11 +1,11 @@
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from app import db
 
 class Alert(db.Model):
     __tablename__ = 'alerts'
     
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     camera_id = db.Column(db.Integer, db.ForeignKey('cameras.id'), nullable=False)
     alert_type = db.Column(db.String(50), nullable=False)
     confidence = db.Column(db.Float)
