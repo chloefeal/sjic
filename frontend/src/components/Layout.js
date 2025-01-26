@@ -6,9 +6,9 @@ import { Videocam, ModelTraining, Settings, Build, NotificationsActive } from '@
 const drawerWidth = 240;
 
 const menuItems = [
-  { text: '视频流', icon: <Videocam />, path: '/' },
+  { text: '视频流', icon: <Videocam />, path: '/streams' },
   { text: '模型管理', icon: <ModelTraining />, path: '/models' },
-  { text: '算法设置', icon: <Settings />, path: '/settings' },
+  { text: '算法设置', icon: <Settings />, path: '/algorithm-settings' },
   { text: '模型训练', icon: <Build />, path: '/training' },
   { text: '告警记录', icon: <NotificationsActive />, path: '/alerts' },
 ];

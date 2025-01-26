@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout';
@@ -28,9 +28,10 @@ function App() {
       <Router>
         <Layout>
           <Routes>
-            <Route path="/" element={<VideoStreams />} />
+            <Route path="/" element={<Navigate to="/streams" />} />
+            <Route path="/streams" element={<VideoStreams />} />
             <Route path="/models" element={<Models />} />
-            <Route path="/settings" element={<AlgorithmSettings />} />
+            <Route path="/algorithm-settings" element={<AlgorithmSettings />} />
             <Route path="/training" element={<Training />} />
             <Route path="/alerts" element={<Alerts />} />
           </Routes>
