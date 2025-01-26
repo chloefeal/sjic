@@ -1,154 +1,238 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Card, CardContent, Typography, Button, FormControl, InputLabel, Select, MenuItem, TextField, Box, Slider } from '@mui/material';
-import { Save } from '@mui/icons-material';
+import { 
+  Grid, Card, CardContent, Typography, Button, Dialog, DialogTitle, 
+  DialogContent, DialogActions, TextField, FormControl, InputLabel, 
+  Select, MenuItem, Table, TableBody, TableCell, TableContainer, 
+  TableHead, TableRow, Paper, IconButton 
+} from '@mui/material';
+import { Add, Edit, Delete } from '@mui/icons-material';
 import axios from '../utils/axios';
 
 function AlgorithmSettings() {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState([]);
+  const [models, setModels] = useState([]);
+  const [cameras, setCameras] = useState([]);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [editingSettings, setEditingSettings] = useState(null);
+  const [formData, setFormData] = useState({
     modelId: '',
     cameraId: '',
     confidence: 0.5,
-    regions: [],
     alertThreshold: 3,
+    regions: [],
+    notificationEnabled: true
   });
 
-  const [models, setModels] = useState([]);
-  const [cameras, setCameras] = useState([]);
-  const [drawing, setDrawing] = useState(false);
-
   useEffect(() => {
-    fetchModels();
-    fetchCameras();
-    fetchSettings();
+    fetchAll();
   }, []);
 
-  const fetchModels = async () => {
+  const fetchAll = async () => {
     try {
-      const response = await axios.get('/api/models');
-      setModels(response || []);
+      const [settingsRes, modelsRes, camerasRes] = await Promise.all([
+        axios.get('/api/settings'),
+        axios.get('/api/models'),
+        axios.get('/api/cameras')
+      ]);
+      setSettings(settingsRes || []);
+      setModels(modelsRes || []);
+      setCameras(camerasRes || []);
     } catch (error) {
-      console.error('Error fetching models:', error);
+      console.error('Error fetching data:', error);
     }
   };
 
-  const fetchCameras = async () => {
+  const handleCreate = async () => {
     try {
-      const response = await axios.get('/api/cameras');
-      setCameras(response || []);
+      await axios.post('/api/settings', formData);
+      setOpenDialog(false);
+      resetForm();
+      fetchAll();
     } catch (error) {
-      console.error('Error fetching cameras:', error);
+      console.error('Error creating settings:', error);
     }
   };
 
-  const fetchSettings = async () => {
+  const handleUpdate = async () => {
     try {
-      const response = await axios.get('/api/settings');
-      if (response) {
-        setSettings(prev => ({
-          ...prev,
-          ...response
-        }));
-      }
+      await axios.put(`/api/settings/${editingSettings.id}`, formData);
+      setOpenDialog(false);
+      resetForm();
+      fetchAll();
     } catch (error) {
-      console.error('Error fetching settings:', error);
+      console.error('Error updating settings:', error);
     }
   };
 
-  const handleSave = async () => {
+  const handleDelete = async (id) => {
     try {
-      await axios.put('/api/settings', settings);
+      await axios.delete(`/api/settings/${id}`);
+      fetchAll();
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error('Error deleting settings:', error);
     }
+  };
+
+  const handleEdit = (setting) => {
+    setEditingSettings(setting);
+    setFormData({
+      modelId: setting.modelId || '',
+      cameraId: setting.cameraId || '',
+      confidence: setting.confidence || 0.5,
+      alertThreshold: setting.alertThreshold || 3,
+      regions: setting.regions || [],
+      notificationEnabled: setting.notificationEnabled
+    });
+    setOpenDialog(true);
+  };
+
+  const resetForm = () => {
+    setEditingSettings(null);
+    setFormData({
+      modelId: '',
+      cameraId: '',
+      confidence: 0.5,
+      alertThreshold: 3,
+      regions: [],
+      notificationEnabled: true
+    });
   };
 
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              检测设置
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
-                  <InputLabel>选择模型</InputLabel>
-                  <Select
-                    value={settings.modelId || ''}
-                    onChange={(e) => setSettings({ ...settings, modelId: e.target.value })}
-                  >
-                    {models.map((model) => (
-                      <MenuItem key={model.id} value={model.id}>
-                        {model.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
-                  <InputLabel>选择摄像头</InputLabel>
-                  <Select
-                    value={settings.cameraId || ''}
-                    onChange={(e) => setSettings({ ...settings, cameraId: e.target.value })}
-                  >
-                    {cameras.map((camera) => (
-                      <MenuItem key={camera.id} value={camera.id}>
-                        {camera.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="置信度阈值"
-                  type="number"
-                  value={settings.confidence}
-                  onChange={(e) => setSettings({ ...settings, confidence: parseFloat(e.target.value) })}
-                  inputProps={{ step: 0.1, min: 0, max: 1 }}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="告警阈值"
-                  type="number"
-                  value={settings.alertThreshold}
-                  onChange={(e) => setSettings({ ...settings, alertThreshold: parseInt(e.target.value) })}
-                  inputProps={{ min: 1 }}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <Button variant="contained" color="primary" onClick={handleSave}>
-                  保存设置
-                </Button>
-              </Grid>
+        <Button
+          variant="contained"
+          startIcon={<Add />}
+          onClick={() => {
+            resetForm();
+            setOpenDialog(true);
+          }}
+          sx={{ mb: 2 }}
+        >
+          添加设置
+        </Button>
+
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>模型</TableCell>
+                <TableCell>摄像头</TableCell>
+                <TableCell>置信度</TableCell>
+                <TableCell>告警阈值</TableCell>
+                <TableCell>操作</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {settings.map((setting) => (
+                <TableRow key={setting.id}>
+                  <TableCell>{setting.id}</TableCell>
+                  <TableCell>
+                    {models.find(m => m.id === setting.modelId)?.name || '-'}
+                  </TableCell>
+                  <TableCell>
+                    {cameras.find(c => c.id === setting.cameraId)?.name || '-'}
+                  </TableCell>
+                  <TableCell>{setting.confidence}</TableCell>
+                  <TableCell>{setting.alertThreshold}</TableCell>
+                  <TableCell>
+                    <IconButton
+                      color="primary"
+                      onClick={() => handleEdit(setting)}
+                      title="编辑"
+                    >
+                      <Edit />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      onClick={() => handleDelete(setting.id)}
+                      title="删除"
+                    >
+                      <Delete />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Grid>
+
+      <Dialog 
+        open={openDialog} 
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {editingSettings ? '编辑设置' : '添加设置'}
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>选择模型</InputLabel>
+                <Select
+                  value={formData.modelId}
+                  onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
+                >
+                  {models.map((model) => (
+                    <MenuItem key={model.id} value={model.id}>
+                      {model.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
-          </CardContent>
-        </Card>
-      </Grid>
-      <Grid item xs={12}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              区域设置
-            </Typography>
-            <Box
-              sx={{
-                width: '100%',
-                height: '400px',
-                border: '1px solid #ccc',
-                position: 'relative',
-              }}
-            >
-              {/* 这里添加区域绘制功能 */}
-            </Box>
-          </CardContent>
-        </Card>
-      </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth>
+                <InputLabel>选择摄像头</InputLabel>
+                <Select
+                  value={formData.cameraId}
+                  onChange={(e) => setFormData({ ...formData, cameraId: e.target.value })}
+                >
+                  {cameras.map((camera) => (
+                    <MenuItem key={camera.id} value={camera.id}>
+                      {camera.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="置信度阈值"
+                type="number"
+                value={formData.confidence}
+                onChange={(e) => setFormData({ ...formData, confidence: parseFloat(e.target.value) })}
+                inputProps={{ step: 0.1, min: 0, max: 1 }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="告警阈值"
+                type="number"
+                value={formData.alertThreshold}
+                onChange={(e) => setFormData({ ...formData, alertThreshold: parseInt(e.target.value) })}
+                inputProps={{ min: 1 }}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDialog(false)}>取消</Button>
+          <Button 
+            onClick={editingSettings ? handleUpdate : handleCreate}
+            color="primary"
+          >
+            {editingSettings ? '更新' : '添加'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Grid>
   );
 }
