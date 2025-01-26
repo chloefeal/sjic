@@ -93,7 +93,7 @@ def start_detection():
     """启动检测"""
     data = request.json
     try:
-        detector_service.start_stream(
+        detector_service.start(
             camera_id=data['camera_id'],
             model_id=data['model_id'],
             settings=data.get('settings', {})
@@ -107,7 +107,7 @@ def stop_detection():
     """停止检测"""
     data = request.json
     try:
-        detector_service.stop_stream(data['camera_id'])
+        detector_service.stop(data['camera_id'])
         return jsonify({'message': 'Detection stopped'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 400
