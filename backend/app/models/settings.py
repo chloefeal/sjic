@@ -9,14 +9,16 @@ class Settings(db.Model):
     regions = db.Column(db.JSON)  # 检测区域设置
     notificationEnabled = db.Column(db.Boolean, default=True)
     modelId = db.Column(db.Integer, db.ForeignKey('detection_models.id'))
+    cameraId = db.Column(db.Integer, db.ForeignKey('cameras.id'))
 
     def to_dict(self):
         return {
             'id': self.id,
-            'confidence': self.confidence_threshold,
-            'alertThreshold': self.alert_interval,
-            'regions': self.detection_regions,
-            'notificationEnabled': self.notification_enabled,
-            'modelId': self.detection_model_id
+            'confidence': self.confidence,
+            'alertThreshold': self.alertThreshold,
+            'regions': self.regions,
+            'notificationEnabled': self.notificationEnabled,
+            'modelId': self.modelId,
+            'cameraId': self.cameraId
         } 
     
