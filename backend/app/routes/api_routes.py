@@ -179,29 +179,29 @@ def internal_error(error):
 
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
-    """获取系统设置"""
-    settings = Settings.query.first()
-    if not settings:
-        settings = Settings()  # 创建默认设置
-        db.session.add(settings)
-        db.session.commit()
-    return jsonify(settings.to_dict())
+    """获取算法设置"""
+    settings = Settings.query.all()
+    return jsonify([setting.to_dict() for setting in settings])
 
-@app.route('/api/settings', methods=['PUT'])
-def update_settings():
-    """更新系统设置"""
+@app.route('/api/settings', methods=['POST'])
+def create_settings():
+    """创建算法设置"""
     data = request.json
-    settings = Settings.query.first()
-    if not settings:
-        settings = Settings()
-        db.session.add(settings)
-    
-    for key, value in data.items():
-        if hasattr(settings, key):
-            setattr(settings, key, value)
-    
+    settings = Settings(**data)
+    db.session.add(settings)
     db.session.commit()
-    return jsonify(settings.to_dict())
+    return jsonify(settings.to_dict()), 201
+
+@app.route('/api/settings/<int:setting_id>', methods=['PUT'])
+def update_settings(setting_id):
+    """更新算法设置"""
+    data = request.json
+    setting = Settings.query.get_or_404(setting_id)
+    for key, value in data.items():
+        if hasattr(setting, key):
+            setattr(setting, key, value)
+    db.session.commit()
+    return jsonify(setting.to_dict())
 
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
