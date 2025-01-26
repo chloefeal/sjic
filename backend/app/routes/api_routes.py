@@ -4,6 +4,8 @@ from app.models import Alert, Camera, DetectionModel
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
 from app.models import Settings, Log
+import os
+from pathlib import Path
 
 # 初始化服务
 detector_service = DetectorService()
@@ -56,14 +58,23 @@ def upload_model():
     name = request.form.get('name', file.filename)
     
     try:
+        # 确保模型目录存在
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models')
+        Path(model_dir).mkdir(parents=True, exist_ok=True)
+        
+        # 保存文件
+        file_path = os.path.join(model_dir, file.filename)
+        file.save(file_path)
+        
+        # 创建模型记录
         model = DetectionModel(
             name=name,
             path=file.filename,
             description=request.form.get('description', '')
         )
-        file.save(f'models/{file.filename}')
         db.session.add(model)
         db.session.commit()
+        
         return jsonify(model.to_dict()), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 400
