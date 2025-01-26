@@ -5,7 +5,7 @@ import {
   Select, MenuItem, Table, TableBody, TableCell, TableContainer, 
   TableHead, TableRow, Paper, IconButton 
 } from '@mui/material';
-import { Add, Edit, Delete } from '@mui/icons-material';
+import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
 
 function AlgorithmSettings() {
@@ -22,6 +22,7 @@ function AlgorithmSettings() {
     regions: [],
     notificationEnabled: true
   });
+  const [runningSettings, setRunningSettings] = useState(new Set());
 
   useEffect(() => {
     fetchAll();
@@ -98,6 +99,39 @@ function AlgorithmSettings() {
     });
   };
 
+  const handleStartDetection = async (setting) => {
+    try {
+      await axios.post('/api/detection/start', {
+        camera_id: setting.cameraId,
+        model_id: setting.modelId,
+        settings: {
+          confidence: setting.confidence,
+          alert_threshold: setting.alertThreshold,
+          regions: setting.regions,
+          notification_enabled: setting.notificationEnabled
+        }
+      });
+      setRunningSettings(prev => new Set([...prev, setting.id]));
+    } catch (error) {
+      console.error('Error starting detection:', error);
+    }
+  };
+
+  const handleStopDetection = async (setting) => {
+    try {
+      await axios.post('/api/detection/stop', {
+        camera_id: setting.cameraId
+      });
+      setRunningSettings(prev => {
+        const next = new Set(prev);
+        next.delete(setting.id);
+        return next;
+      });
+    } catch (error) {
+      console.error('Error stopping detection:', error);
+    }
+  };
+
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
@@ -122,6 +156,7 @@ function AlgorithmSettings() {
                 <TableCell>摄像头</TableCell>
                 <TableCell>置信度</TableCell>
                 <TableCell>告警阈值</TableCell>
+                <TableCell>状态</TableCell>
                 <TableCell>操作</TableCell>
               </TableRow>
             </TableHead>
@@ -138,10 +173,14 @@ function AlgorithmSettings() {
                   <TableCell>{setting.confidence}</TableCell>
                   <TableCell>{setting.alertThreshold}</TableCell>
                   <TableCell>
+                    {runningSettings.has(setting.id) ? '运行中' : '已停止'}
+                  </TableCell>
+                  <TableCell>
                     <IconButton
                       color="primary"
                       onClick={() => handleEdit(setting)}
                       title="编辑"
+                      disabled={runningSettings.has(setting.id)}
                     >
                       <Edit />
                     </IconButton>
@@ -149,9 +188,27 @@ function AlgorithmSettings() {
                       color="error"
                       onClick={() => handleDelete(setting.id)}
                       title="删除"
+                      disabled={runningSettings.has(setting.id)}
                     >
                       <Delete />
                     </IconButton>
+                    {!runningSettings.has(setting.id) ? (
+                      <IconButton
+                        color="success"
+                        onClick={() => handleStartDetection(setting)}
+                        title="开始推理"
+                      >
+                        <PlayArrow />
+                      </IconButton>
+                    ) : (
+                      <IconButton
+                        color="warning"
+                        onClick={() => handleStopDetection(setting)}
+                        title="停止推理"
+                      >
+                        <Stop />
+                      </IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
