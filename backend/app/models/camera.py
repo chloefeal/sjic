@@ -18,4 +18,7 @@ class Camera(db.Model):
             'url': self.url,
             'status': self.status,
             'created_at': self.created_at.isoformat()
-        } 
+        }
+
+    def get_rtsp_url(self):
+        return self.url
