@@ -82,7 +82,7 @@ run.bat backend
 run.bat frontend
 ```
 
-访问 http://localhost:3000 打开系统界面
+访问 http://localhost:38880 打开系统界面
 
 ## 项目结构
 

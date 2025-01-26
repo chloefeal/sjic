@@ -17,4 +17,8 @@ class Config:
     LOG_FOLDER = 'logs'
     
     # 区域配置存储
-    REGION_CONFIG_PATH = 'data/regions.json' 
+    REGION_CONFIG_PATH = 'data/regions.json'
+    
+    # 端口配置
+    #FRONTEND_PORT = 38880
+    BACKEND_PORT = 38881 
