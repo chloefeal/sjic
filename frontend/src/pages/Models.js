@@ -94,7 +94,6 @@ function Models() {
           <input
             type="file"
             accept=".pt,.pth"
-            value={modelFile}
             onChange={(e) => setModelFile(e.target.files[0])}
             style={{ marginTop: '16px' }}
           />
