@@ -25,8 +25,7 @@ function AlgorithmSettings() {
   const fetchModels = async () => {
     try {
       const response = await axios.get('/api/models');
-      setModels(response || []);  // 确保始终是数组
-      console.log('Models:', response);
+      setModels(response || []);
     } catch (error) {
       console.error('Error fetching models:', error);
     }
@@ -35,7 +34,7 @@ function AlgorithmSettings() {
   const fetchCameras = async () => {
     try {
       const response = await axios.get('/api/cameras');
-      setCameras(response.data);
+      setCameras(response || []);
     } catch (error) {
       console.error('Error fetching cameras:', error);
     }
@@ -44,7 +43,12 @@ function AlgorithmSettings() {
   const fetchSettings = async () => {
     try {
       const response = await axios.get('/api/settings');
-      setSettings(response.data);
+      if (response) {
+        setSettings(prev => ({
+          ...prev,
+          ...response
+        }));
+      }
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
@@ -52,7 +56,7 @@ function AlgorithmSettings() {
 
   const handleSave = async () => {
     try {
-      await axios.post('/api/settings', settings);
+      await axios.put('/api/settings', settings);
     } catch (error) {
       console.error('Error saving settings:', error);
     }
@@ -71,7 +75,7 @@ function AlgorithmSettings() {
                 <FormControl fullWidth>
                   <InputLabel>选择模型</InputLabel>
                   <Select
-                    value={settings.modelId}
+                    value={settings.modelId || ''}
                     onChange={(e) => setSettings({ ...settings, modelId: e.target.value })}
                   >
                     {models.map((model) => (
@@ -86,7 +90,7 @@ function AlgorithmSettings() {
                 <FormControl fullWidth>
                   <InputLabel>选择摄像头</InputLabel>
                   <Select
-                    value={settings.cameraId}
+                    value={settings.cameraId || ''}
                     onChange={(e) => setSettings({ ...settings, cameraId: e.target.value })}
                   >
                     {cameras.map((camera) => (
@@ -97,31 +101,30 @@ function AlgorithmSettings() {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12}>
-                <Typography gutterBottom>
-                  置信度阈值: {settings.confidence}
-                </Typography>
-                <Slider
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="置信度阈值"
+                  type="number"
                   value={settings.confidence}
-                  onChange={(e, newValue) => setSettings({ ...settings, confidence: newValue })}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  valueLabelDisplay="auto"
+                  onChange={(e) => setSettings({ ...settings, confidence: parseFloat(e.target.value) })}
+                  inputProps={{ step: 0.1, min: 0, max: 1 }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="告警阈值"
+                  type="number"
+                  value={settings.alertThreshold}
+                  onChange={(e) => setSettings({ ...settings, alertThreshold: parseInt(e.target.value) })}
+                  inputProps={{ min: 1 }}
                 />
               </Grid>
               <Grid item xs={12}>
-                <Typography gutterBottom>
-                  告警阈值（秒）: {settings.alertThreshold}
-                </Typography>
-                <Slider
-                  value={settings.alertThreshold}
-                  onChange={(e, newValue) => setSettings({ ...settings, alertThreshold: newValue })}
-                  min={1}
-                  max={10}
-                  step={1}
-                  valueLabelDisplay="auto"
-                />
+                <Button variant="contained" color="primary" onClick={handleSave}>
+                  保存设置
+                </Button>
               </Grid>
             </Grid>
           </CardContent>
@@ -145,15 +148,6 @@ function AlgorithmSettings() {
             </Box>
           </CardContent>
         </Card>
-      </Grid>
-      <Grid item xs={12}>
-        <Button
-          variant="contained"
-          startIcon={<Save />}
-          onClick={handleSave}
-        >
-          保存设置
-        </Button>
       </Grid>
     </Grid>
   );
