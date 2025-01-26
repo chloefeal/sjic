@@ -7,7 +7,7 @@ services:
       args:
         PYTHON_VERSION: "3.10"
     ports:
-      - "5000:5000"
+      - "38881:38881"
     volumes:
       - ./backend:/app
     environment:
@@ -28,7 +28,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_API_URL=http://localhost:38881
 
   db:
     image: sqlite:latest

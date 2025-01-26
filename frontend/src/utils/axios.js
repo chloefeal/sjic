@@ -2,10 +2,10 @@ import axios from 'axios';
 
 const instance = axios.create({
   baseURL: process.env.REACT_APP_API_URL,
-  timeout: 10000,
+  timeout: 5000,
   headers: {
-    'Content-Type': 'application/json',
-  },
+    'Content-Type': 'application/json'
+  }
 });
 
 // 请求拦截器
