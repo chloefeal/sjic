@@ -24,12 +24,21 @@ function Models() {
   };
 
   const handleUpload = async () => {
+    if (!modelFile) {
+      console.error('No file selected');
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', modelFile);
     formData.append('name', modelName);
 
     try {
-      await axios.post('/api/models/upload', formData);
+      await axios.post('/api/models/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'  // 重要：设置正确的 Content-Type
+        }
+      });
       setOpenUpload(false);
       setModelFile(null);
       setModelName('');
@@ -85,7 +94,9 @@ function Models() {
           <input
             type="file"
             accept=".pt,.pth"
+            value={modelFile}
             onChange={(e) => setModelFile(e.target.files[0])}
+            style={{ marginTop: '16px' }}
           />
         </DialogContent>
         <DialogActions>
