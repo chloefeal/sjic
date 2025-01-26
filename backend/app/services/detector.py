@@ -3,17 +3,36 @@ import numpy as np
 from ultralytics import YOLO
 from app import socketio, db
 import torch
-from app.models import Alert
+from app.models import Alert, Camera, DetectionModel
+import os
 
 class DetectorService:
     def __init__(self):
-        self.models = {}
+        self.running = False
+        self.camera = None
+        self.model = None
+        self.settings = None
+        self.active_detectors = {}  # 存储每个摄像头的检测状态
+
+    def load_camera(self, camera_id):
+        """加载摄像头"""
+        camera = Camera.query.get(camera_id)
+        if not camera:
+            raise ValueError(f"Camera with id {camera_id} not found")
+        return camera
         
-    def load_model(self, model_path):
+    def load_model(self, model_id):
         """加载YOLO模型"""
         try:
-            model = YOLO(model_path)
-            return model
+            model = DetectionModel.query.get(model_id)
+            if not model:
+                raise ValueError(f"Model with id {model_id} not found")
+
+            model_path = os.path.join('models', model.path)
+            if not os.path.exists(model_path):
+                raise FileNotFoundError(f"Model file not found: {model_path}")
+
+            return YOLO(model_path)
         except Exception as e:
             raise Exception(f"模型加载失败: {str(e)}")
             
@@ -33,60 +52,95 @@ class DetectorService:
         socketio.emit('new_alert', alert.to_dict())
         
         return alert
-        
-    def detect(self, image, model_name, conf_threshold=0.5):
-        """执行目标检测"""
-        if model_name not in self.models:
-            raise Exception("模型未加载")
-            
-        results = self.models[model_name](image, conf=conf_threshold)
-        
-        # 如果检测到目标，创建告警
-        if len(results) > 0:
-            for result in results:
-                if result.conf >= conf_threshold:
-                    self.create_alert(
-                        camera_id=self.camera_id,
-                        alert_type=result.name,
-                        confidence=float(result.conf),
-                        image_url=self.save_detection_image(image, result)
-                    )
-                    
-        return results
 
-class Detector:
-    def __init__(self):
-        self.running = False
-        self.camera = None
-        self.model = None
-        self.settings = None
-        
-    def start(self, camera_id, model_type, settings):
-        self.camera = cv2.VideoCapture(camera_id)
-        self.model = YOLO(f'models/{model_type}.pt')
-        self.settings = settings
-        self.running = True
-        self._detect_loop()
-        
-    def stop(self):
-        self.running = False
-        if self.camera:
-            self.camera.release()
+    def start(self, camera_id, model_id, settings):
+        """启动检测"""
+        try:
+            # 检查是否已经在运行
+            if camera_id in self.active_detectors:
+                raise RuntimeError(f"Detection already running for camera {camera_id}")
+
+            # 加载摄像头
+            camera = self.load_camera(camera_id)
+            rtsp_url = camera.get_rtsp_url()
+            if not rtsp_url:
+                raise ValueError(f"Invalid RTSP URL for camera {camera_id}")
             
-    def _detect_loop(self):
-        while self.running:
-            ret, frame = self.camera.read()
+            # 初始化视频捕获
+            cap = cv2.VideoCapture(rtsp_url)
+            if not cap.isOpened():
+                raise RuntimeError(f"Failed to open camera stream: {rtsp_url}")
+            
+            # 加载模型
+            model = self.load_model(model_id)
+
+            # 保存检测器状态
+            self.active_detectors[camera_id] = {
+                'camera': cap,
+                'model': model,
+                'settings': settings,
+                'running': True
+            }
+            
+            # 开始检测循环
+            self._start_detection_thread(camera_id)
+            
+        except Exception as e:
+            if camera_id in self.active_detectors:
+                self.stop(camera_id)
+            raise RuntimeError(f"Failed to start detection: {str(e)}")
+        
+    def stop(self, camera_id):
+        """停止检测"""
+        if camera_id in self.active_detectors:
+            detector = self.active_detectors[camera_id]
+            detector['running'] = False
+            if detector['camera']:
+                detector['camera'].release()
+            del self.active_detectors[camera_id]
+            
+    def _start_detection_thread(self, camera_id):
+        """启动检测线程"""
+        import threading
+        thread = threading.Thread(
+            target=self._detect_loop,
+            args=(camera_id,),
+            daemon=True
+        )
+        thread.start()
+            
+    def _detect_loop(self, camera_id):
+        """检测循环"""
+        detector = self.active_detectors[camera_id]
+        
+        while detector['running']:
+            ret, frame = detector['camera'].read()
             if not ret:
                 continue
                 
             # 执行检测
-            results = self.model(frame)
+            results = detector['model'](
+                frame,
+                conf=detector['settings'].get('confidence', 0.5)
+            )
             
             # 处理检测结果
-            alerts = self._process_results(results)
+            for result in results:
+                if result.conf >= detector['settings'].get('confidence', 0.5):
+                    self.create_alert(
+                        camera_id=camera_id,
+                        alert_type=result.name,
+                        confidence=float(result.conf),
+                        image_url=self._save_detection_image(frame, result)
+                    )
             
             # 发送结果到前端
             socketio.emit('detection_result', {
-                'alerts': alerts,
+                'camera_id': camera_id,
                 'frame': cv2.imencode('.jpg', frame)[1].tobytes()
-            }) 
+            })
+
+    def _save_detection_image(self, frame, result):
+        """保存检测图片"""
+        # TODO: 实现图片保存逻辑
+        return None 
