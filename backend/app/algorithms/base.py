@@ -34,7 +34,10 @@ class BaseAlgorithm(Algorithm):
     @classmethod
     def register_algorithms(cls):
         """注册所有算法到数据库"""
+        print(__file__)
         for algorithm_class in cls.get_subclasses():
+            print(algorithm_class.__name__)
+
             if not algorithm_class.__abstract__:
                 # 使用 __mapper_args__ 中定义的 polymorphic_identity
                 type_name = algorithm_class.__mapper_args__['polymorphic_identity']
@@ -46,6 +49,5 @@ class BaseAlgorithm(Algorithm):
                         description=algorithm_class.__doc__ or '',
                         parameters=algorithm_class().get_parameters_schema()
                     )
-                    print(algorithm.to_dict())
                     db.session.add(algorithm)
         db.session.commit() 
