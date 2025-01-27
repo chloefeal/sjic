@@ -39,9 +39,15 @@ class BaseAlgorithm(Algorithm):
             print(algorithm_class.__name__)
 
             if not algorithm_class.__abstract__:
+                print("1")
                 # 使用 __mapper_args__ 中定义的 polymorphic_identity
                 type_name = algorithm_class.__mapper_args__['polymorphic_identity']
-                algorithm = algorithm_class.query.filter_by(type=type_name).first()
+                algorithmc = algorithm_class.query.filter_by(type=type_name).first()
+                print("2")
+                print(algorithmc)
+                algorithm = Algorithm.query.filter_by(type=type_name).first()
+                print("3")
+                print(algorithm)
                 if not algorithm:
                     algorithm = algorithm_class(
                         name=algorithm_class.__doc__.strip() or algorithm_class.__name__,
