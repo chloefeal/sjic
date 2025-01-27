@@ -6,10 +6,15 @@ class Algorithm(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.String(50), nullable=False)  # 算法类型：如 'object_detection', 'behavior_analysis' 等
+    type = db.Column(db.String(50), nullable=False)  # 用于多态
     description = db.Column(db.Text)
     parameters = db.Column(db.JSON)  # 算法参数配置
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'algorithm',
+        'polymorphic_on': type
+    }
     
     def to_dict(self):
         return {
@@ -19,4 +24,12 @@ class Algorithm(db.Model):
             'description': self.description,
             'parameters': self.parameters,
             'created_at': self.created_at.isoformat()
-        } 
+        }
+
+    @classmethod
+    def get_algorithm(cls, algorithm_type):
+        """获取算法实例"""
+        algorithm = cls.query.filter_by(type=algorithm_type).first()
+        if not algorithm:
+            raise ValueError(f"Unknown algorithm type: {algorithm_type}")
+        return algorithm 

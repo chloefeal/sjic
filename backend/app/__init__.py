@@ -17,9 +17,13 @@ def init_app():
         # 导入路由和模型
         from app.routes import api_routes
         from app.models import camera, detection_model, alert, task, log
+        from app.algorithms.base import BaseAlgorithm
         
         # 创建数据库表
         db.create_all()
+        
+        # 注册算法
+        BaseAlgorithm.register_algorithms()
         
         return app
 

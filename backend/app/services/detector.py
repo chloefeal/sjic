@@ -5,7 +5,8 @@ from app import socketio, db
 import torch
 from app.models import Alert, Camera, DetectionModel, Task
 import os
-from app.services.algorithm_service import AlgorithmFactory
+from app.algorithms import AlgorithmFactory
+from app.models.algorithm import Algorithm
 
 class DetectorService:
     def __init__(self):
@@ -114,7 +115,7 @@ class DetectorService:
         """检测循环"""
         detector = self.active_detectors[camera_id]
         task = Task.query.get(detector['task_id'])
-        algorithm = AlgorithmFactory.get_algorithm(task.algorithm.type)
+        algorithm = Algorithm.get_algorithm(task.algorithm_type)
         
         while detector['running']:
             ret, frame = detector['camera'].read()
