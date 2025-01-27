@@ -152,6 +152,7 @@ function Algorithms() {
             <TableHead>
               <TableRow>
                 <TableCell>ID</TableCell>
+                <TableCell>名称</TableCell>
                 <TableCell>模型</TableCell>
                 <TableCell>摄像头</TableCell>
                 <TableCell>置信度</TableCell>
@@ -164,6 +165,7 @@ function Algorithms() {
               {algorithms.map((algorithm) => (
                 <TableRow key={algorithm.id}>
                   <TableCell>{algorithm.id}</TableCell>
+                  <TableCell>{algorithm.name}</TableCell>
                   <TableCell>
                     {models.find(m => m.id === algorithm.modelId)?.name || '-'}
                   </TableCell>
@@ -228,6 +230,14 @@ function Algorithms() {
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="名称"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+            </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel>选择模型</InputLabel>
