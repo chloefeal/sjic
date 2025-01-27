@@ -8,12 +8,12 @@ import {
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
 
-function Algorithms() {
-  const [algorithms, setAlgorithms] = useState([]);
+function Tasks() {
+  const [tasks, setTasks] = useState([]);
   const [models, setModels] = useState([]);
   const [cameras, setCameras] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingAlgorithm, setEditingAlgorithm] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
   const [formData, setFormData] = useState({
     modelId: '',
     cameraId: '',
@@ -22,7 +22,7 @@ function Algorithms() {
     regions: [],
     notificationEnabled: true
   });
-  const [runningAlgorithms, setRunningAlgorithms] = useState(new Set());
+  const [runningTasks, setRunningTasks] = useState(new Set());
 
   useEffect(() => {
     fetchAll();
@@ -30,12 +30,12 @@ function Algorithms() {
 
   const fetchAll = async () => {
     try {
-      const [algorithmsRes, modelsRes, camerasRes] = await Promise.all([
-        axios.get('/api/algorithms'),
+      const [tasksRes, modelsRes, camerasRes] = await Promise.all([
+        axios.get('/api/tasks'),
         axios.get('/api/models'),
         axios.get('/api/cameras')
       ]);
-      setAlgorithms(algorithmsRes || []);
+      setTasks(tasksRes || []);
       setModels(modelsRes || []);
       setCameras(camerasRes || []);
     } catch (error) {
@@ -45,50 +45,50 @@ function Algorithms() {
 
   const handleCreate = async () => {
     try {
-      await axios.post('/api/algorithms', formData);
+      await axios.post('/api/tasks', formData);
       setOpenDialog(false);
       resetForm();
       fetchAll();
     } catch (error) {
-      console.error('Error creating algorithm:', error);
+      console.error('Error creating task:', error);
     }
   };
 
   const handleUpdate = async () => {
     try {
-      await axios.put(`/api/algorithms/${editingAlgorithm.id}`, formData);
+      await axios.put(`/api/tasks/${editingTask.id}`, formData);
       setOpenDialog(false);
       resetForm();
       fetchAll();
     } catch (error) {
-      console.error('Error updating algorithm:', error);
+      console.error('Error updating task:', error);
     }
   };
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`/api/algorithms/${id}`);
+      await axios.delete(`/api/tasks/${id}`);
       fetchAll();
     } catch (error) {
-      console.error('Error deleting algorithm:', error);
+      console.error('Error deleting task:', error);
     }
   };
 
-  const handleEdit = (algorithm) => {
-    setEditingAlgorithm(algorithm);
+  const handleEdit = (task) => {
+    setEditingTask(task);
     setFormData({
-      modelId: algorithm.modelId || '',
-      cameraId: algorithm.cameraId || '',
-      confidence: algorithm.confidence || 0.5,
-      alertThreshold: algorithm.alertThreshold || 3,
-      regions: algorithm.regions || [],
-      notificationEnabled: algorithm.notificationEnabled
+      modelId: task.modelId || '',
+      cameraId: task.cameraId || '',
+      confidence: task.confidence || 0.5,
+      alertThreshold: task.alertThreshold || 3,
+      regions: task.regions || [],
+      notificationEnabled: task.notificationEnabled
     });
     setOpenDialog(true);
   };
 
   const resetForm = () => {
-    setEditingAlgorithm(null);
+    setEditingTask(null);
     setFormData({
       modelId: '',
       cameraId: '',
@@ -99,32 +99,32 @@ function Algorithms() {
     });
   };
 
-  const handleStartDetection = async (algorithm) => {
+  const handleStartDetection = async (task) => {
     try {
       await axios.post('/api/detection/start', {
-        camera_id: algorithm.cameraId,
-        model_id: algorithm.modelId,
+        camera_id: task.cameraId,
+        model_id: task.modelId,
         settings: {
-          confidence: algorithm.confidence,
-          alert_threshold: algorithm.alertThreshold,
-          regions: algorithm.regions,
-          notification_enabled: algorithm.notificationEnabled
+          confidence: task.confidence,
+          alert_threshold: task.alertThreshold,
+          regions: task.regions,
+          notification_enabled: task.notificationEnabled
         }
       });
-      setRunningAlgorithms(prev => new Set([...prev, algorithm.id]));
+      setRunningTasks(prev => new Set([...prev, task.id]));
     } catch (error) {
       console.error('Error starting detection:', error);
     }
   };
 
-  const handleStopDetection = async (algorithm) => {
+  const handleStopDetection = async (task) => {
     try {
       await axios.post('/api/detection/stop', {
-        camera_id: algorithm.cameraId
+        camera_id: task.cameraId
       });
-      setRunningAlgorithms(prev => {
+      setRunningTasks(prev => {
         const next = new Set(prev);
-        next.delete(algorithm.id);
+        next.delete(task.id);
         return next;
       });
     } catch (error) {
@@ -162,42 +162,42 @@ function Algorithms() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {algorithms.map((algorithm) => (
-                <TableRow key={algorithm.id}>
-                  <TableCell>{algorithm.id}</TableCell>
-                  <TableCell>{algorithm.name}</TableCell>
+              {tasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell>{task.id}</TableCell>
+                  <TableCell>{task.name}</TableCell>
                   <TableCell>
-                    {models.find(m => m.id === algorithm.modelId)?.name || '-'}
+                    {models.find(m => m.id === task.modelId)?.name || '-'}
                   </TableCell>
                   <TableCell>
-                    {cameras.find(c => c.id === algorithm.cameraId)?.name || '-'}
+                    {cameras.find(c => c.id === task.cameraId)?.name || '-'}
                   </TableCell>
-                  <TableCell>{algorithm.confidence}</TableCell>
-                  <TableCell>{algorithm.alertThreshold}</TableCell>
+                  <TableCell>{task.confidence}</TableCell>
+                  <TableCell>{task.alertThreshold}</TableCell>
                   <TableCell>
-                    {runningAlgorithms.has(algorithm.id) ? '运行中' : '已停止'}
+                    {runningTasks.has(task.id) ? '运行中' : '已停止'}
                   </TableCell>
                   <TableCell>
                     <IconButton
                       color="primary"
-                      onClick={() => handleEdit(algorithm)}
+                      onClick={() => handleEdit(task)}
                       title="编辑"
-                      disabled={runningAlgorithms.has(algorithm.id)}
+                      disabled={runningTasks.has(task.id)}
                     >
                       <Edit />
                     </IconButton>
                     <IconButton
                       color="error"
-                      onClick={() => handleDelete(algorithm.id)}
+                      onClick={() => handleDelete(task.id)}
                       title="删除"
-                      disabled={runningAlgorithms.has(algorithm.id)}
+                      disabled={runningTasks.has(task.id)}
                     >
                       <Delete />
                     </IconButton>
-                    {!runningAlgorithms.has(algorithm.id) ? (
+                    {!runningTasks.has(task.id) ? (
                       <IconButton
                         color="success"
-                        onClick={() => handleStartDetection(algorithm)}
+                        onClick={() => handleStartDetection(task)}
                         title="开始推理"
                       >
                         <PlayArrow />
@@ -205,7 +205,7 @@ function Algorithms() {
                     ) : (
                       <IconButton
                         color="warning"
-                        onClick={() => handleStopDetection(algorithm)}
+                        onClick={() => handleStopDetection(task)}
                         title="停止推理"
                       >
                         <Stop />
@@ -226,7 +226,7 @@ function Algorithms() {
         fullWidth
       >
         <DialogTitle>
-          {editingAlgorithm ? '编辑任务' : '添加任务'}
+          {editingTask ? '编辑任务' : '添加任务'}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -293,10 +293,10 @@ function Algorithms() {
         <DialogActions>
           <Button onClick={() => setOpenDialog(false)}>取消</Button>
           <Button 
-            onClick={editingAlgorithm ? handleUpdate : handleCreate}
+            onClick={editingTask ? handleUpdate : handleCreate}
             color="primary"
           >
-            {editingAlgorithm ? '更新' : '添加'}
+            {editingTask ? '更新' : '添加'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -304,4 +304,4 @@ function Algorithms() {
   );
 }
 
-export default Algorithms; 
+export default Tasks; 

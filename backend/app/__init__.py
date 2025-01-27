@@ -16,7 +16,7 @@ def init_app():
     with app.app_context():
         # 导入路由和模型
         from app.routes import api_routes
-        from app.models import camera, detection_model, alert, algorithm, log
+        from app.models import camera, detection_model, alert, task, log
         
         # 创建数据库表
         db.create_all()

@@ -3,7 +3,7 @@ from app import app, db, socketio
 from app.models import Alert, Camera, DetectionModel
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
-from app.models import Algorithms, Log
+from app.models import Tasks, Log
 import os
 from pathlib import Path
 
@@ -96,7 +96,7 @@ def start_detection():
         detector_service.start(
             camera_id=data['camera_id'],
             model_id=data['model_id'],
-            algorithms=data.get('algorithms', {})
+            tasks=data.get('tasks', {})
         )
         return jsonify({'message': 'Detection started'}), 200
     except Exception as e:
@@ -177,37 +177,37 @@ def internal_error(error):
     db.session.rollback()
     return jsonify({'error': 'Internal server error'}), 500
 
-@app.route('/api/algorithms', methods=['GET'])
-def get_algorithms():
+@app.route('/api/tasks', methods=['GET'])
+def get_tasks():
     """获取算法设置"""
-    algorithms = Algorithms.query.all()
-    return jsonify([algorithm.to_dict() for algorithm in algorithms])
+    tasks = Tasks.query.all()
+    return jsonify([task.to_dict() for task in tasks])
 
-@app.route('/api/algorithms', methods=['POST'])
-def create_algorithms():
+@app.route('/api/tasks', methods=['POST'])
+def create_tasks():
     """创建算法设置"""
     data = request.json
-    algorithms = Algorithms(**data)
-    db.session.add(algorithms)
+    tasks = Tasks(**data)
+    db.session.add(tasks)
     db.session.commit()
-    return jsonify(algorithms.to_dict()), 201
+    return jsonify(tasks.to_dict()), 201
 
-@app.route('/api/algorithms/<int:algorithm_id>', methods=['PUT'])
-def update_algorithms(algorithm_id):
+@app.route('/api/tasks/<int:task_id>', methods=['PUT'])
+def update_tasks(task_id):
     """更新算法设置"""
     data = request.json
-    algorithm = Algorithms.query.get_or_404(algorithm_id)
+    task = Tasks.query.get_or_404(task_id)
     for key, value in data.items():
-        if hasattr(algorithm, key):
-            setattr(algorithm, key, value)
+        if hasattr(task, key):
+            setattr(task, key, value)
     db.session.commit()
-    return jsonify(algorithm.to_dict())
+    return jsonify(task.to_dict())
 
-@app.route('/api/algorithms/<int:algorithm_id>', methods=['DELETE'])
-def delete_algorithms(algorithm_id):
+@app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
+def delete_tasks(task_id):
     """删除算法设置"""
-    algorithm = Algorithms.query.get_or_404(algorithm_id)
-    db.session.delete(algorithm)
+    task = Tasks.query.get_or_404(task_id)
+    db.session.delete(task)
     db.session.commit()
     return '', 204
 
