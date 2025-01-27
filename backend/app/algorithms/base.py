@@ -37,23 +37,21 @@ class BaseAlgorithm(Algorithm):
         print(__file__)
         for algorithm_class in cls.get_subclasses():
             print(algorithm_class.__name__)
-
-            if not algorithm_class.__abstract__:
-                print("1")
-                # 使用 __mapper_args__ 中定义的 polymorphic_identity
-                type_name = algorithm_class.__mapper_args__['polymorphic_identity']
-                algorithmc = algorithm_class.query.filter_by(type=type_name).first()
-                print("2")
-                print(algorithmc)
-                algorithm = Algorithm.query.filter_by(type=type_name).first()
-                print("3")
-                print(algorithm)
-                if not algorithm:
-                    algorithm = algorithm_class(
-                        name=algorithm_class.__doc__.strip() or algorithm_class.__name__,
-                        type=type_name,  # 使用相同的 type_name
-                        description=algorithm_class.__doc__ or '',
-                        parameters=algorithm_class().get_parameters_schema()
-                    )
-                    db.session.add(algorithm)
+            print("1")
+            # 使用 __mapper_args__ 中定义的 polymorphic_identity
+            type_name = algorithm_class.__mapper_args__['polymorphic_identity']
+            algorithmc = algorithm_class.query.filter_by(type=type_name).first()
+            print("2")
+            print(algorithmc)
+            algorithm = Algorithm.query.filter_by(type=type_name).first()
+            print("3")
+            print(algorithm)
+            if not algorithm:
+                algorithm = algorithm_class(
+                    name=algorithm_class.__doc__.strip() or algorithm_class.__name__,
+                    type=type_name,  # 使用相同的 type_name
+                    description=algorithm_class.__doc__ or '',
+                    parameters=algorithm_class().get_parameters_schema()
+                )
+                db.session.add(algorithm)
         db.session.commit() 
