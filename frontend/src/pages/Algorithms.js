@@ -8,12 +8,12 @@ import {
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
 
-function AlgorithmSettings() {
-  const [settings, setSettings] = useState([]);
+function Algorithms() {
+  const [algorithms, setAlgorithms] = useState([]);
   const [models, setModels] = useState([]);
   const [cameras, setCameras] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingSettings, setEditingSettings] = useState(null);
+  const [editingAlgorithm, setEditingAlgorithm] = useState(null);
   const [formData, setFormData] = useState({
     modelId: '',
     cameraId: '',
@@ -22,7 +22,7 @@ function AlgorithmSettings() {
     regions: [],
     notificationEnabled: true
   });
-  const [runningSettings, setRunningSettings] = useState(new Set());
+  const [runningAlgorithms, setRunningAlgorithms] = useState(new Set());
 
   useEffect(() => {
     fetchAll();
@@ -30,12 +30,12 @@ function AlgorithmSettings() {
 
   const fetchAll = async () => {
     try {
-      const [settingsRes, modelsRes, camerasRes] = await Promise.all([
-        axios.get('/api/settings'),
+      const [algorithmsRes, modelsRes, camerasRes] = await Promise.all([
+        axios.get('/api/algorithms'),
         axios.get('/api/models'),
         axios.get('/api/cameras')
       ]);
-      setSettings(settingsRes || []);
+      setAlgorithms(algorithmsRes || []);
       setModels(modelsRes || []);
       setCameras(camerasRes || []);
     } catch (error) {
@@ -45,50 +45,50 @@ function AlgorithmSettings() {
 
   const handleCreate = async () => {
     try {
-      await axios.post('/api/settings', formData);
+      await axios.post('/api/algorithms', formData);
       setOpenDialog(false);
       resetForm();
       fetchAll();
     } catch (error) {
-      console.error('Error creating settings:', error);
+      console.error('Error creating algorithm:', error);
     }
   };
 
   const handleUpdate = async () => {
     try {
-      await axios.put(`/api/settings/${editingSettings.id}`, formData);
+      await axios.put(`/api/algorithms/${editingAlgorithm.id}`, formData);
       setOpenDialog(false);
       resetForm();
       fetchAll();
     } catch (error) {
-      console.error('Error updating settings:', error);
+      console.error('Error updating algorithm:', error);
     }
   };
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`/api/settings/${id}`);
+      await axios.delete(`/api/algorithms/${id}`);
       fetchAll();
     } catch (error) {
-      console.error('Error deleting settings:', error);
+      console.error('Error deleting algorithm:', error);
     }
   };
 
-  const handleEdit = (setting) => {
-    setEditingSettings(setting);
+  const handleEdit = (algorithm) => {
+    setEditingAlgorithm(algorithm);
     setFormData({
-      modelId: setting.modelId || '',
-      cameraId: setting.cameraId || '',
-      confidence: setting.confidence || 0.5,
-      alertThreshold: setting.alertThreshold || 3,
-      regions: setting.regions || [],
-      notificationEnabled: setting.notificationEnabled
+      modelId: algorithm.modelId || '',
+      cameraId: algorithm.cameraId || '',
+      confidence: algorithm.confidence || 0.5,
+      alertThreshold: algorithm.alertThreshold || 3,
+      regions: algorithm.regions || [],
+      notificationEnabled: algorithm.notificationEnabled
     });
     setOpenDialog(true);
   };
 
   const resetForm = () => {
-    setEditingSettings(null);
+    setEditingAlgorithm(null);
     setFormData({
       modelId: '',
       cameraId: '',
@@ -99,32 +99,32 @@ function AlgorithmSettings() {
     });
   };
 
-  const handleStartDetection = async (setting) => {
+  const handleStartDetection = async (algorithm) => {
     try {
       await axios.post('/api/detection/start', {
-        camera_id: setting.cameraId,
-        model_id: setting.modelId,
+        camera_id: algorithm.cameraId,
+        model_id: algorithm.modelId,
         settings: {
-          confidence: setting.confidence,
-          alert_threshold: setting.alertThreshold,
-          regions: setting.regions,
-          notification_enabled: setting.notificationEnabled
+          confidence: algorithm.confidence,
+          alert_threshold: algorithm.alertThreshold,
+          regions: algorithm.regions,
+          notification_enabled: algorithm.notificationEnabled
         }
       });
-      setRunningSettings(prev => new Set([...prev, setting.id]));
+      setRunningAlgorithms(prev => new Set([...prev, algorithm.id]));
     } catch (error) {
       console.error('Error starting detection:', error);
     }
   };
 
-  const handleStopDetection = async (setting) => {
+  const handleStopDetection = async (algorithm) => {
     try {
       await axios.post('/api/detection/stop', {
-        camera_id: setting.cameraId
+        camera_id: algorithm.cameraId
       });
-      setRunningSettings(prev => {
+      setRunningAlgorithms(prev => {
         const next = new Set(prev);
-        next.delete(setting.id);
+        next.delete(algorithm.id);
         return next;
       });
     } catch (error) {
@@ -144,7 +144,7 @@ function AlgorithmSettings() {
           }}
           sx={{ mb: 2 }}
         >
-          添加设置
+          添加任务
         </Button>
 
         <TableContainer component={Paper}>
@@ -161,41 +161,41 @@ function AlgorithmSettings() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {settings.map((setting) => (
-                <TableRow key={setting.id}>
-                  <TableCell>{setting.id}</TableCell>
+              {algorithms.map((algorithm) => (
+                <TableRow key={algorithm.id}>
+                  <TableCell>{algorithm.id}</TableCell>
                   <TableCell>
-                    {models.find(m => m.id === setting.modelId)?.name || '-'}
+                    {models.find(m => m.id === algorithm.modelId)?.name || '-'}
                   </TableCell>
                   <TableCell>
-                    {cameras.find(c => c.id === setting.cameraId)?.name || '-'}
+                    {cameras.find(c => c.id === algorithm.cameraId)?.name || '-'}
                   </TableCell>
-                  <TableCell>{setting.confidence}</TableCell>
-                  <TableCell>{setting.alertThreshold}</TableCell>
+                  <TableCell>{algorithm.confidence}</TableCell>
+                  <TableCell>{algorithm.alertThreshold}</TableCell>
                   <TableCell>
-                    {runningSettings.has(setting.id) ? '运行中' : '已停止'}
+                    {runningAlgorithms.has(algorithm.id) ? '运行中' : '已停止'}
                   </TableCell>
                   <TableCell>
                     <IconButton
                       color="primary"
-                      onClick={() => handleEdit(setting)}
+                      onClick={() => handleEdit(algorithm)}
                       title="编辑"
-                      disabled={runningSettings.has(setting.id)}
+                      disabled={runningAlgorithms.has(algorithm.id)}
                     >
                       <Edit />
                     </IconButton>
                     <IconButton
                       color="error"
-                      onClick={() => handleDelete(setting.id)}
+                      onClick={() => handleDelete(algorithm.id)}
                       title="删除"
-                      disabled={runningSettings.has(setting.id)}
+                      disabled={runningAlgorithms.has(algorithm.id)}
                     >
                       <Delete />
                     </IconButton>
-                    {!runningSettings.has(setting.id) ? (
+                    {!runningAlgorithms.has(algorithm.id) ? (
                       <IconButton
                         color="success"
-                        onClick={() => handleStartDetection(setting)}
+                        onClick={() => handleStartDetection(algorithm)}
                         title="开始推理"
                       >
                         <PlayArrow />
@@ -203,7 +203,7 @@ function AlgorithmSettings() {
                     ) : (
                       <IconButton
                         color="warning"
-                        onClick={() => handleStopDetection(setting)}
+                        onClick={() => handleStopDetection(algorithm)}
                         title="停止推理"
                       >
                         <Stop />
@@ -224,7 +224,7 @@ function AlgorithmSettings() {
         fullWidth
       >
         <DialogTitle>
-          {editingSettings ? '编辑设置' : '添加设置'}
+          {editingAlgorithm ? '编辑任务' : '添加任务'}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -283,10 +283,10 @@ function AlgorithmSettings() {
         <DialogActions>
           <Button onClick={() => setOpenDialog(false)}>取消</Button>
           <Button 
-            onClick={editingSettings ? handleUpdate : handleCreate}
+            onClick={editingAlgorithm ? handleUpdate : handleCreate}
             color="primary"
           >
-            {editingSettings ? '更新' : '添加'}
+            {editingAlgorithm ? '更新' : '添加'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -294,4 +294,4 @@ function AlgorithmSettings() {
   );
 }
 
-export default AlgorithmSettings; 
+export default Algorithms; 

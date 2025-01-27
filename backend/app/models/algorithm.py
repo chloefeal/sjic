@@ -1,9 +1,10 @@
 from app import db
 
-class Settings(db.Model):
-    __tablename__ = 'settings'
+class Algorithms(db.Model):
+    __tablename__ = 'algorithms'
     
     id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
     confidence = db.Column(db.Float, default=0.5)
     alertThreshold = db.Column(db.Integer, default=5)  # 告警间隔（秒）
     regions = db.Column(db.JSON)  # 检测区域设置
@@ -14,6 +15,7 @@ class Settings(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'name': self.name,
             'confidence': self.confidence,
             'alertThreshold': self.alertThreshold,
             'regions': self.regions,

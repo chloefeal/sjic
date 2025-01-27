@@ -5,7 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout';
 import VideoStreams from './pages/VideoStreams';
 import Models from './pages/Models';
-import AlgorithmSettings from './pages/AlgorithmSettings';
+import AlgorithmTasks from './pages/Algorithms';
 import Training from './pages/Training';
 import Alerts from './pages/Alerts';
 
@@ -31,7 +31,7 @@ function App() {
             <Route path="/" element={<Navigate to="/streams" />} />
             <Route path="/streams" element={<VideoStreams />} />
             <Route path="/models" element={<Models />} />
-            <Route path="/algorithm-settings" element={<AlgorithmSettings />} />
+            <Route path="/algorithms" element={<Algorithms />} />
             <Route path="/training" element={<Training />} />
             <Route path="/alerts" element={<Alerts />} />
           </Routes>

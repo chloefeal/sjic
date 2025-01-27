@@ -3,7 +3,7 @@ from app import app, db, socketio
 from app.models import Alert, Camera, DetectionModel
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
-from app.models import Settings, Log
+from app.models import Algorithms, Log
 import os
 from pathlib import Path
 
@@ -96,7 +96,7 @@ def start_detection():
         detector_service.start(
             camera_id=data['camera_id'],
             model_id=data['model_id'],
-            settings=data.get('settings', {})
+            algorithms=data.get('algorithms', {})
         )
         return jsonify({'message': 'Detection started'}), 200
     except Exception as e:
@@ -177,37 +177,37 @@ def internal_error(error):
     db.session.rollback()
     return jsonify({'error': 'Internal server error'}), 500
 
-@app.route('/api/settings', methods=['GET'])
-def get_settings():
+@app.route('/api/algorithms', methods=['GET'])
+def get_algorithms():
     """获取算法设置"""
-    settings = Settings.query.all()
-    return jsonify([setting.to_dict() for setting in settings])
+    algorithms = Algorithms.query.all()
+    return jsonify([algorithm.to_dict() for algorithm in algorithms])
 
-@app.route('/api/settings', methods=['POST'])
-def create_settings():
+@app.route('/api/algorithms', methods=['POST'])
+def create_algorithms():
     """创建算法设置"""
     data = request.json
-    settings = Settings(**data)
-    db.session.add(settings)
+    algorithms = Algorithms(**data)
+    db.session.add(algorithms)
     db.session.commit()
-    return jsonify(settings.to_dict()), 201
+    return jsonify(algorithms.to_dict()), 201
 
-@app.route('/api/settings/<int:setting_id>', methods=['PUT'])
-def update_settings(setting_id):
+@app.route('/api/algorithms/<int:algorithm_id>', methods=['PUT'])
+def update_algorithms(algorithm_id):
     """更新算法设置"""
     data = request.json
-    setting = Settings.query.get_or_404(setting_id)
+    algorithm = Algorithms.query.get_or_404(algorithm_id)
     for key, value in data.items():
-        if hasattr(setting, key):
-            setattr(setting, key, value)
+        if hasattr(algorithm, key):
+            setattr(algorithm, key, value)
     db.session.commit()
-    return jsonify(setting.to_dict())
+    return jsonify(algorithm.to_dict())
 
-@app.route('/api/settings/<int:setting_id>', methods=['DELETE'])
-def delete_settings(setting_id):
+@app.route('/api/algorithms/<int:algorithm_id>', methods=['DELETE'])
+def delete_algorithms(algorithm_id):
     """删除算法设置"""
-    setting = Settings.query.get_or_404(setting_id)
-    db.session.delete(setting)
+    algorithm = Algorithms.query.get_or_404(algorithm_id)
+    db.session.delete(algorithm)
     db.session.commit()
     return '', 204
 
