@@ -3,7 +3,7 @@ import numpy as np
 from ultralytics import YOLO
 from app import socketio, db
 import torch
-from app.models import Alert, Camera, DetectionModel
+from app.models import Alert, Camera, DetectionModel, Task
 import os
 from app.services.algorithm_service import AlgorithmFactory
 
@@ -12,7 +12,7 @@ class DetectorService:
         self.running = False
         self.camera = None
         self.model = None
-        self.settings = None
+        self.task = None
         self.active_detectors = {}  # 存储每个摄像头的检测状态
 
     def load_camera(self, camera_id):
@@ -54,7 +54,7 @@ class DetectorService:
         
         return alert
 
-    def start(self, camera_id, model_id, settings):
+    def start(self, camera_id, model_id, task_id):
         """启动检测"""
         try:
             # 检查是否已经在运行
@@ -79,7 +79,7 @@ class DetectorService:
             self.active_detectors[camera_id] = {
                 'camera': cap,
                 'model': model,
-                'settings': settings,
+                'task_id': task_id,
                 'running': True
             }
             
@@ -113,7 +113,7 @@ class DetectorService:
     def _detect_loop(self, camera_id):
         """检测循环"""
         detector = self.active_detectors[camera_id]
-        task = detector['task']
+        task = Task.query.get(detector['task_id'])
         algorithm = AlgorithmFactory.get_algorithm(task.algorithm.type)
         
         while detector['running']:
