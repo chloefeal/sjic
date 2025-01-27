@@ -5,6 +5,7 @@ from app import socketio, db
 import torch
 from app.models import Alert, Camera, DetectionModel
 import os
+from app.services.algorithm_service import AlgorithmFactory
 
 class DetectorService:
     def __init__(self):
@@ -112,27 +113,23 @@ class DetectorService:
     def _detect_loop(self, camera_id):
         """检测循环"""
         detector = self.active_detectors[camera_id]
+        task = detector['task']
+        algorithm = AlgorithmFactory.get_algorithm(task.algorithm.type)
         
         while detector['running']:
             ret, frame = detector['camera'].read()
             if not ret:
                 continue
                 
-            # 执行检测
-            results = detector['model'](
-                frame,
-                conf=detector['settings'].get('confidence', 0.5)
-            )
+            # 使用选定的算法处理帧
+            results = algorithm.process(frame, {
+                'model': detector['model'],
+                'confidence': task.confidence,
+                'regions': task.regions
+            })
             
-            # 处理检测结果
-            for result in results:
-                if result.conf >= detector['settings'].get('confidence', 0.5):
-                    self.create_alert(
-                        camera_id=camera_id,
-                        alert_type=result.name,
-                        confidence=float(result.conf),
-                        image_url=self._save_detection_image(frame, result)
-                    )
+            # 处理结果并创建告警
+            self._handle_results(camera_id, results, frame)
             
             # 发送结果到前端
             socketio.emit('detection_result', {
