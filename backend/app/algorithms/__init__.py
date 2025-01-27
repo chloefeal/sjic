@@ -6,4 +6,4 @@ __all__ = [
     'BaseAlgorithm',
     'ObjectDetectionAlgorithm',
     'TemplateAlgorithm',
-] 
+]

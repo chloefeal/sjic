@@ -46,5 +46,6 @@ class BaseAlgorithm(Algorithm):
                         description=algorithm_class.__doc__ or '',
                         parameters=algorithm_class().get_parameters_schema()
                     )
+                    print(algorithm.to_dict())
                     db.session.add(algorithm)
         db.session.commit() 
