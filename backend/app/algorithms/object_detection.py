@@ -1,8 +1,6 @@
 from .base import BaseAlgorithm
-from flask_sqlalchemy import SQLAlchemy
 from app.models import Algorithm
-
-db = SQLAlchemy()
+from app import db
 
 class ObjectDetectionAlgorithm(BaseAlgorithm):
     """目标检测算法"""

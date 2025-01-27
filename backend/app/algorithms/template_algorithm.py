@@ -1,8 +1,6 @@
 from .base import BaseAlgorithm
 from app.models import Algorithm
-from flask_sqlalchemy import SQLAlchemy
-
-db = SQLAlchemy()
+from app import db
 
 class TemplateAlgorithm(BaseAlgorithm):
     """模板匹配算法"""
