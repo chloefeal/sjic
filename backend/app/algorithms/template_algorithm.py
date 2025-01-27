@@ -25,6 +25,7 @@ class TemplateAlgorithm(BaseAlgorithm):
                 parameters=cls().get_parameters_schema()
             )
             db.session.add(algorithm)
+            db.session.commit()
 
     def process(self, frame, parameters):
         """模板匹配处理"""

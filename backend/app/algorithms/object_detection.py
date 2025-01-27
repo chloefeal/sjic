@@ -25,6 +25,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 parameters=cls().get_parameters_schema()
             )
             db.session.add(algorithm)
+            db.session.commit()
 
     def process(self, frame, parameters):
         """目标检测算法"""
