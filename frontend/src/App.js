@@ -8,6 +8,7 @@ import Models from './pages/Models';
 import Tasks from './pages/Tasks';
 import Training from './pages/Training';
 import Alerts from './pages/Alerts';
+import Algorithms from './pages/Algorithms';
 
 const theme = createTheme({
   palette: {
@@ -34,6 +35,7 @@ function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/training" element={<Training />} />
             <Route path="/alerts" element={<Alerts />} />
+            <Route path="/algorithms" element={<Algorithms />} />
           </Routes>
         </Layout>
       </Router>

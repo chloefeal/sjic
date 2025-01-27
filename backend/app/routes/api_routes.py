@@ -1,6 +1,6 @@
 from flask import jsonify, request
 from app import app, db, socketio
-from app.models import Alert, Camera, DetectionModel
+from app.models import Alert, Camera, DetectionModel, Algorithm
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
 from app.models import Task, Log
@@ -176,6 +176,21 @@ def not_found_error(error):
 def internal_error(error):
     db.session.rollback()
     return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/algorithms', methods=['GET'])
+def get_algorithms():
+    """获取算法"""
+    algorithms = Algorithm.query.all()
+    return jsonify([algorithm.to_dict() for algorithm in algorithms])
+
+@app.route('/api/algorithms', methods=['POST'])
+def create_algorithm():
+    """创建新算法"""
+    data = request.json
+    algorithm = Algorithm(**data)
+    db.session.add(algorithm)
+    db.session.commit()
+    return jsonify(algorithm.to_dict()), 201
 
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
