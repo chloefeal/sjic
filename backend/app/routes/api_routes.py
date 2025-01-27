@@ -3,7 +3,7 @@ from app import app, db, socketio
 from app.models import Alert, Camera, DetectionModel
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
-from app.models import Tasks, Log
+from app.models import Task, Log
 import os
 from pathlib import Path
 
@@ -96,7 +96,7 @@ def start_detection():
         detector_service.start(
             camera_id=data['camera_id'],
             model_id=data['model_id'],
-            tasks=data.get('tasks', {})
+            task_id=data['task_id']
         )
         return jsonify({'message': 'Detection started'}), 200
     except Exception as e:
@@ -180,23 +180,23 @@ def internal_error(error):
 @app.route('/api/tasks', methods=['GET'])
 def get_tasks():
     """获取算法设置"""
-    tasks = Tasks.query.all()
+    tasks = Task.query.all()
     return jsonify([task.to_dict() for task in tasks])
 
 @app.route('/api/tasks', methods=['POST'])
 def create_tasks():
     """创建算法设置"""
     data = request.json
-    tasks = Tasks(**data)
-    db.session.add(tasks)
+    task = Task(**data)
+    db.session.add(task)
     db.session.commit()
-    return jsonify(tasks.to_dict()), 201
+    return jsonify(task.to_dict()), 201
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
 def update_tasks(task_id):
     """更新算法设置"""
     data = request.json
-    task = Tasks.query.get_or_404(task_id)
+    task = Task.query.get_or_404(task_id)
     for key, value in data.items():
         if hasattr(task, key):
             setattr(task, key, value)
@@ -206,7 +206,7 @@ def update_tasks(task_id):
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
 def delete_tasks(task_id):
     """删除算法设置"""
-    task = Tasks.query.get_or_404(task_id)
+    task = Task.query.get_or_404(task_id)
     db.session.delete(task)
     db.session.commit()
     return '', 204
