@@ -42,6 +42,5 @@ class BaseAlgorithm(Algorithm):
         """注册所有算法到数据库"""
         print(__file__)
         for algorithm_class in cls.get_subclasses():
-            if not algorithm_class.__abstract__:
-                algorithm_class.register()
+            algorithm_class.register()
         db.session.commit() 
