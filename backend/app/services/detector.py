@@ -5,7 +5,6 @@ from app import socketio, db
 import torch
 from app.models import Alert, Camera, DetectionModel, Task
 import os
-from app.algorithms import AlgorithmFactory
 from app.models.algorithm import Algorithm
 
 class DetectorService:
