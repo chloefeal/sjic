@@ -5,7 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout';
 import VideoStreams from './pages/VideoStreams';
 import Models from './pages/Models';
-import AlgorithmTasks from './pages/Algorithms';
+import Algorithms from './pages/Algorithms';
 import Training from './pages/Training';
 import Alerts from './pages/Alerts';
 
