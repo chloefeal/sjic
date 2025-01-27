@@ -36,11 +36,13 @@ class BaseAlgorithm(Algorithm):
         """注册所有算法到数据库"""
         for algorithm_class in cls.get_subclasses():
             if not algorithm_class.__abstract__:
-                algorithm = algorithm_class.query.filter_by(type=algorithm_class.__name__).first()
+                # 使用 __mapper_args__ 中定义的 polymorphic_identity
+                type_name = algorithm_class.__mapper_args__['polymorphic_identity']
+                algorithm = algorithm_class.query.filter_by(type=type_name).first()
                 if not algorithm:
                     algorithm = algorithm_class(
-                        name=algorithm_class.__name__,
-                        type=algorithm_class.__name__,
+                        name=algorithm_class.__doc__.strip() or algorithm_class.__name__,
+                        type=type_name,  # 使用相同的 type_name
                         description=algorithm_class.__doc__ or '',
                         parameters=algorithm_class().get_parameters_schema()
                     )

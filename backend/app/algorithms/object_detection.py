@@ -3,7 +3,9 @@ from .base import BaseAlgorithm
 class ObjectDetectionAlgorithm(BaseAlgorithm):
     """目标检测算法"""
     __tablename__ = 'algorithms'  # 使用同一个表
-    __mapper_args__ = {'polymorphic_identity': 'ObjectDetectionAlgorithm'}
+    __mapper_args__ = {
+        'polymorphic_identity': 'object_detection'  # 改为和前端使用的类型值保持一致
+    }
 
     def process(self, frame, parameters):
         """目标检测算法"""

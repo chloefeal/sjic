@@ -6,14 +6,14 @@ class Algorithm(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.String(50), nullable=False)  # 用于多态
+    type = db.Column(db.String(50), nullable=False)  # 这个列用来区分不同的算法类型
     description = db.Column(db.Text)
     parameters = db.Column(db.JSON)  # 算法参数配置
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __mapper_args__ = {
         'polymorphic_identity': 'algorithm',
-        'polymorphic_on': type
+        'polymorphic_on': type  # 指定使用 type 列来区分不同的算法
     }
     
     def to_dict(self):
