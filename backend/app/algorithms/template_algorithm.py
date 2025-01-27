@@ -1,44 +1,53 @@
 from .base import BaseAlgorithm
+from app.models import Algorithm
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
 
 class TemplateAlgorithm(BaseAlgorithm):
-    """目标检测算法"""
-    __tablename__ = 'algorithms'  # 使用同一个表
+    """模板匹配算法"""
+    __tablename__ = 'algorithms'
     __mapper_args__ = {
-        'polymorphic_identity': 'template_algorithm'  # 改为和前端使用的类型值保持一致
+        'polymorphic_identity': 'template_matching'
     }
 
+    @classmethod
+    def register(cls):
+        type_name = cls.__mapper_args__['polymorphic_identity']
+        algorithm = Algorithm.query.filter_by(type=type_name).first()
+        if not algorithm:
+            algorithm = cls(
+                name='模板匹配',
+                type=type_name,
+                description='使用OpenCV模板匹配算法，支持多模板匹配和相似度阈值设置',
+                parameters=cls().get_parameters_schema()
+            )
+            db.session.add(algorithm)
+
     def process(self, frame, parameters):
-        """目标检测算法"""
-        model = parameters.get('model')
-        confidence = parameters.get('confidence', 0.5)
-        results = model(frame, conf=confidence)
-        return results
+        """模板匹配处理"""
+        # 实现模板匹配逻辑
+        pass
 
     def get_parameters_schema(self):
         return {
             "type": "object",
             "properties": {
-                "confidence": {
+                "threshold": {
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1,
-                    "default": 0.5
+                    "default": 0.8
                 },
-                "regions": {
+                "template_images": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "properties": {
-                            "x": {"type": "number"},
-                            "y": {"type": "number"},
-                            "width": {"type": "number"},
-                            "height": {"type": "number"}
-                        }
+                        "type": "string",
+                        "format": "uri"
                     }
                 }
             }
         }
 
     def validate_parameters(self, parameters):
-        # TODO: 实现参数验证
         return True 
