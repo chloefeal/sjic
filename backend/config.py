@@ -7,8 +7,8 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # 文件存储配置
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-    ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+    ALLOWED_EXTENSIONS = {'pt', 'pth', 'weights'}
     
     # 模型配置
     MODEL_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
@@ -21,4 +21,7 @@ class Config:
     
     # 端口配置
     #FRONTEND_PORT = 38880
-    BACKEND_PORT = 38881 
+    BACKEND_PORT = 38881
+    
+    # 文件上传配置
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB 

@@ -6,6 +6,8 @@ from app.services.model_trainer import ModelTrainer
 from app.models import Task, Log
 import os
 from pathlib import Path
+from werkzeug.utils import secure_filename
+from config import Config
 
 # 初始化服务
 detector_service = DetectorService()
@@ -48,6 +50,10 @@ def get_models():
     models = DetectionModel.query.all()
     return jsonify([model.to_dict() for model in models])
 
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
+
 @app.route('/api/models/upload', methods=['POST'])
 def upload_model():
     """上传新模型"""
@@ -55,29 +61,36 @@ def upload_model():
         return jsonify({'error': 'No file provided'}), 400
         
     file = request.files['file']
-    name = request.form.get('name', file.filename)
+    if not file or not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400
     
     try:
         # 确保模型目录存在
-        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models')
-        Path(model_dir).mkdir(parents=True, exist_ok=True)
+        Path(Config.UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
+        
+        # 安全的文件名
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
         
         # 保存文件
-        file_path = os.path.join(model_dir, file.filename)
         file.save(file_path)
         
         # 创建模型记录
         model = DetectionModel(
-            name=name,
-            path=file.filename,
+            name=request.form.get('name', filename),
+            path=filename,
             description=request.form.get('description', '')
         )
         db.session.add(model)
         db.session.commit()
         
         return jsonify(model.to_dict()), 201
+        
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        # 如果出错，清理已上传的文件
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/models/<int:model_id>', methods=['DELETE'])
 def delete_model(model_id):

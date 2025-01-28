@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-  Paper, IconButton, Box
+  Paper, IconButton, Box, LinearProgress, Typography
 } from '@mui/material';
 import { Delete, Upload } from '@mui/icons-material';
 import axios from '../utils/axios';
@@ -12,6 +12,7 @@ function Models() {
   const [openUpload, setOpenUpload] = useState(false);
   const [modelFile, setModelFile] = useState(null);
   const [modelName, setModelName] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     fetchModels();
@@ -41,6 +42,12 @@ function Models() {
       await axios.post('/api/models/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setUploadProgress(percentCompleted);
         }
       });
       setOpenUpload(false);
@@ -111,6 +118,14 @@ function Models() {
       <Dialog open={openUpload} onClose={() => setOpenUpload(false)}>
         <DialogTitle>上传模型</DialogTitle>
         <DialogContent>
+          {uploadProgress > 0 && (
+            <Box sx={{ width: '100%', mt: 2 }}>
+              <LinearProgress variant="determinate" value={uploadProgress} />
+              <Typography variant="caption" align="center" display="block">
+                {uploadProgress}%
+              </Typography>
+            </Box>
+          )}
           <TextField
             autoFocus
             margin="dense"
