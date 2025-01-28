@@ -17,6 +17,7 @@ function Tasks() {
   const [formData, setFormData] = useState({
     modelId: '',
     cameraId: '',
+    id: '',
     confidence: 0.5,
     alertThreshold: 3,
     regions: [],
@@ -104,6 +105,7 @@ function Tasks() {
       await axios.post('/api/detection/start', {
         camera_id: task.cameraId,
         model_id: task.modelId,
+        task_id: task.id,
         settings: {
           confidence: task.confidence,
           alert_threshold: task.alertThreshold,
@@ -120,7 +122,7 @@ function Tasks() {
   const handleStopDetection = async (task) => {
     try {
       await axios.post('/api/detection/stop', {
-        camera_id: task.cameraId
+        task_id: task.id
       });
       setRunningTasks(prev => {
         const next = new Set(prev);
