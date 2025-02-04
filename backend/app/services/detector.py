@@ -6,6 +6,7 @@ import torch
 from app.models import Alert, Camera, DetectionModel, Task
 import os
 from app.models.algorithm import Algorithm
+from config import config
 
 class DetectorService:
     def __init__(self):
@@ -29,7 +30,8 @@ class DetectorService:
             if not model:
                 raise ValueError(f"Model with id {model_id} not found")
 
-            model_path = os.path.join('models', model.path)
+            # 使用绝对路径
+            model_path = os.path.join(config.MODEL_FOLDER, model.path)
             if not os.path.exists(model_path):
                 raise FileNotFoundError(f"Model file not found: {model_path}")
 
@@ -117,19 +119,17 @@ class DetectorService:
         algorithm = Algorithm.get_algorithm(task.algorithm_type)
         
         while detector['running']:
-            ret, frame = detector['camera'].read()
-            if not ret:
-                continue
                 
             # 使用选定的算法处理帧
-            results = algorithm.process(frame, {
+            results = algorithm.process(detector['camera'], {
                 'model': detector['model'],
                 'confidence': task.confidence,
                 'regions': task.regions
             })
             
             # 处理结果并创建告警
-            self._handle_results(task_id, results, frame)
+            self._handle_results(task_id, results)
+            frame = results['frame']
             
             # 发送结果到前端
             socketio.emit('detection_result', {
