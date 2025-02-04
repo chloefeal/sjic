@@ -6,7 +6,7 @@ import torch
 from app.models import Alert, Camera, DetectionModel, Task
 import os
 from app.models.algorithm import Algorithm
-from config import config
+from config import Config
 
 class DetectorService:
     def __init__(self):
@@ -31,7 +31,7 @@ class DetectorService:
                 raise ValueError(f"Model with id {model_id} not found")
 
             # 使用绝对路径
-            model_path = os.path.join(config.MODEL_FOLDER, model.path)
+            model_path = os.path.join(Config.MODEL_FOLDER, model.path)
             if not os.path.exists(model_path):
                 raise FileNotFoundError(f"Model file not found: {model_path}")
 
