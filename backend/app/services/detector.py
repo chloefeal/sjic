@@ -13,7 +13,7 @@ class DetectorService:
         self.camera = None
         self.model = None
         self.task = None
-        self.active_detectors = {}  # 存储每个摄像头的检测状态
+        self.active_detectors = {}  # 存储每个任务的检测状态
 
     def load_camera(self, camera_id):
         """加载摄像头"""
@@ -58,7 +58,7 @@ class DetectorService:
         """启动检测"""
         try:
             # 检查是否已经在运行
-            if camera_id in self.active_detectors:
+            if task_id in self.active_detectors:
                 raise RuntimeError(f"Detection already running for camera {camera_id}")
 
             # 加载摄像头
@@ -76,7 +76,7 @@ class DetectorService:
             model = self.load_model(model_id)
 
             # 保存检测器状态
-            self.active_detectors[camera_id] = {
+            self.active_detectors[task_id] = {
                 'camera': cap,
                 'model': model,
                 'task_id': task_id,
@@ -84,35 +84,35 @@ class DetectorService:
             }
             
             # 开始检测循环
-            self._start_detection_thread(camera_id)
+            self._start_detection_thread(task_id)
             
         except Exception as e:
-            if camera_id in self.active_detectors:
-                self.stop(camera_id)
+            if task_id in self.active_detectors:
+                self.stop(task_id)
             raise RuntimeError(f"Failed to start detection: {str(e)}")
         
-    def stop(self, camera_id):
+    def stop(self, task_id):
         """停止检测"""
-        if camera_id in self.active_detectors:
-            detector = self.active_detectors[camera_id]
+        if task_id in self.active_detectors:
+            detector = self.active_detectors[task_id]
             detector['running'] = False
             if detector['camera']:
                 detector['camera'].release()
-            del self.active_detectors[camera_id]
+            del self.active_detectors[task_id]
             
-    def _start_detection_thread(self, camera_id):
+    def _start_detection_thread(self, task_id):
         """启动检测线程"""
         import threading
         thread = threading.Thread(
             target=self._detect_loop,
-            args=(camera_id,),
+            args=(task_id,),
             daemon=True
         )
         thread.start()
             
-    def _detect_loop(self, camera_id):
+    def _detect_loop(self, task_id):
         """检测循环"""
-        detector = self.active_detectors[camera_id]
+        detector = self.active_detectors[task_id]
         task = Task.query.get(detector['task_id'])
         algorithm = Algorithm.get_algorithm(task.algorithm_type)
         
@@ -129,11 +129,11 @@ class DetectorService:
             })
             
             # 处理结果并创建告警
-            self._handle_results(camera_id, results, frame)
+            self._handle_results(task_id, results, frame)
             
             # 发送结果到前端
             socketio.emit('detection_result', {
-                'camera_id': camera_id,
+                'task_id': task_id,
                 'frame': cv2.imencode('.jpg', frame)[1].tobytes()
             })
 

@@ -25,7 +25,7 @@ class TemplateAlgorithm(BaseAlgorithm):
             db.session.add(algorithm)
             db.session.commit()
 
-    def process(self, frame, parameters):
+    def process(self, camera, parameters):
         """模板匹配处理"""
         # 实现模板匹配逻辑
         pass

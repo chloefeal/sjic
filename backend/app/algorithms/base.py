@@ -7,7 +7,7 @@ class BaseAlgorithm(Algorithm):
     __abstract__ = True  # SQLAlchemy 不会为这个类创建表
     
     @abstractmethod
-    def process(self, frame, parameters):
+    def process(self, camera, parameters):
         """处理单帧图像"""
         pass
 

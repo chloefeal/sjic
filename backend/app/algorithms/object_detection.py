@@ -25,12 +25,17 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             db.session.add(algorithm)
             db.session.commit()
 
-    def process(self, frame, parameters):
+    def process(self, camera, parameters):
         """目标检测算法"""
-        model = parameters.get('model')
-        confidence = parameters.get('confidence', 0.5)
-        results = model(frame, conf=confidence)
-        return results
+        while True:
+            ret, frame = camera.read()
+            if not ret:
+                    continue
+            model = parameters.get('model')
+            confidence = parameters.get('confidence', 0.5)
+            results = model(frame, conf=confidence)
+            # 处理结果  
+            return results
 
     def get_parameters_schema(self):
         return {
