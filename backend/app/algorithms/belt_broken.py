@@ -19,7 +19,7 @@ class BeltBroken(BaseAlgorithm):
             algorithm = cls(
                 name='皮带表面故障检测',
                 type=type_name,
-                description='使用YOLO Segment检测皮带表面异常，当异常面积大于100cm²时推送告警',
+                description='使用Segment检测皮带表面异常，当异常面积大于100cm²时推送告警',
                 parameters=cls().get_parameters_schema()
             )
             db.session.add(algorithm)

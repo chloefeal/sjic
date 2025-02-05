@@ -19,7 +19,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             algorithm = cls(
                 name='目标检测',
                 type=type_name,
-                description='使用YOLO模型进行目标检测，支持多目标检测和目标跟踪',
+                description='目标检测，支持多目标检测和目标跟踪',
                 parameters=cls().get_parameters_schema()
             )
             db.session.add(algorithm)
