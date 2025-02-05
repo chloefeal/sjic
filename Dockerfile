@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 
 # 2. 复制并安装 Python 依赖，这部分偶尔改动
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip --default-timeout=1000 install -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple --no-cache-dir -r requirements.txt
 
 # 3. 最后才复制应用代码，这部分经常改动
 COPY backend .
