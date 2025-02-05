@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
+import CalibrationTool from '../components/CalibrationTool';
 
 function Tasks() {
   const [tasks, setTasks] = useState([]);
@@ -21,7 +22,14 @@ function Tasks() {
     confidence: 0.5,
     alertThreshold: 3,
     regions: [],
-    notificationEnabled: true
+    notificationEnabled: true,
+    parameters: {
+      pixel_to_cm: 0.1,
+      calibration: {
+        belt_width: 0,
+        points: []
+      }
+    }
   });
   const [runningTasks, setRunningTasks] = useState(new Set());
 
@@ -83,7 +91,14 @@ function Tasks() {
       confidence: task.confidence || 0.5,
       alertThreshold: task.alertThreshold || 3,
       regions: task.regions || [],
-      notificationEnabled: task.notificationEnabled
+      notificationEnabled: task.notificationEnabled,
+      parameters: task.parameters || {
+        pixel_to_cm: 0.1,
+        calibration: {
+          belt_width: 0,
+          points: []
+        }
+      }
     });
     setOpenDialog(true);
   };
@@ -96,7 +111,14 @@ function Tasks() {
       confidence: 0.5,
       alertThreshold: 3,
       regions: [],
-      notificationEnabled: true
+      notificationEnabled: true,
+      parameters: {
+        pixel_to_cm: 0.1,
+        calibration: {
+          belt_width: 0,
+          points: []
+        }
+      }
     });
   };
 
@@ -110,7 +132,9 @@ function Tasks() {
           confidence: task.confidence,
           alert_threshold: task.alertThreshold,
           regions: task.regions,
-          notification_enabled: task.notificationEnabled
+          notification_enabled: task.notificationEnabled,
+          pixel_to_cm: task.parameters.pixel_to_cm,
+          calibration: task.parameters.calibration
         }
       });
       setRunningTasks(prev => new Set([...prev, task.id]));
@@ -132,6 +156,17 @@ function Tasks() {
     } catch (error) {
       console.error('Error stopping detection:', error);
     }
+  };
+
+  const handleCalibrate = (calibrationData) => {
+    setFormData(prev => ({
+      ...prev,
+      parameters: {
+        ...prev.parameters,
+        pixel_to_cm: calibrationData.pixel_to_cm,
+        calibration: calibrationData.calibration
+      }
+    }));
   };
 
   return (
@@ -289,6 +324,9 @@ function Tasks() {
                 onChange={(e) => setFormData({ ...formData, alertThreshold: parseInt(e.target.value) })}
                 inputProps={{ min: 1 }}
               />
+            </Grid>
+            <Grid item xs={12}>
+              <CalibrationTool onCalibrate={handleCalibrate} />
             </Grid>
           </Grid>
         </DialogContent>
