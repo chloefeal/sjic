@@ -26,6 +26,7 @@ class Task(db.Model):
             'notificationEnabled': self.notificationEnabled,
             'modelId': self.modelId,
             'cameraId': self.cameraId,
+            'algorithm_id': self.algorithm_id,
             'status': self.status,
             'created_at': self.created_at.isoformat()
         } 
