@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from config import Config
+from app.middleware.auth import token_required
 
 # 初始化服务
 detector_service = DetectorService()
@@ -15,6 +16,7 @@ model_trainer = ModelTrainer()
 
 # 摄像头相关路由
 @app.route('/api/cameras', methods=['GET'])
+@token_required
 def get_cameras():
     """获取所有摄像头"""
     try:
@@ -24,6 +26,7 @@ def get_cameras():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/cameras', methods=['POST'])
+@token_required
 def create_camera():
     """创建新摄像头"""
     data = request.json
@@ -36,6 +39,7 @@ def create_camera():
     return jsonify(camera.to_dict()), 201
 
 @app.route('/api/cameras/<int:camera_id>', methods=['DELETE'])
+@token_required
 def delete_camera(camera_id):
     """删除摄像头"""
     camera = Camera.query.get_or_404(camera_id)
@@ -45,6 +49,7 @@ def delete_camera(camera_id):
 
 # 模型相关路由
 @app.route('/api/models', methods=['GET'])
+@token_required
 def get_models():
     """获取所有模型"""
     models = DetectionModel.query.all()
@@ -55,6 +60,7 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
 
 @app.route('/api/models/upload', methods=['POST'])
+@token_required
 def upload_model():
     """上传新模型"""
     if 'file' not in request.files:

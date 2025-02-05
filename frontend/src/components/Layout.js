@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, Drawer, AppBar, Toolbar, List, Typography, Divider, ListItem, ListItemIcon, ListItemText, IconButton } from '@mui/material';
-import { Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Code } from '@mui/icons-material';
+import { Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Code, Logout } from '@mui/icons-material';
 
 const drawerWidth = 240;
 
@@ -18,13 +18,21 @@ function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
+
   return (
     <Box sx={{ display: 'flex' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
-        <Toolbar>
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Typography variant="h6" noWrap component="div">
-            目标检测系统
+            视觉检测系统
           </Typography>
+          <IconButton color="inherit" onClick={handleLogout}>
+            <Logout />
+          </IconButton>
         </Toolbar>
       </AppBar>
       <Drawer
