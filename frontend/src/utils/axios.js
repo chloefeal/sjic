@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:38881'
+  baseURL: '/api'  // 使用相对路径
 });
 
 // 请求拦截器
