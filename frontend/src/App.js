@@ -11,7 +11,6 @@ import Tasks from './pages/Tasks';
 import Training from './pages/Training';
 import Alerts from './pages/Alerts';
 import Algorithms from './pages/Algorithms';
-import Cameras from './pages/Cameras';
 
 const theme = createTheme({
   palette: {
@@ -35,14 +34,14 @@ function App() {
           <Route path="/" element={
             <PrivateRoute>
               <Layout>
-                <Navigate to="/cameras" />
+                <Navigate to="/streams" />
               </Layout>
             </PrivateRoute>
           } />
-          <Route path="/cameras" element={
+          <Route path="/streams" element={
             <PrivateRoute>
               <Layout>
-                <Cameras />
+                <VideoStreams />
               </Layout>
             </PrivateRoute>
           } />

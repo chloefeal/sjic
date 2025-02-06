@@ -1,11 +1,11 @@
 # 前端构建阶段
-FROM node:16 as frontend-builder
+FROM node:22 as frontend-builder
 
 WORKDIR /app/frontend
 
 # 安装前端依赖
 COPY frontend/package*.json ./
-RUN npm install --registry=https://registry.npm.taobao.org
+RUN npm install
 
 # 构建前端
 COPY frontend .
