@@ -11,3 +11,4 @@ python-engineio==4.8.0
 python-socketio==5.10.0
 flask-restful==0.3.10
 flask-migrate==4.0.0
+pyjwt==2.10.1
