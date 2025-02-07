@@ -11,16 +11,17 @@ RUN npm install
 COPY frontend .
 RUN npm run build
 
+
 # 后端构建阶段
 FROM python:3.10 as backend-builder
 
 WORKDIR /app/backend
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+## 安装系统依赖
+#RUN apt-get update && apt-get install -y \
+#    libgl1-mesa-glx \
+#    libglib2.0-0 \
+#    && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖
 COPY backend/requirements.txt .
