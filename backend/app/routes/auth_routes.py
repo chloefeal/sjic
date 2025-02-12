@@ -1,16 +1,21 @@
 from flask import jsonify, request
 from app import app
+from flask_cors import cross_origin
 import jwt
 from datetime import datetime, timedelta
 from config import Config
 
-@app.route('/api/auth/login', methods=['POST'])
+@app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
+@cross_origin(origins="*", methods=['POST', 'OPTIONS'])
 def login():
+    if request.method == 'OPTIONS':
+        return '', 200
+        
     data = request.json
     username = data.get('username')
     password = data.get('password')
     
-    app.logger.info(f"Login request received: username={username}, password={password}")
+    app.logger.info(f"Login request received: username={username}")
     
     # 验证默认账号密码
     if username == 'admin' and password == '123123':

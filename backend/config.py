@@ -31,4 +31,9 @@ class Config:
     BACKEND_PORT = 38881
     
     # 文件上传配置
-    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB 
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB
+    
+    # CORS 配置
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')  # 默认允许所有
+    CORS_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+    CORS_HEADERS = ['Content-Type', 'Authorization'] 

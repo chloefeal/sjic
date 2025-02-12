@@ -35,7 +35,16 @@ app.logger.addHandler(console_handler)
 app.logger.setLevel(Config.LOG_LEVEL)
 
 app.config.from_object(Config)
-CORS(app)
+
+# 配置 CORS - 更灵活的配置
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "*",  # 允许所有域名访问
+        "methods": Config.CORS_METHODS,
+        "allow_headers": Config.CORS_HEADERS
+    }
+})
+
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 socketio = SocketIO(app, cors_allowed_origins="*")
