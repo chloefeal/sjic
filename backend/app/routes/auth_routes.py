@@ -8,6 +8,7 @@ from config import Config
 @app.route('/api/login', methods=['POST', 'OPTIONS'])
 @cross_origin(origins="*", methods=['POST', 'OPTIONS'])
 def login():
+    app.logger.info(f"Login request received: request.method={request.method}")
     if request.method == 'OPTIONS':
         return '', 200
         
