@@ -20,7 +20,29 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 name='目标检测',
                 type=type_name,
                 description='目标检测，支持多目标检测和目标跟踪',
-                parameters=cls().get_parameters_schema()
+                parameter_schema={
+                    "type": "object",
+                    "properties": {
+                        "confidence": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "default": 0.5
+                        },
+                        "regions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "width": {"type": "number"},
+                                    "height": {"type": "number"}
+                                }
+                            }
+                        }
+                    }
+                }
             )
             db.session.add(algorithm)
             db.session.commit()

@@ -16,20 +16,15 @@ function Tasks() {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [formData, setFormData] = useState({
+    name: '',
     modelId: '',
     cameraId: '',
-    id: '',
     confidence: 0.5,
     alertThreshold: 3,
     regions: [],
     notificationEnabled: true,
-    parameters: {
-      pixel_to_cm: 0.1,
-      calibration: {
-        belt_width: 0,
-        points: []
-      }
-    }
+    algorithm_id: '',
+    algorithm_parameters: {}
   });
   const [runningTasks, setRunningTasks] = useState(new Set());
 
@@ -54,10 +49,20 @@ function Tasks() {
 
   const handleCreate = async () => {
     try {
-      await axios.post('/api/tasks', formData);
+      const algorithm = models.find(m => m.id === formData.modelId);
+      const defaultParams = {};
+      if (algorithm?.parameter_schema?.properties) {
+        Object.entries(algorithm.parameter_schema.properties).forEach(([key, value]) => {
+          defaultParams[key] = value.default;
+        });
+      }
+
+      const response = await axios.post('/api/tasks', {
+        ...formData,
+        algorithm_parameters: defaultParams
+      });
+      setTasks([...tasks, response]);
       setOpenDialog(false);
-      resetForm();
-      fetchAll();
     } catch (error) {
       console.error('Error creating task:', error);
     }
@@ -92,13 +97,8 @@ function Tasks() {
       alertThreshold: task.alertThreshold || 3,
       regions: task.regions || [],
       notificationEnabled: task.notificationEnabled,
-      parameters: task.parameters || {
-        pixel_to_cm: 0.1,
-        calibration: {
-          belt_width: 0,
-          points: []
-        }
-      }
+      algorithm_id: task.algorithm_id || '',
+      algorithm_parameters: task.algorithm_parameters || {}
     });
     setOpenDialog(true);
   };
@@ -106,19 +106,15 @@ function Tasks() {
   const resetForm = () => {
     setEditingTask(null);
     setFormData({
+      name: '',
       modelId: '',
       cameraId: '',
       confidence: 0.5,
       alertThreshold: 3,
       regions: [],
       notificationEnabled: true,
-      parameters: {
-        pixel_to_cm: 0.1,
-        calibration: {
-          belt_width: 0,
-          points: []
-        }
-      }
+      algorithm_id: '',
+      algorithm_parameters: {}
     });
   };
 
@@ -133,8 +129,8 @@ function Tasks() {
           alert_threshold: task.alertThreshold,
           regions: task.regions,
           notification_enabled: task.notificationEnabled,
-          pixel_to_cm: task.parameters.pixel_to_cm,
-          calibration: task.parameters.calibration
+          algorithm_id: task.algorithm_id,
+          algorithm_parameters: task.algorithm_parameters
         }
       });
       setRunningTasks(prev => new Set([...prev, task.id]));
@@ -161,10 +157,9 @@ function Tasks() {
   const handleCalibrate = (calibrationData) => {
     setFormData(prev => ({
       ...prev,
-      parameters: {
-        ...prev.parameters,
-        pixel_to_cm: calibrationData.pixel_to_cm,
-        calibration: calibrationData.calibration
+      algorithm_parameters: {
+        ...prev.algorithm_parameters,
+        ...calibrationData.algorithm_parameters
       }
     }));
   };

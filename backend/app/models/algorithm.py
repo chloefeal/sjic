@@ -6,9 +6,9 @@ class Algorithm(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.String(50), nullable=False)  # 这个列用来区分不同的算法类型
+    type = db.Column(db.String(50), nullable=False)  # 算法类型标识
     description = db.Column(db.Text)
-    parameters = db.Column(db.JSON)  # 算法参数配置
+    parameter_schema = db.Column(db.JSON)  # 参数的schema定义
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     __mapper_args__ = {
@@ -22,7 +22,7 @@ class Algorithm(db.Model):
             'name': self.name,
             'type': self.type,
             'description': self.description,
-            'parameters': self.parameters,
+            'parameter_schema': self.parameter_schema,
             'created_at': self.created_at.isoformat()
         }
 
