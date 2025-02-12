@@ -45,12 +45,41 @@ function App() {
               </Layout>
             </PrivateRoute>
           } />
-          <Route path="/streams" element={<VideoStreams />} />
-          <Route path="/models" element={<Models />} />
-          <Route path="/tasks" element={<Tasks />} />
-          <Route path="/training" element={<Training />} />
-          <Route path="/alerts" element={<Alerts />} />
-          <Route path="/algorithms" element={<Algorithms />} />
+          <Route path="/models" element={
+            <PrivateRoute>
+              <Layout>
+                <Models />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/tasks" element={
+            <PrivateRoute>
+              <Layout>
+                <Tasks />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/training" element={
+            <PrivateRoute>
+              <Layout>
+                <Training />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/alerts" element={
+            <PrivateRoute>
+              <Layout>
+                <Alerts />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/algorithms" element={
+            <PrivateRoute>
+              <Layout>
+                <Algorithms />
+              </Layout>
+            </PrivateRoute>
+          } />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
