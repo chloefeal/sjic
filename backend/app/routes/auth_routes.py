@@ -5,7 +5,7 @@ import jwt
 from datetime import datetime, timedelta
 from config import Config
 
-@app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
 @cross_origin(origins="*", methods=['POST', 'OPTIONS'])
 def login():
     if request.method == 'OPTIONS':
