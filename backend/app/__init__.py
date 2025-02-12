@@ -57,7 +57,7 @@ def init_app():
         app.logger.info('Initializing application...')
         
         # 导入路由和模型
-        from app.routes import api_routes
+        from app.routes import api_routes, auth_routes
         from app.models import camera, detection_model, alert, task, log
         from app.algorithms.base import BaseAlgorithm
         
