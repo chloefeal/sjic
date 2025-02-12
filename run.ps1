@@ -91,9 +91,18 @@ function ShowHelp {
     Write-Host "  .\run.ps1 frontend     - Run frontend development server"
 }
 
+function RunMigrations {
+    Write-Host "Running database migrations..."
+    Set-Location backend
+    $env:FLASK_APP = "run.py"
+    flask db upgrade
+    Set-Location ..
+}
+
 switch ($Command) {
     "install" { Install }
     "init-db" { InitDb }
+    "migrate" { RunMigrations }
     "backend" { StartBackend }
     "frontend" { StartFrontend }
     "conda-env" { CreateCondaEnv }

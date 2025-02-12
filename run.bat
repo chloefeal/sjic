@@ -2,11 +2,19 @@
 
 IF "%1"=="install" GOTO install
 IF "%1"=="init-db" GOTO init-db
+IF "%1"=="migrate" GOTO migrate
 IF "%1"=="backend" GOTO backend
 IF "%1"=="frontend" GOTO frontend
 IF "%1"=="conda-env" GOTO condaenv
 IF "%1"=="help" GOTO help
 GOTO help
+
+:migrate
+echo Running database migrations...
+cd backend
+set FLASK_APP=run.py
+flask db upgrade
+GOTO end
 
 :install
 echo Installing backend dependencies...

@@ -20,6 +20,11 @@ init-db:
 	@echo "Initializing database..."
 	cd $(BACKEND_DIR) && $(PYTHON) -c "from app import app, db; app.app_context().push(); db.create_all()"
 
+# 数据库迁移
+migrate:
+	@echo "Running database migrations..."
+	cd $(BACKEND_DIR) && export FLASK_APP=run.py && flask db upgrade
+
 # 运行后端开发服务器
 backend:
 	@echo "Starting backend server..."
