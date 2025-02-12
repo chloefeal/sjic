@@ -1,12 +1,15 @@
 import cv2
 import numpy as np
 from ultralytics import YOLO
-from app import socketio, db
+from app import socketio, db, app
 import torch
 from app.models import Alert, Camera, DetectionModel, Task
 import os
 from app.models.algorithm import Algorithm
 from config import Config
+import logging
+
+app.logger = logging.getLogger(__name__)
 
 class DetectorService:
     def __init__(self):
@@ -59,9 +62,13 @@ class DetectorService:
     def start(self, camera_id, model_id, task_id):
         """启动检测"""
         try:
+            app.logger.info(f"Starting detection: camera={camera_id}, model={model_id}, task={task_id}")
+            
             # 检查是否已经在运行
             if task_id in self.active_detectors:
-                raise RuntimeError(f"Detection already running for camera {camera_id}")
+                msg = f"Detection already running for camera {camera_id}"
+                app.logger.warning(msg)
+                raise RuntimeError(msg)
 
             # 加载摄像头
             camera = self.load_camera(camera_id)
@@ -88,7 +95,10 @@ class DetectorService:
             # 开始检测循环
             self._start_detection_thread(task_id)
             
+            app.logger.info(f"Detection started successfully for task {task_id}")
+            
         except Exception as e:
+            app.logger.error(f"Failed to start detection: {str(e)}", exc_info=True)
             if task_id in self.active_detectors:
                 self.stop(task_id)
             raise RuntimeError(f"Failed to start detection: {str(e)}")

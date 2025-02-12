@@ -10,6 +10,8 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
+    app.logger.info(f"Login request received: username={username}, password={password}")
+    
     # 验证默认账号密码
     if username == 'admin' and password == '123123':
         token = jwt.encode({

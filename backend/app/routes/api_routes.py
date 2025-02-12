@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 from config import Config
 from app.middleware.auth import token_required
 
+
 # 初始化服务
 detector_service = DetectorService()
 model_trainer = ModelTrainer()
@@ -29,14 +30,22 @@ def get_cameras():
 @token_required
 def create_camera():
     """创建新摄像头"""
-    data = request.json
-    camera = Camera(
-        name=data['name'],
-        url=data['url']
-    )
-    db.session.add(camera)
-    db.session.commit()
-    return jsonify(camera.to_dict()), 201
+    try:
+        data = request.json
+        app.logger.info(f"Creating new camera: {data}")
+        
+        camera = Camera(
+            name=data['name'],
+            url=data['url']
+        )
+        db.session.add(camera)
+        db.session.commit()
+        
+        app.logger.info(f"Camera created successfully: id={camera.id}")
+        return jsonify(camera.to_dict()), 201
+    except Exception as e:
+        app.logger.error(f"Failed to create camera: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/cameras/<int:camera_id>', methods=['DELETE'])
 @token_required

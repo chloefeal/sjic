@@ -4,8 +4,36 @@ from flask_socketio import SocketIO
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from config import Config
+import logging
+from logging.handlers import RotatingFileHandler
+import os
 
+# 创建日志目录
+os.makedirs(Config.LOG_FOLDER, exist_ok=True)
+
+# 配置日志处理器
+formatter = logging.Formatter(Config.LOG_FORMAT)
+
+# 文件处理器
+file_handler = RotatingFileHandler(
+    Config.LOG_PATH,
+    maxBytes=Config.LOG_MAX_BYTES,
+    backupCount=Config.LOG_BACKUP_COUNT
+)
+file_handler.setFormatter(formatter)
+file_handler.setLevel(Config.LOG_LEVEL)
+
+# 控制台处理器
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+console_handler.setLevel(Config.LOG_LEVEL)
+
+# 配置Flask应用的日志
 app = Flask(__name__)
+app.logger.addHandler(file_handler)
+app.logger.addHandler(console_handler)
+app.logger.setLevel(Config.LOG_LEVEL)
+
 app.config.from_object(Config)
 CORS(app)
 db = SQLAlchemy(app)
@@ -14,6 +42,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 def init_app():
     with app.app_context():
+        app.logger.info('Initializing application...')
+        
         # 导入路由和模型
         from app.routes import api_routes
         from app.models import camera, detection_model, alert, task, log
@@ -21,9 +51,11 @@ def init_app():
         
         # 创建数据库表
         db.create_all()
+        app.logger.info('Database tables created')
         
         # 注册算法
         BaseAlgorithm.register_algorithms()
+        app.logger.info('Algorithms registered')
         
         return app
 
