@@ -36,14 +36,17 @@ app.logger.setLevel(Config.LOG_LEVEL)
 
 app.config.from_object(Config)
 
-# 配置 CORS - 更灵活的配置
-CORS(app, resources={
-    r"/api/*": {
+# 配置 CORS - 允许所有路由的 OPTIONS 请求
+CORS(app, 
+    resources={r"/api/*": {
         "origins": "*",  # 允许所有域名访问
         "methods": Config.CORS_METHODS,
-        "allow_headers": Config.CORS_HEADERS
-    }
-})
+        "allow_headers": Config.CORS_HEADERS,
+        "supports_credentials": True,
+        "max_age": 1728000  # 预检请求缓存20天
+    }},
+    expose_headers=["Content-Type", "Authorization"]
+)
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
