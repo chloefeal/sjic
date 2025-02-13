@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Grid, Card, CardContent, Typography, Button, Dialog, DialogTitle, 
-  DialogContent, DialogActions, TextField, Switch, FormControlLabel,
-  Select, MenuItem, IconButton
+import {
+  Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
+  TableRow, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Switch, FormControlLabel, Select, MenuItem, IconButton,
+  Typography
 } from '@mui/material';
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
@@ -12,6 +13,7 @@ function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [models, setModels] = useState([]);
   const [cameras, setCameras] = useState([]);
+  const [algorithms, setAlgorithms] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [formData, setFormData] = useState({
@@ -24,14 +26,12 @@ function Tasks() {
     notificationEnabled: true,
     algorithm_id: '',
     algorithm_parameters: {
-      // 皮带检测算法参数
       pixel_to_cm: 0.1,
       min_area_cm2: 100,
       calibration: {
         belt_width: 0,
         points: []
       },
-      // 目标检测算法参数
       confidence: 0.5,
       regions: []
     }
@@ -44,14 +44,16 @@ function Tasks() {
 
   const fetchAll = async () => {
     try {
-      const [tasksRes, modelsRes, camerasRes] = await Promise.all([
+      const [tasksRes, modelsRes, camerasRes, algorithmsRes] = await Promise.all([
         axios.get('/api/tasks'),
         axios.get('/api/models'),
-        axios.get('/api/cameras')
+        axios.get('/api/cameras'),
+        axios.get('/api/algorithms')
       ]);
       setTasks(tasksRes || []);
       setModels(modelsRes || []);
       setCameras(camerasRes || []);
+      setAlgorithms(algorithmsRes || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     }
@@ -186,57 +188,65 @@ function Tasks() {
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => {
-            resetForm();
-            setOpenDialog(true);
-          }}
-          sx={{ mb: 2 }}
-        >
-          添加任务
-        </Button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <Typography variant="h5">任务列表</Typography>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => {
+              resetForm();
+              setOpenDialog(true);
+            }}
+          >
+            添加任务
+          </Button>
+        </div>
       </Grid>
 
-      {tasks.map(task => (
-        <Grid item xs={12} md={6} lg={4} key={task.id}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                {task.name}
-              </Typography>
-              <Typography color="textSecondary">
-                摄像头: {cameras.find(c => c.id === task.cameraId)?.name}
-              </Typography>
-              <Typography color="textSecondary">
-                模型: {models.find(m => m.id === task.modelId)?.name}
-              </Typography>
-              <Typography color="textSecondary">
-                状态: {task.status}
-              </Typography>
-              
-              <div style={{ marginTop: 16 }}>
-                <IconButton onClick={() => handleEdit(task)}>
-                  <Edit />
-                </IconButton>
-                <IconButton onClick={() => handleDelete(task.id)}>
-                  <Delete />
-                </IconButton>
-                {runningTasks.has(task.id) ? (
-                  <IconButton onClick={() => handleStopDetection(task)}>
-                    <Stop />
-                  </IconButton>
-                ) : (
-                  <IconButton onClick={() => handleStartDetection(task)}>
-                    <PlayArrow />
-                  </IconButton>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </Grid>
-      ))}
+      <Grid item xs={12}>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>名称</TableCell>
+                <TableCell>摄像头</TableCell>
+                <TableCell>模型</TableCell>
+                <TableCell>算法</TableCell>
+                <TableCell>状态</TableCell>
+                <TableCell>操作</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {tasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell>{task.name}</TableCell>
+                  <TableCell>{cameras.find(c => c.id === task.cameraId)?.name}</TableCell>
+                  <TableCell>{models.find(m => m.id === task.modelId)?.name}</TableCell>
+                  <TableCell>{algorithms.find(a => a.id === task.algorithm_id)?.name}</TableCell>
+                  <TableCell>{task.status}</TableCell>
+                  <TableCell>
+                    <IconButton onClick={() => handleEdit(task)}>
+                      <Edit />
+                    </IconButton>
+                    <IconButton onClick={() => handleDelete(task.id)}>
+                      <Delete />
+                    </IconButton>
+                    {runningTasks.has(task.id) ? (
+                      <IconButton onClick={() => handleStopDetection(task)}>
+                        <Stop />
+                      </IconButton>
+                    ) : (
+                      <IconButton onClick={() => handleStartDetection(task)}>
+                        <PlayArrow />
+                      </IconButton>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Grid>
 
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>
@@ -281,6 +291,22 @@ function Tasks() {
                 {cameras.map(camera => (
                   <MenuItem key={camera.id} value={camera.id}>
                     {camera.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Select
+                fullWidth
+                value={formData.algorithm_id}
+                onChange={(e) => setFormData({ ...formData, algorithm_id: e.target.value })}
+                displayEmpty
+              >
+                <MenuItem value="">选择算法</MenuItem>
+                {algorithms.map(algorithm => (
+                  <MenuItem key={algorithm.id} value={algorithm.id}>
+                    {algorithm.name}
                   </MenuItem>
                 ))}
               </Select>
