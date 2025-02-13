@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Grid, Card, CardContent, Typography, Button, Dialog, DialogTitle, 
-  DialogContent, DialogActions, TextField, FormControl, InputLabel, 
-  Select, MenuItem, Table, TableBody, TableCell, TableContainer, 
-  TableHead, TableRow, Paper, IconButton 
+  DialogContent, DialogActions, TextField, Switch, FormControlLabel,
+  Select, MenuItem, IconButton
 } from '@mui/material';
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
@@ -24,7 +23,18 @@ function Tasks() {
     regions: [],
     notificationEnabled: true,
     algorithm_id: '',
-    algorithm_parameters: {}
+    algorithm_parameters: {
+      // 皮带检测算法参数
+      pixel_to_cm: 0.1,
+      min_area_cm2: 100,
+      calibration: {
+        belt_width: 0,
+        points: []
+      },
+      // 目标检测算法参数
+      confidence: 0.5,
+      regions: []
+    }
   });
   const [runningTasks, setRunningTasks] = useState(new Set());
 
@@ -49,18 +59,7 @@ function Tasks() {
 
   const handleCreate = async () => {
     try {
-      const algorithm = models.find(m => m.id === formData.modelId);
-      const defaultParams = {};
-      if (algorithm?.parameter_schema?.properties) {
-        Object.entries(algorithm.parameter_schema.properties).forEach(([key, value]) => {
-          defaultParams[key] = value.default;
-        });
-      }
-
-      const response = await axios.post('/api/tasks', {
-        ...formData,
-        algorithm_parameters: defaultParams
-      });
+      const response = await axios.post('/api/tasks', formData);
       setTasks([...tasks, response]);
       setOpenDialog(false);
     } catch (error) {
@@ -91,14 +90,24 @@ function Tasks() {
   const handleEdit = (task) => {
     setEditingTask(task);
     setFormData({
-      modelId: task.modelId || '',
-      cameraId: task.cameraId || '',
-      confidence: task.confidence || 0.5,
-      alertThreshold: task.alertThreshold || 3,
+      name: task.name,
+      modelId: task.modelId,
+      cameraId: task.cameraId,
+      confidence: task.confidence,
+      alertThreshold: task.alertThreshold,
       regions: task.regions || [],
       notificationEnabled: task.notificationEnabled,
-      algorithm_id: task.algorithm_id || '',
-      algorithm_parameters: task.algorithm_parameters || {}
+      algorithm_id: task.algorithm_id,
+      algorithm_parameters: task.algorithm_parameters || {
+        pixel_to_cm: 0.1,
+        min_area_cm2: 100,
+        calibration: {
+          belt_width: 0,
+          points: []
+        },
+        confidence: 0.5,
+        regions: []
+      }
     });
     setOpenDialog(true);
   };
@@ -114,7 +123,16 @@ function Tasks() {
       regions: [],
       notificationEnabled: true,
       algorithm_id: '',
-      algorithm_parameters: {}
+      algorithm_parameters: {
+        pixel_to_cm: 0.1,
+        min_area_cm2: 100,
+        calibration: {
+          belt_width: 0,
+          points: []
+        },
+        confidence: 0.5,
+        regions: []
+      }
     });
   };
 
@@ -159,7 +177,8 @@ function Tasks() {
       ...prev,
       algorithm_parameters: {
         ...prev.algorithm_parameters,
-        ...calibrationData.algorithm_parameters
+        calibration: calibrationData.calibration,
+        pixel_to_cm: calibrationData.pixel_to_cm
       }
     }));
   };
@@ -178,148 +197,129 @@ function Tasks() {
         >
           添加任务
         </Button>
-
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>ID</TableCell>
-                <TableCell>名称</TableCell>
-                <TableCell>模型</TableCell>
-                <TableCell>摄像头</TableCell>
-                <TableCell>置信度</TableCell>
-                <TableCell>告警阈值</TableCell>
-                <TableCell>状态</TableCell>
-                <TableCell>操作</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {tasks.map((task) => (
-                <TableRow key={task.id}>
-                  <TableCell>{task.id}</TableCell>
-                  <TableCell>{task.name}</TableCell>
-                  <TableCell>
-                    {models.find(m => m.id === task.modelId)?.name || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {cameras.find(c => c.id === task.cameraId)?.name || '-'}
-                  </TableCell>
-                  <TableCell>{task.confidence}</TableCell>
-                  <TableCell>{task.alertThreshold}</TableCell>
-                  <TableCell>
-                    {runningTasks.has(task.id) ? '运行中' : '已停止'}
-                  </TableCell>
-                  <TableCell>
-                    <IconButton
-                      color="primary"
-                      onClick={() => handleEdit(task)}
-                      title="编辑"
-                      disabled={runningTasks.has(task.id)}
-                    >
-                      <Edit />
-                    </IconButton>
-                    <IconButton
-                      color="error"
-                      onClick={() => handleDelete(task.id)}
-                      title="删除"
-                      disabled={runningTasks.has(task.id)}
-                    >
-                      <Delete />
-                    </IconButton>
-                    {!runningTasks.has(task.id) ? (
-                      <IconButton
-                        color="success"
-                        onClick={() => handleStartDetection(task)}
-                        title="开始推理"
-                      >
-                        <PlayArrow />
-                      </IconButton>
-                    ) : (
-                      <IconButton
-                        color="warning"
-                        onClick={() => handleStopDetection(task)}
-                        title="停止推理"
-                      >
-                        <Stop />
-                      </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
       </Grid>
 
-      <Dialog 
-        open={openDialog} 
-        onClose={() => setOpenDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
+      {tasks.map(task => (
+        <Grid item xs={12} md={6} lg={4} key={task.id}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                {task.name}
+              </Typography>
+              <Typography color="textSecondary">
+                摄像头: {cameras.find(c => c.id === task.cameraId)?.name}
+              </Typography>
+              <Typography color="textSecondary">
+                模型: {models.find(m => m.id === task.modelId)?.name}
+              </Typography>
+              <Typography color="textSecondary">
+                状态: {task.status}
+              </Typography>
+              
+              <div style={{ marginTop: 16 }}>
+                <IconButton onClick={() => handleEdit(task)}>
+                  <Edit />
+                </IconButton>
+                <IconButton onClick={() => handleDelete(task.id)}>
+                  <Delete />
+                </IconButton>
+                {runningTasks.has(task.id) ? (
+                  <IconButton onClick={() => handleStopDetection(task)}>
+                    <Stop />
+                  </IconButton>
+                ) : (
+                  <IconButton onClick={() => handleStartDetection(task)}>
+                    <PlayArrow />
+                  </IconButton>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </Grid>
+      ))}
+
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          {editingTask ? '编辑任务' : '添加任务'}
+          {editingTask ? '编辑任务' : '创建任务'}
         </DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid container spacing={2}>
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="名称"
+                label="任务名称"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                margin="normal"
               />
             </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>选择模型</InputLabel>
-                <Select
-                  value={formData.modelId}
-                  onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
-                >
-                  {models.map((model) => (
-                    <MenuItem key={model.id} value={model.id}>
-                      {model.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+            
+            <Grid item xs={12} md={6}>
+              <Select
+                fullWidth
+                value={formData.modelId}
+                onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
+                displayEmpty
+              >
+                <MenuItem value="">选择模型</MenuItem>
+                {models.map(model => (
+                  <MenuItem key={model.id} value={model.id}>
+                    {model.name}
+                  </MenuItem>
+                ))}
+              </Select>
             </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>选择摄像头</InputLabel>
-                <Select
-                  value={formData.cameraId}
-                  onChange={(e) => setFormData({ ...formData, cameraId: e.target.value })}
-                >
-                  {cameras.map((camera) => (
-                    <MenuItem key={camera.id} value={camera.id}>
-                      {camera.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+
+            <Grid item xs={12} md={6}>
+              <Select
+                fullWidth
+                value={formData.cameraId}
+                onChange={(e) => setFormData({ ...formData, cameraId: e.target.value })}
+                displayEmpty
+              >
+                <MenuItem value="">选择摄像头</MenuItem>
+                {cameras.map(camera => (
+                  <MenuItem key={camera.id} value={camera.id}>
+                    {camera.name}
+                  </MenuItem>
+                ))}
+              </Select>
             </Grid>
-            <Grid item xs={12}>
+
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="置信度阈值"
                 type="number"
+                label="置信度"
                 value={formData.confidence}
                 onChange={(e) => setFormData({ ...formData, confidence: parseFloat(e.target.value) })}
                 inputProps={{ step: 0.1, min: 0, max: 1 }}
               />
             </Grid>
-            <Grid item xs={12}>
+
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="告警阈值"
                 type="number"
+                label="告警间隔(秒)"
                 value={formData.alertThreshold}
                 onChange={(e) => setFormData({ ...formData, alertThreshold: parseInt(e.target.value) })}
                 inputProps={{ min: 1 }}
               />
             </Grid>
+
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.notificationEnabled}
+                    onChange={(e) => setFormData({ ...formData, notificationEnabled: e.target.checked })}
+                  />
+                }
+                label="启用通知"
+              />
+            </Grid>
+
             <Grid item xs={12}>
               <CalibrationTool onCalibrate={handleCalibrate} />
             </Grid>
@@ -327,11 +327,8 @@ function Tasks() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenDialog(false)}>取消</Button>
-          <Button 
-            onClick={editingTask ? handleUpdate : handleCreate}
-            color="primary"
-          >
-            {editingTask ? '更新' : '添加'}
+          <Button onClick={editingTask ? handleUpdate : handleCreate} variant="contained">
+            {editingTask ? '更新' : '创建'}
           </Button>
         </DialogActions>
       </Dialog>

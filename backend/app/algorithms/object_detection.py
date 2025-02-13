@@ -4,9 +4,9 @@ from app import db
 
 class ObjectDetectionAlgorithm(BaseAlgorithm):
     """目标检测算法"""
-    __tablename__ = 'algorithms'  # 使用同一个表
+    __tablename__ = 'algorithms'
     __mapper_args__ = {
-        'polymorphic_identity': 'object_detection'  # 改为和前端使用的类型值保持一致
+        'polymorphic_identity': 'object_detection'
     }
 
     @classmethod
@@ -19,30 +19,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             algorithm = cls(
                 name='目标检测',
                 type=type_name,
-                description='目标检测，支持多目标检测和目标跟踪',
-                parameter_schema={
-                    "type": "object",
-                    "properties": {
-                        "confidence": {
-                            "type": "number",
-                            "minimum": 0,
-                            "maximum": 1,
-                            "default": 0.5
-                        },
-                        "regions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "x": {"type": "number"},
-                                    "y": {"type": "number"},
-                                    "width": {"type": "number"},
-                                    "height": {"type": "number"}
-                                }
-                            }
-                        }
-                    }
-                }
+                description='目标检测，支持多目标检测和目标跟踪'
             )
             db.session.add(algorithm)
             db.session.commit()
@@ -52,38 +29,8 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
         while True:
             ret, frame = camera.read()
             if not ret:
-                    continue
+                continue
             model = parameters.get('model')
             confidence = parameters.get('confidence', 0.5)
             results = model(frame, conf=confidence)
-            # 处理结果  
             return results
-
-    def get_parameters_schema(self):
-        return {
-            "type": "object",
-            "properties": {
-                "confidence": {
-                    "type": "number",
-                    "minimum": 0,
-                    "maximum": 1,
-                    "default": 0.5
-                },
-                "regions": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "x": {"type": "number"},
-                            "y": {"type": "number"},
-                            "width": {"type": "number"},
-                            "height": {"type": "number"}
-                        }
-                    }
-                }
-            }
-        }
-
-    def validate_parameters(self, parameters):
-        # TODO: 实现参数验证
-        return True 

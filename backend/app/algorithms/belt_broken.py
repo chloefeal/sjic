@@ -19,8 +19,7 @@ class BeltBroken(BaseAlgorithm):
             algorithm = cls(
                 name='皮带表面故障检测',
                 type=type_name,
-                description='使用Segment检测皮带表面异常，当异常面积大于100cm²时推送告警',
-                parameters=cls().get_parameters_schema()
+                description='使用Segment检测皮带表面异常，当异常面积大于100cm²时推送告警'
             )
             db.session.add(algorithm)
             db.session.commit()
@@ -107,60 +106,3 @@ class BeltBroken(BaseAlgorithm):
                 'frame': frame,
                 'alert': False
             }
-
-    def get_parameters_schema(self):
-        return {
-            "type": "object",
-            "properties": {
-                "confidence": {
-                    "type": "number",
-                    "minimum": 0,
-                    "maximum": 1,
-                    "default": 0.5,
-                    "description": "检测置信度阈值"
-                },
-                "pixel_to_cm": {
-                    "type": "number",
-                    "minimum": 0.01,
-                    "maximum": 1.0,
-                    "default": 0.1,
-                    "description": "像素到厘米的转换比例"
-                },
-                "min_area_cm2": {
-                    "type": "number",
-                    "minimum": 1,
-                    "maximum": 1000,
-                    "default": 100,
-                    "description": "最小异常面积(cm²)"
-                },
-                "calibration": {
-                    "type": "object",
-                    "properties": {
-                        "belt_width": {
-                            "type": "number",
-                            "description": "皮带实际宽度(cm)"
-                        },
-                        "points": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "x": {"type": "number"},
-                                    "y": {"type": "number"}
-                                }
-                            },
-                            "description": "标定点坐标"
-                        }
-                    }
-                }
-            }
-        }
-
-    def validate_parameters(self, parameters):
-        schema = self.get_parameters_schema()
-        for key, value in parameters.items():
-            if key in schema['properties']:
-                prop = schema['properties'][key]
-                if value < prop['minimum'] or value > prop['maximum']:
-                    return False
-        return True 

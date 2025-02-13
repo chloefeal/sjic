@@ -19,36 +19,12 @@ class TemplateAlgorithm(BaseAlgorithm):
             algorithm = cls(
                 name='模板匹配',
                 type=type_name,
-                description='使用OpenCV模板匹配算法，支持多模板匹配和相似度阈值设置',
-                parameters=cls().get_parameters_schema()
+                description='使用模板匹配进行目标检测'
             )
             db.session.add(algorithm)
             db.session.commit()
 
     def process(self, camera, parameters):
         """模板匹配处理"""
-        # 实现模板匹配逻辑
-        pass
-
-    def get_parameters_schema(self):
-        return {
-            "type": "object",
-            "properties": {
-                "threshold": {
-                    "type": "number",
-                    "minimum": 0,
-                    "maximum": 1,
-                    "default": 0.8
-                },
-                "template_images": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "format": "uri"
-                    }
-                }
-            }
-        }
-
-    def validate_parameters(self, parameters):
-        return True 
+        # TODO: 实现模板匹配逻辑
+        pass 
