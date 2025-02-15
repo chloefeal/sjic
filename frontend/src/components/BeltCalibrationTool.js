@@ -59,24 +59,28 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       stopStreaming();
     });
 
+    const drawFrame = (frameData) => {
+        const blob = new Blob([frameData], { type: 'image/jpeg' });
+        if (frameUrl) {
+            URL.revokeObjectURL(frameUrl);
+        }
+        const url = URL.createObjectURL(blob);
+        
+        // 获取图像实际尺寸
+        const img = new Image();
+        img.onload = () => {
+            const size = calculateAspectRatio(img.width, img.height);
+            setFrameSize(size);
+            URL.revokeObjectURL(img.src);
+        };
+        img.src = url;
+        
+        setFrameUrl(url);
+    }
+
     // 处理接收到的视频帧
     socketRef.current.on('frame', (frameData) => {
-      const blob = new Blob([frameData], { type: 'image/jpeg' });
-      if (frameUrl) {
-        URL.revokeObjectURL(frameUrl);
-      }
-      const url = URL.createObjectURL(blob);
-      
-      // 获取图像实际尺寸
-      const img = new Image();
-      img.onload = () => {
-        const size = calculateAspectRatio(img.width, img.height);
-        setFrameSize(size);
-        URL.revokeObjectURL(img.src);
-      };
-      img.src = url;
-      
-      setFrameUrl(url);
+      drawFrame(frameData);
     });
   };
 
@@ -104,7 +108,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         }, {
           responseType: 'blob'
         });
-        setImageUrl(URL.createObjectURL(response.data));
+        drawFrame(response.data);
       } catch (error) {
         console.error('Error capturing frame:', error);
       }
