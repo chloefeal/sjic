@@ -16,6 +16,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const imageRef = useRef(null);
   const videoRef = useRef(null);
   const socketRef = useRef(null);
+  const [frameUrl, setFrameUrl] = useState(null);  // 新增状态
 
   // 开始视频流预览
   const startStreaming = () => {
@@ -50,14 +51,12 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
 
     // 处理接收到的视频帧
     socketRef.current.on('frame', (frameData) => {
-      const videoElement = videoRef.current;
-      if (videoElement) {
-        const blob = new Blob([frameData], { type: 'image/jpeg' });
-        const url = URL.createObjectURL(blob);
-        videoElement.src = url;
-        // 清理旧的 URL
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const blob = new Blob([frameData], { type: 'image/jpeg' });
+      if (frameUrl) {
+        URL.revokeObjectURL(frameUrl);  // 清理旧的 URL
       }
+      const url = URL.createObjectURL(blob);
+      setFrameUrl(url);
     });
   };
 
@@ -201,6 +200,9 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       if (imageUrl) {
         URL.revokeObjectURL(imageUrl);
       }
+      if (frameUrl) {
+        URL.revokeObjectURL(frameUrl);
+      }
     };
   }, []);
 
@@ -244,12 +246,12 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
           {/* 视频预览区域 */}
           {isStreaming && !imageUrl && (
             <Box mb={2}>
-              <video
-                ref={videoRef}
+              <img
+                src={frameUrl}
                 width={800}
                 height={600}
-                autoPlay
                 style={{ border: '1px solid #ccc' }}
+                alt="Video stream"
               />
             </Box>
           )}
