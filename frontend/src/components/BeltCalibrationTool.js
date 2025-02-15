@@ -17,6 +17,17 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const videoRef = useRef(null);
   const socketRef = useRef(null);
   const [frameUrl, setFrameUrl] = useState(null);  // 新增状态
+  const [frameSize, setFrameSize] = useState({ width: 800, height: 600 });
+  const containerRef = useRef(null);
+
+  // 计算缩放后的尺寸
+  const calculateAspectRatio = (originalWidth, originalHeight, maxWidth = 800) => {
+    const ratio = originalWidth / originalHeight;
+    let width = maxWidth;
+    let height = maxWidth / ratio;
+    
+    return { width, height };
+  };
 
   // 开始视频流预览
   const startStreaming = () => {
@@ -53,9 +64,19 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     socketRef.current.on('frame', (frameData) => {
       const blob = new Blob([frameData], { type: 'image/jpeg' });
       if (frameUrl) {
-        URL.revokeObjectURL(frameUrl);  // 清理旧的 URL
+        URL.revokeObjectURL(frameUrl);
       }
       const url = URL.createObjectURL(blob);
+      
+      // 获取图像实际尺寸
+      const img = new Image();
+      img.onload = () => {
+        const size = calculateAspectRatio(img.width, img.height);
+        setFrameSize(size);
+        URL.revokeObjectURL(img.src);
+      };
+      img.src = url;
+      
       setFrameUrl(url);
     });
   };
@@ -245,12 +266,24 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
 
           {/* 视频预览区域 */}
           {isStreaming && !imageUrl && (
-            <Box mb={2}>
+            <Box 
+              mb={2} 
+              ref={containerRef}
+              sx={{ 
+                width: '100%',
+                maxWidth: 800,
+                display: 'flex',
+                justifyContent: 'center'
+              }}
+            >
               <img
                 src={frameUrl}
-                width={800}
-                height={600}
-                style={{ border: '1px solid #ccc' }}
+                width={frameSize.width}
+                height={frameSize.height}
+                style={{ 
+                  border: '1px solid #ccc',
+                  objectFit: 'contain'
+                }}
                 alt="Video stream"
               />
             </Box>
@@ -259,13 +292,26 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
           {/* 标定区域 */}
           {imageUrl && (
             <>
-              <canvas
-                ref={canvasRef}
-                width={800}
-                height={600}
-                onClick={handleCanvasClick}
-                style={{ border: '1px solid #ccc', marginBottom: 16 }}
-              />
+              <Box 
+                sx={{ 
+                  width: '100%',
+                  maxWidth: 800,
+                  display: 'flex',
+                  justifyContent: 'center'
+                }}
+              >
+                <canvas
+                  ref={canvasRef}
+                  width={frameSize.width}
+                  height={frameSize.height}
+                  onClick={handleCanvasClick}
+                  style={{ 
+                    border: '1px solid #ccc', 
+                    marginBottom: 16,
+                    objectFit: 'contain'
+                  }}
+                />
+              </Box>
               <TextField
                 fullWidth
                 type="number"
