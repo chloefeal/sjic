@@ -11,7 +11,6 @@ class BaseAlgorithm(Algorithm):
         """处理单帧图像"""
         pass
 
-
     @classmethod
     def get_subclasses(cls):
         """获取所有子类"""
@@ -27,7 +26,11 @@ class BaseAlgorithm(Algorithm):
     @classmethod
     def register_algorithms(cls):
         """注册所有算法到数据库"""
-        print(__file__)
+
+        print("Registering algorithms...")
+        print(f"Current file: {__file__}")
         for algorithm_class in cls.get_subclasses():
+            print(f"Registering algorithm: {algorithm_class.__name__}")
             algorithm_class.register()
-        db.session.commit() 
+        db.session.commit()
+        print("Algorithm registration completed") 
