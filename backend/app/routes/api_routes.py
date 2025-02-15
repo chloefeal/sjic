@@ -331,6 +331,7 @@ def handle_disconnect():
 @socketio.on('start_stream')
 def handle_start_stream(data):
     """处理开始流请求"""
+    cap = None
     try:
         camera_id = data.get('camera_id')
         camera = Camera.query.get_or_404(camera_id)
