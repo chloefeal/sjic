@@ -33,7 +33,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       reconnectionAttempts: 5,
       // 确保连接到正确的后端地址
       host: window.location.hostname,
-      port: '38881'  // 使用后端端口
+      port: process.env.BACKEND_PORT  // 使用后端端口
     });
 
     // 连接成功后开始请求视频流
