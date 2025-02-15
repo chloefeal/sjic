@@ -4,6 +4,7 @@ import {
   TextField, Paper, Box
 } from '@mui/material';
 import axios from '../utils/axios';
+import { io } from 'socket.io-client';  // 需要安装 socket.io-client
 
 function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const [open, setOpen] = useState(false);
@@ -14,31 +15,50 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const videoRef = useRef(null);
-  const wsRef = useRef(null);
+  const socketRef = useRef(null);
 
   // 开始视频流预览
   const startStreaming = () => {
     if (!cameraId) return;
     
     setIsStreaming(true);
-    wsRef.current = new WebSocket(`ws://${window.location.host}/api/stream/${cameraId}`);
     
-    wsRef.current.onmessage = (event) => {
+    // 创建 Socket.IO 连接
+    socketRef.current = io('/stream', {
+      path: '/socket.io',
+      transports: ['websocket']
+    });
+
+    // 连接成功后开始请求视频流
+    socketRef.current.on('connect', () => {
+      console.log('Connected to stream server');
+      socketRef.current.emit('start_stream', { camera_id: cameraId });
+    });
+
+    // 处理接收到的视频帧
+    socketRef.current.on('frame', (frameData) => {
       const videoElement = videoRef.current;
       if (videoElement) {
-        const blob = new Blob([event.data], { type: 'image/jpeg' });
+        const blob = new Blob([frameData], { type: 'image/jpeg' });
         const url = URL.createObjectURL(blob);
         videoElement.src = url;
         // 清理旧的 URL
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
-    };
+    });
+
+    // 处理错误
+    socketRef.current.on('error', (error) => {
+      console.error('Stream error:', error);
+      stopStreaming();
+    });
   };
 
   // 停止视频流预览
   const stopStreaming = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
     }
     setIsStreaming(false);
   };

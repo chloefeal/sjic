@@ -321,19 +321,21 @@ def capture_frame():
 @socketio.on('connect', namespace='/stream')
 def handle_stream_connect():
     """处理视频流连接"""
-    print('Client connected to stream')
+    app.logger.info('Client connected to stream')
 
 @socketio.on('disconnect', namespace='/stream')
 def handle_stream_disconnect():
     """处理视频流断开"""
-    print('Client disconnected from stream')
+    app.logger.info('Client disconnected from stream')
 
-def generate_frames(camera_id):
-    """生成视频帧"""
-    camera = Camera.query.get_or_404(camera_id)
-    cap = cv2.VideoCapture(camera.get_rtsp_url())
-    
+@socketio.on('start_stream', namespace='/stream')
+def handle_start_stream(data):
+    """处理开始流请求"""
     try:
+        camera_id = data.get('camera_id')
+        camera = Camera.query.get_or_404(camera_id)
+        cap = cv2.VideoCapture(camera.get_rtsp_url())
+        
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -341,15 +343,19 @@ def generate_frames(camera_id):
                 
             # 将帧编码为JPEG
             _, buffer = cv2.imencode('.jpg', frame)
-            frame_bytes = buffer.tobytes()
+            frame_data = buffer.tobytes()
             
-            # 发送帧
-            yield frame_bytes
+            # 发送帧到客户端
+            socketio.emit('frame', frame_data, namespace='/stream', room=request.sid)
             
             # 控制帧率
-            time.sleep(1/30)  # 30fps
+            socketio.sleep(1/30)  # 30fps
+            
+    except Exception as e:
+        app.logger.error(f"Stream error: {str(e)}")
     finally:
-        cap.release()
+        if cap:
+            cap.release()
 
 @app.route('/api/stream/<int:camera_id>')
 def video_stream(camera_id):
