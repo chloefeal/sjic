@@ -5,8 +5,6 @@ import {
 } from '@mui/material';
 import axios from '../utils/axios';
 import { io } from 'socket.io-client';  // 需要安装 socket.io-client
-import process from 'process';
-import { BADFAMILY } from 'dns';
 
 function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const [open, setOpen] = useState(false);
@@ -26,7 +24,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     setIsStreaming(true);
     
     // 创建 Socket.IO 连接
-    socketRef.current = io(`${process.env.REACT_APP_API_URL}/stream`, {
+    socketRef.current = io(process.env.REACT_APP_API_URL+'/stream', {
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
