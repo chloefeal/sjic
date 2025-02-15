@@ -29,8 +29,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-      path: '/stream'
+      reconnectionAttempts: 5
     });
 
     // 连接成功后开始请求视频流
