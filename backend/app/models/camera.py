@@ -1,5 +1,8 @@
 from datetime import datetime
 from app import db
+from werkzeug.utils import secure_filename
+from config import Config
+import os
 
 class Camera(db.Model):
     __tablename__ = 'cameras'
@@ -21,4 +24,10 @@ class Camera(db.Model):
         }
 
     def get_rtsp_url(self):
-        return self.url
+        file = self.url
+        if file.startswith('rtsp://'):
+            return self.url
+        else:
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(Config.VIDEO_FOLDER, filename)
+            return file_path

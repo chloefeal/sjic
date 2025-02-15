@@ -14,6 +14,9 @@ class Config:
     # 模型配置
     MODEL_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
     
+    # 视频流配置
+    VIDEO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
+
     # 日志配置
     LOG_FOLDER = 'logs'
     LOG_FILENAME = f'app_{datetime.now().strftime("%Y%m%d")}.log'
