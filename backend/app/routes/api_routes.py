@@ -318,17 +318,17 @@ def capture_frame():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@socketio.on('connect', namespace='/stream')
-def handle_stream_connect():
-    """处理视频流连接"""
-    app.logger.info('Client connected to stream')
+@socketio.on('connect')
+def handle_connect():
+    """处理连接"""
+    app.logger.info('Client connected')
 
-@socketio.on('disconnect', namespace='/stream')
-def handle_stream_disconnect():
-    """处理视频流断开"""
-    app.logger.info('Client disconnected from stream')
+@socketio.on('disconnect')
+def handle_disconnect():
+    """处理断开连接"""
+    app.logger.info('Client disconnected')
 
-@socketio.on('start_stream', namespace='/stream')
+@socketio.on('start_stream')
 def handle_start_stream(data):
     """处理开始流请求"""
     try:
@@ -346,7 +346,7 @@ def handle_start_stream(data):
             frame_data = buffer.tobytes()
             
             # 发送帧到客户端
-            socketio.emit('frame', frame_data, namespace='/stream', room=request.sid)
+            socketio.emit('frame', frame_data, room=request.sid)
             
             # 控制帧率
             socketio.sleep(1/30)  # 30fps

@@ -5,6 +5,8 @@ import {
 } from '@mui/material';
 import axios from '../utils/axios';
 import { io } from 'socket.io-client';  // 需要安装 socket.io-client
+import process from 'process';
+import { BADFAMILY } from 'dns';
 
 function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const [open, setOpen] = useState(false);
@@ -23,16 +25,14 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     
     setIsStreaming(true);
     
-    // 创建 Socket.IO 连接，修改连接配置
-    socketRef.current = io('/stream',{
+    // 创建 Socket.IO 连接
+    socketRef.current = io(`${process.env.REACT_APP_API_URL}/stream`, {
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
-      // 确保连接到正确的后端地址
-      host: '116.205.243.239',
-      port: process.env.BACKEND_PORT  // 使用后端端口
+      path: '/socket.io'  // 默认的 Socket.IO 路径
     });
 
     // 连接成功后开始请求视频流
