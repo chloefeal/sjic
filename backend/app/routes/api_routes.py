@@ -230,6 +230,7 @@ def get_tasks():
 def create_tasks():
     """创建算法设置"""
     data = request.json
+    app.logger.info(f"Creating new task: {data}")
     task = Task(**data)
     db.session.add(task)
     db.session.commit()
@@ -239,6 +240,7 @@ def create_tasks():
 def update_tasks(task_id):
     """更新算法设置"""
     data = request.json
+    app.logger.info(f"Updating task: {data}")
     task = Task.query.get_or_404(task_id)
     for key, value in data.items():
         if hasattr(task, key):
