@@ -50,7 +50,13 @@ CORS(app,
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode='threading',
+    logger=True,
+    engineio_logger=True
+)
 
 def init_app():
     with app.app_context():

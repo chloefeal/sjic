@@ -23,16 +23,33 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     
     setIsStreaming(true);
     
-    // 创建 Socket.IO 连接
-    socketRef.current = io('/stream', {
+    // 创建 Socket.IO 连接，修改连接配置
+    socketRef.current = io({
       path: '/socket.io',
-      transports: ['websocket']
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5,
+      // 确保连接到正确的后端地址
+      host: window.location.hostname,
+      port: '38881'  // 使用后端端口
     });
 
     // 连接成功后开始请求视频流
     socketRef.current.on('connect', () => {
       console.log('Connected to stream server');
       socketRef.current.emit('start_stream', { camera_id: cameraId });
+    });
+
+    socketRef.current.on('connect_error', (error) => {
+      console.error('Connection error:', error);
+      stopStreaming();
+    });
+
+    socketRef.current.on('disconnect', (reason) => {
+      console.log('Disconnected:', reason);
+      stopStreaming();
     });
 
     // 处理接收到的视频帧
@@ -45,12 +62,6 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         // 清理旧的 URL
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
-    });
-
-    // 处理错误
-    socketRef.current.on('error', (error) => {
-      console.error('Stream error:', error);
-      stopStreaming();
     });
   };
 
