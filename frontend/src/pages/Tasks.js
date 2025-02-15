@@ -340,42 +340,38 @@ function Tasks() {
               />
             </Grid>
 
-            {formData.algorithm_id === 'belt_broken' && (
-              <>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="像素到厘米转换比例"
-                    value={formData.algorithm_parameters.pixel_to_cm}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      algorithm_parameters: {
-                        ...formData.algorithm_parameters,
-                        pixel_to_cm: parseFloat(e.target.value)
-                      }
-                    })}
-                    inputProps={{ step: 0.01, min: 0.01 }}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="最小异常面积(cm²)"
-                    value={formData.algorithm_parameters.min_area_cm2}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      algorithm_parameters: {
-                        ...formData.algorithm_parameters,
-                        min_area_cm2: parseInt(e.target.value)
-                      }
-                    })}
-                    inputProps={{ min: 1 }}
-                  />
-                </Grid>
-              </>
-            )}
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="像素到厘米转换比例"
+                value={formData.algorithm_parameters.pixel_to_cm}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  algorithm_parameters: {
+                    ...formData.algorithm_parameters,
+                    pixel_to_cm: parseFloat(e.target.value)
+                  }
+                })}
+                inputProps={{ step: 0.01, min: 0.01 }}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="最小异常面积(cm²)"
+                value={formData.algorithm_parameters.min_area_cm2}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  algorithm_parameters: {
+                    ...formData.algorithm_parameters,
+                    min_area_cm2: parseInt(e.target.value)
+                  }
+                })}
+                inputProps={{ min: 1 }}
+              />
+            </Grid>
 
             <Grid item xs={12}>
               <CalibrationTool onCalibrate={handleCalibrate} />

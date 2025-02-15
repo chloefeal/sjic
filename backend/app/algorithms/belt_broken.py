@@ -14,9 +14,9 @@ class BeltBroken(BaseAlgorithm):
     @classmethod
     def register(cls):
         type_name = cls.__mapper_args__['polymorphic_identity']
+        print(type_name)
         algorithm = Algorithm.query.filter_by(type=type_name).first()
         print(algorithm)
-        print(type_name)
         if not algorithm:
             algorithm = cls(
                 name='皮带表面故障检测',
@@ -32,8 +32,8 @@ class BeltBroken(BaseAlgorithm):
         confidence = parameters.get('confidence', 0.5)
         alertThreshold = parameters.get('alertThreshold', 5)
         algorithm_parameters = parameters.get('algorithm_parameters', {})
-        pixel_to_cm = parameters.get('pixel_to_cm', 0.1)  # 像素到厘米的转换比例
-        min_area_cm2 = parameters.get('min_area_cm2', 100)  # 最小异常面积(cm²)
+        pixel_to_cm = algorithm_parameters.get('pixel_to_cm', 0.1)  # 像素到厘米的转换比例
+        min_area_cm2 = algorithm_parameters.get('min_area_cm2', 100)  # 最小异常面积(cm²)
         
         while True:
             ret, frame = camera.read()
