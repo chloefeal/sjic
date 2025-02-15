@@ -24,13 +24,13 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     setIsStreaming(true);
     
     // 创建 Socket.IO 连接
-    socketRef.current = io(process.env.REACT_APP_API_URL+'/stream', {
+    socketRef.current = io(process.env.REACT_APP_API_URL, {
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
-      path: '/socket.io'  // 默认的 Socket.IO 路径
+      path: '/stream'
     });
 
     // 连接成功后开始请求视频流
