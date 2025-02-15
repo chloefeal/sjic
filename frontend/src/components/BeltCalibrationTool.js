@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Paper
+  TextField, Paper, Box
 } from '@mui/material';
 import axios from '../utils/axios';
 
@@ -10,20 +10,68 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const [imageUrl, setImageUrl] = useState(null);
   const [points, setPoints] = useState([]);
   const [beltWidth, setBeltWidth] = useState(0); // 真实宽度(cm)
+  const [isStreaming, setIsStreaming] = useState(false);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
+  const videoRef = useRef(null);
+  const wsRef = useRef(null);
 
-  // 获取视频流截图
+  // 开始视频流预览
+  const startStreaming = () => {
+    if (!cameraId) return;
+    
+    setIsStreaming(true);
+    wsRef.current = new WebSocket(`ws://${window.location.host}/api/stream/${cameraId}`);
+    
+    wsRef.current.onmessage = (event) => {
+      const videoElement = videoRef.current;
+      if (videoElement) {
+        const blob = new Blob([event.data], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+        videoElement.src = url;
+        // 清理旧的 URL
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    };
+  };
+
+  // 停止视频流预览
+  const stopStreaming = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    setIsStreaming(false);
+  };
+
+  // 从视频流中截取当前帧
   const captureFrame = async () => {
-    try {
-      const response = await axios.post('/api/cameras/capture', {
-        camera_id: cameraId
-      }, {
-        responseType: 'blob'
-      });
-      setImageUrl(URL.createObjectURL(response.data));
-    } catch (error) {
-      console.error('Error capturing frame:', error);
+    if (isStreaming && videoRef.current) {
+      // 从视频元素创建 canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(videoRef.current, 0, 0);
+      
+      // 转换为 blob
+      canvas.toBlob((blob) => {
+        setImageUrl(URL.createObjectURL(blob));
+      }, 'image/jpeg');
+      
+      // 停止视频流
+      stopStreaming();
+    } else {
+      // 如果没有视频流，使用原来的方式获取图片
+      try {
+        const response = await axios.post('/api/cameras/capture', {
+          camera_id: cameraId
+        }, {
+          responseType: 'blob'
+        });
+        setImageUrl(URL.createObjectURL(response.data));
+      } catch (error) {
+        console.error('Error capturing frame:', error);
+      }
     }
   };
 
@@ -119,6 +167,16 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     }
   }, [points]);
 
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      stopStreaming();
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl);
+      }
+    };
+  }, []);
+
   return (
     <>
       <Button variant="outlined" onClick={() => setOpen(true)}>
@@ -129,6 +187,16 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         <DialogTitle>皮带宽度标定</DialogTitle>
         <DialogContent>
           <Paper style={{ padding: 16, marginBottom: 16 }}>
+            {!imageUrl && (
+              <Button 
+                variant="contained" 
+                onClick={isStreaming ? stopStreaming : startStreaming}
+                disabled={!cameraId}
+                style={{ marginRight: 16 }}
+              >
+                {isStreaming ? '停止预览' : '开始预览'}
+              </Button>
+            )}
             <Button 
               variant="contained" 
               onClick={captureFrame}
@@ -146,6 +214,20 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
             </Button>
           </Paper>
 
+          {/* 视频预览区域 */}
+          {isStreaming && !imageUrl && (
+            <Box mb={2}>
+              <video
+                ref={videoRef}
+                width={800}
+                height={600}
+                autoPlay
+                style={{ border: '1px solid #ccc' }}
+              />
+            </Box>
+          )}
+
+          {/* 标定区域 */}
           {imageUrl && (
             <>
               <canvas

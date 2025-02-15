@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 from config import Config
 from app.middleware.auth import token_required
 import cv2
+import time
 
 
 # 初始化服务
@@ -316,4 +317,45 @@ def capture_frame():
         )
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@socketio.on('connect', namespace='/stream')
+def handle_stream_connect():
+    """处理视频流连接"""
+    print('Client connected to stream')
+
+@socketio.on('disconnect', namespace='/stream')
+def handle_stream_disconnect():
+    """处理视频流断开"""
+    print('Client disconnected from stream')
+
+def generate_frames(camera_id):
+    """生成视频帧"""
+    camera = Camera.query.get_or_404(camera_id)
+    cap = cv2.VideoCapture(camera.get_rtsp_url())
+    
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            # 将帧编码为JPEG
+            _, buffer = cv2.imencode('.jpg', frame)
+            frame_bytes = buffer.tobytes()
+            
+            # 发送帧
+            yield frame_bytes
+            
+            # 控制帧率
+            time.sleep(1/30)  # 30fps
+    finally:
+        cap.release()
+
+@app.route('/api/stream/<int:camera_id>')
+def video_stream(camera_id):
+    """视频流端点"""
+    return Response(
+        generate_frames(camera_id),
+        mimetype='multipart/x-mixed-replace; boundary=frame'
+    )
 
