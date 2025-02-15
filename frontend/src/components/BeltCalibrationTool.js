@@ -14,7 +14,6 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const [isStreaming, setIsStreaming] = useState(false);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
-  const videoRef = useRef(null);
   const socketRef = useRef(null);
   const [frameUrl, setFrameUrl] = useState(null);  // 新增状态
   const [frameSize, setFrameSize] = useState({ width: 800, height: 600 });
@@ -92,19 +91,9 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
 
   // 从视频流中截取当前帧
   const captureFrame = async () => {
-    if (isStreaming && videoRef.current) {
-      // 从视频元素创建 canvas
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(videoRef.current, 0, 0);
-      
-      // 转换为 blob
-      canvas.toBlob((blob) => {
-        setImageUrl(URL.createObjectURL(blob));
-      }, 'image/jpeg');
-      
+    if (isStreaming && frameUrl) {
+      // 直接使用当前显示的帧
+      setImageUrl(frameUrl);
       // 停止视频流
       stopStreaming();
     } else {
