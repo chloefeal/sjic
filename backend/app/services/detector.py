@@ -134,7 +134,8 @@ class DetectorService:
             results = algorithm.process(detector['camera'], {
                 'model': detector['model'],
                 'confidence': task.confidence,
-                'regions': task.regions
+                'alertThreshold': task.alertThreshold,
+                'algorithm_parameters': task.algorithm_parameters
             })
             
             # 处理结果并创建告警

@@ -28,6 +28,8 @@ class BeltBroken(BaseAlgorithm):
         """皮带表面故障检测处理"""
         model = parameters.get('model')  # 应该是YOLO Segment模型
         confidence = parameters.get('confidence', 0.5)
+        alertThreshold = parameters.get('alertThreshold', 5)
+        algorithm_parameters = parameters.get('algorithm_parameters', {})
         pixel_to_cm = parameters.get('pixel_to_cm', 0.1)  # 像素到厘米的转换比例
         min_area_cm2 = parameters.get('min_area_cm2', 100)  # 最小异常面积(cm²)
         
