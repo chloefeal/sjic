@@ -59,31 +59,30 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       stopStreaming();
     });
 
-    const drawFrame = (frameData) => {
-        const blob = new Blob([frameData], { type: 'image/jpeg' });
-        if (frameUrl) {
-            URL.revokeObjectURL(frameUrl);
-        }
-        const url = URL.createObjectURL(blob);
-        
-        // 获取图像实际尺寸
-        const img = new Image();
-        img.onload = () => {
-            const size = calculateAspectRatio(img.width, img.height);
-            setFrameSize(size);
-            URL.revokeObjectURL(img.src);
-        };
-        img.src = url;
-        
-        setFrameUrl(url);
-    }
-
     // 处理接收到的视频帧
     socketRef.current.on('frame', (frameData) => {
       drawFrame(frameData);
     });
   };
-
+  
+  const drawFrame = (frameData) => {
+    const blob = new Blob([frameData], { type: 'image/jpeg' });
+    if (frameUrl) {
+        URL.revokeObjectURL(frameUrl);
+    }
+    const url = URL.createObjectURL(blob);
+    
+    // 获取图像实际尺寸
+    const img = new Image();
+    img.onload = () => {
+        const size = calculateAspectRatio(img.width, img.height);
+        setFrameSize(size);
+        URL.revokeObjectURL(img.src);
+    };
+    img.src = url;
+    
+    setFrameUrl(url);
+  }
   // 停止视频流预览
   const stopStreaming = () => {
     if (socketRef.current) {
