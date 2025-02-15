@@ -8,6 +8,7 @@ import {
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
 import CalibrationTool from '../components/CalibrationTool';
+import BeltCalibrationTool from '../components/BeltCalibrationTool';
 
 function Tasks() {
   const [tasks, setTasks] = useState([]);
@@ -373,9 +374,14 @@ function Tasks() {
               />
             </Grid>
 
+            
             <Grid item xs={12}>
-              <CalibrationTool onCalibrate={handleCalibrate} />
+              <BeltCalibrationTool 
+                cameraId={formData.cameraId}
+                onCalibrate={handleCalibrate}
+              />
             </Grid>
+            
           </Grid>
         </DialogContent>
         <DialogActions>

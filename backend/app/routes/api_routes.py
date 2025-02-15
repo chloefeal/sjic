@@ -1,4 +1,4 @@
-from flask import jsonify, request
+from flask import jsonify, request, Response
 from app import app, db, socketio
 from app.models import Alert, Camera, DetectionModel, Algorithm
 from app.services.detector import DetectorService
@@ -9,6 +9,7 @@ from pathlib import Path
 from werkzeug.utils import secure_filename
 from config import Config
 from app.middleware.auth import token_required
+import cv2
 
 
 # 初始化服务
@@ -284,4 +285,35 @@ def delete_log(id):
     db.session.delete(log)
     db.session.commit()
     return jsonify({"status": "success"})
+
+@app.route('/api/cameras/capture', methods=['POST'])
+def capture_frame():
+    """获取摄像头当前帧"""
+    try:
+        data = request.json
+        camera_id = data.get('camera_id')
+        
+        # 获取摄像头
+        camera = Camera.query.get_or_404(camera_id)
+        cap = cv2.VideoCapture(camera.get_rtsp_url())
+        
+        if not cap.isOpened():
+            raise RuntimeError(f"Failed to open camera: {camera_id}")
+            
+        # 读取一帧
+        ret, frame = cap.read()
+        cap.release()
+        
+        if not ret:
+            raise RuntimeError("Failed to capture frame")
+            
+        # 将图片编码为JPEG
+        _, buffer = cv2.imencode('.jpg', frame)
+        
+        return Response(
+            buffer.tobytes(),
+            mimetype='image/jpeg'
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
