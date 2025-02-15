@@ -24,15 +24,14 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     setIsStreaming(true);
     
     // 创建 Socket.IO 连接，修改连接配置
-    socketRef.current = io({
-      path: '/socket.io',
+    socketRef.current = io('/stream',{
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
       // 确保连接到正确的后端地址
-      host: window.location.hostname,
+      host: '116.205.243.239',
       port: process.env.BACKEND_PORT  // 使用后端端口
     });
 
