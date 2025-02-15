@@ -12,9 +12,9 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
     @classmethod
     def register(cls):
         type_name = cls.__mapper_args__['polymorphic_identity']
+        print(type_name)
         algorithm = Algorithm.query.filter_by(type=type_name).first()
         print(algorithm)
-        print(type_name)
         if not algorithm:
             algorithm = cls(
                 name='目标检测',
