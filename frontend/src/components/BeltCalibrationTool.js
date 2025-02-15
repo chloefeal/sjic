@@ -42,6 +42,8 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   // 绘制画布
   const drawCanvas = () => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
+
     const ctx = canvas.getContext('2d');
     const image = imageRef.current;
 
@@ -101,7 +103,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   };
 
   useEffect(() => {
-    if (imageUrl) {
+    if (imageUrl && canvasRef.current) {
       const image = new Image();
       image.src = imageUrl;
       image.onload = () => {
@@ -112,7 +114,9 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   }, [imageUrl]);
 
   useEffect(() => {
-    drawCanvas();
+    if (canvasRef.current) {
+      drawCanvas();
+    }
   }, [points]);
 
   return (
