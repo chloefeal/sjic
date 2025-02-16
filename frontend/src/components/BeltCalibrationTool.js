@@ -19,6 +19,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const [frameSize, setFrameSize] = useState({ width: 800, height: 600 });
   const containerRef = useRef(null);
   const lastFrameData = useRef(null);
+  const [draggingPointIndex, setDraggingPointIndex] = useState(null);  // 新增：当前拖动的点索引
 
   // 计算缩放后的尺寸
   const calculateAspectRatio = (originalWidth, originalHeight, maxWidth = 800) => {
@@ -146,14 +147,46 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
 
   // 处理画布点击
   const handleCanvasClick = (event) => {
-    if (points.length >= 2) return;
-
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
-    setPoints([...points, { x, y }]);
+    // 检查是否点击了已存在的点
+    const clickedPointIndex = points.findIndex(point => {
+      const distance = Math.sqrt(
+        Math.pow(point.x - x, 2) + Math.pow(point.y - y, 2)
+      );
+      return distance < 10;  // 10像素的点击范围
+    });
+
+    if (clickedPointIndex !== -1) {
+      // 如果点击了已存在的点，开始拖动
+      setDraggingPointIndex(clickedPointIndex);
+    } else if (points.length < 2) {
+      // 如果没有点击已存在的点且点数小于2，添加新点
+      setPoints([...points, { x, y }]);
+    }
+  };
+
+  // 处理鼠标移动
+  const handleMouseMove = (event) => {
+    if (draggingPointIndex === null) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(event.clientX - rect.left, canvas.width));
+    const y = Math.max(0, Math.min(event.clientY - rect.top, canvas.height));
+
+    // 更新点的位置
+    const newPoints = [...points];
+    newPoints[draggingPointIndex] = { x, y };
+    setPoints(newPoints);
+  };
+
+  // 处理鼠标松开
+  const handleMouseUp = () => {
+    setDraggingPointIndex(null);
   };
 
   // 绘制画布
@@ -173,11 +206,14 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     }
 
     // 绘制点和线
-    points.forEach(point => {
+    points.forEach((point, index) => {
       ctx.beginPath();
-      ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
-      ctx.fillStyle = 'red';
+      ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);  // 增大点的大小
+      ctx.fillStyle = index === draggingPointIndex ? 'yellow' : 'red';  // 拖动时改变颜色
       ctx.fill();
+      ctx.strokeStyle = 'white';  // 添加白色边框
+      ctx.lineWidth = 2;
+      ctx.stroke();
     });
 
     if (points.length === 2) {
@@ -329,10 +365,14 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
                   width={frameSize.width}
                   height={frameSize.height}
                   onClick={handleCanvasClick}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}  // 鼠标离开时也停止拖动
                   style={{ 
                     border: '1px solid #ccc', 
                     marginBottom: 16,
-                    objectFit: 'contain'
+                    objectFit: 'contain',
+                    cursor: draggingPointIndex !== null ? 'grabbing' : 'crosshair'  // 根据状态改变鼠标样式
                   }}
                 />
               </Box>
