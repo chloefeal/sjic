@@ -18,6 +18,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const [frameUrl, setFrameUrl] = useState(null);  // 新增状态
   const [frameSize, setFrameSize] = useState({ width: 800, height: 600 });
   const containerRef = useRef(null);
+  const lastFrameData = useRef(null);
 
   // 计算缩放后的尺寸
   const calculateAspectRatio = (originalWidth, originalHeight, maxWidth = 800) => {
@@ -66,57 +67,49 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   };
   
   const drawFrame = (frameData) => {
+    // 保存原始的 frameData
     const blob = new Blob([frameData], { type: 'image/jpeg' });
     if (frameUrl) {
-        URL.revokeObjectURL(frameUrl);
+      URL.revokeObjectURL(frameUrl);
     }
     const url = URL.createObjectURL(blob);
     
     // 获取图像实际尺寸
     const img = new Image();
     img.onload = () => {
-        const size = calculateAspectRatio(img.width, img.height);
-        setFrameSize(size);
-        URL.revokeObjectURL(img.src);
+      const size = calculateAspectRatio(img.width, img.height);
+      setFrameSize(size);
+      URL.revokeObjectURL(img.src);
     };
     img.src = url;
     
     setFrameUrl(url);
-  }
-
-  // 从 Blob URL 创建新的 Blob URL
-  const cloneBlob = async (url) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
-    } catch (error) {
-      console.error('Error cloning blob:', error);
-      return null;
-    }
+    // 保存最新的 frameData 以便后续使用
+    lastFrameData.current = frameData;
   };
 
   // 停止视频流预览
-  const stopStreaming = async () => {
+  const stopStreaming = () => {
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
     }
     // 如果有当前帧，保存为标定图像
+    if (lastFrameData.current) {
+      const blob = new Blob([lastFrameData.current], { type: 'image/jpeg' });
+      const url = URL.createObjectURL(blob);
+      setImageUrl(url);
+    }
     if (frameUrl) {
-      const newUrl = await cloneBlob(frameUrl);
-      if (newUrl) {
-        setImageUrl(newUrl);
-        URL.revokeObjectURL(frameUrl);
-        setFrameUrl(null);
-      }
+      URL.revokeObjectURL(frameUrl);
+      setFrameUrl(null);
     }
     setIsStreaming(false);
   };
 
   // 从视频流中截取当前帧
   const captureFrame = async () => {
-    if (isStreaming && frameUrl) {
+    if (isStreaming && lastFrameData.current) {
       stopStreaming();
     } else {
       // 如果没有视频流，直接从摄像头获取图片
@@ -244,6 +237,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       if (frameUrl) {
         URL.revokeObjectURL(frameUrl);
       }
+      lastFrameData.current = null;
     };
   }, []);
 
