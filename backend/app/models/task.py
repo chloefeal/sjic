@@ -1,5 +1,5 @@
 from app import db, app
-from app.utils.calibration import save_calibration_image
+from app.utils.calibration import save_calibration_frame
 from datetime import datetime
 
 class Task(db.Model):
@@ -44,7 +44,7 @@ class Task(db.Model):
         try:
             # 保存图像
             frame_data = calibration.pop('frame')  # 移除 frame 数据并获取它
-            image_path = save_calibration_image(frame_data, self.id)
+            image_path = save_calibration_frame(frame_data, self.id)
             
             # 更新标定参数
             calibration['image_path'] = image_path
