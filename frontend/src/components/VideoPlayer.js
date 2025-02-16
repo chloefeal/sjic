@@ -31,6 +31,17 @@ function VideoPlayer({ cameraId, onClose }) {
       socketRef.current.emit('start_stream', { camera_id: cameraId });
     });
 
+    socketRef.current.on('disconnect', (reason) => {
+      console.log('Disconnected:', reason);
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      if (frameUrl) {
+        URL.revokeObjectURL(frameUrl);
+      }
+    });
+
     // 处理接收到的视频帧
     socketRef.current.on('frame', (frameData) => {
       const blob = new Blob([frameData], { type: 'image/jpeg' });
