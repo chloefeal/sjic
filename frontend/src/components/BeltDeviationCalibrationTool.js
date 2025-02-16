@@ -341,32 +341,122 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
             </ol>
           </Paper>
 
-          {/* ... 其他UI代码类似 BeltCalibrationTool ... */}
+          {/* 操作按钮 */}
+          <Paper style={{ padding: 16, marginBottom: 16 }}>
+            <Button 
+              variant="contained" 
+              onClick={isStreaming ? stopStreaming : startStreaming}
+              disabled={!cameraId}
+              style={{ marginRight: 16 }}
+            >
+              {isStreaming ? '停止预览' : '开始预览'}
+            </Button>
+            <Button 
+              variant="contained" 
+              onClick={captureFrame}
+              disabled={!cameraId || !isStreaming}
+              style={{ marginRight: 16 }}
+            >
+              截取当前帧
+            </Button>
+            <Button 
+              variant="outlined" 
+              onClick={handleReset}
+              disabled={!imageUrl}
+            >
+              重置
+            </Button>
+          </Paper>
 
-          {/* 参数输入 */}
+          {/* 视频预览区域 */}
+          {isStreaming && !imageUrl && frameUrl && (
+            <Box 
+              mb={2} 
+              ref={containerRef}
+              sx={{ 
+                width: '100%',
+                maxWidth: 800,
+                display: 'flex',
+                justifyContent: 'center'
+              }}
+            >
+              <img
+                src={frameUrl}
+                width={frameSize.width}
+                height={frameSize.height}
+                style={{ 
+                  border: '1px solid #ccc',
+                  objectFit: 'contain'
+                }}
+                alt="Video stream"
+              />
+            </Box>
+          )}
+
+          {/* 标定区域 */}
           {imageUrl && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="边界线间距离(cm)"
-                  value={boundaryDistance}
-                  onChange={(e) => setBoundaryDistance(parseFloat(e.target.value))}
-                  inputProps={{ min: 0, step: 0.1 }}
+            <>
+              <Box sx={{ 
+                width: '100%',
+                maxWidth: 800,
+                display: 'flex',
+                justifyContent: 'center',
+                marginBottom: 2
+              }}>
+                <img
+                  ref={imageRef}
+                  src={imageUrl}
+                  style={{
+                    display: 'none'  // 隐藏原始图片，只用于 canvas 绘制
+                  }}
+                  onLoad={() => {
+                    if (canvasRef.current) {
+                      drawCanvas();
+                    }
+                  }}
+                  alt="Calibration"
                 />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  type="number"
-                  label="跑偏报警阈值(cm)"
-                  value={deviationThreshold}
-                  onChange={(e) => setDeviationThreshold(parseFloat(e.target.value))}
-                  inputProps={{ min: 0, step: 0.1 }}
+                <canvas
+                  ref={canvasRef}
+                  width={frameSize.width}
+                  height={frameSize.height}
+                  onClick={handleCanvasClick}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={() => setDraggingPoint(null)}
+                  onMouseLeave={() => setDraggingPoint(null)}
+                  style={{ 
+                    border: '1px solid #ccc',
+                    objectFit: 'contain',
+                    cursor: draggingPoint ? 'grabbing' : currentLine ? 'crosshair' : 'default'
+                  }}
                 />
+              </Box>
+
+              {/* 参数输入 */}
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="边界线间距离(cm)"
+                    value={boundaryDistance}
+                    onChange={(e) => setBoundaryDistance(parseFloat(e.target.value))}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="跑偏报警阈值(cm)"
+                    value={deviationThreshold}
+                    onChange={(e) => setDeviationThreshold(parseFloat(e.target.value))}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
               </Grid>
-            </Grid>
+            </>
           )}
         </DialogContent>
         <DialogActions>
@@ -380,23 +470,6 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
           </Button>
         </DialogActions>
       </Dialog>
-
-      <canvas
-        ref={canvasRef}
-        width={frameSize.width}
-        height={frameSize.height}
-        onClick={handleCanvasClick}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={() => setDraggingPoint(null)}
-        onMouseLeave={() => setDraggingPoint(null)}
-        style={{ 
-          border: '1px solid #ccc', 
-          marginBottom: 16,
-          objectFit: 'contain',
-          cursor: draggingPoint ? 'grabbing' : currentLine ? 'crosshair' : 'default'
-        }}
-      />
     </>
   );
 }
