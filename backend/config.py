@@ -17,6 +17,9 @@ class Config:
     # 视频源配置
     VIDEO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
 
+    # 前端标定后的图像
+    IMAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+
     # 日志配置
     LOG_FOLDER = 'logs'
     LOG_FILENAME = f'app_{datetime.now().strftime("%Y%m%d")}.log'

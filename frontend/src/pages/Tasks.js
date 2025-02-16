@@ -169,13 +169,13 @@ function Tasks() {
   };
 
   const handleCalibrate = (calibrationData) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       algorithm_parameters: {
-        ...formData.algorithm_parameters,
-        calibration: calibrationData.calibration  // 直接传递所有标定数据
+        ...prev.algorithm_parameters,
+        calibration: calibrationData.calibration
       }
-    });
+    }));
   };
 
   // 根据算法类型返回对应的标定工具

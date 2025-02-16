@@ -249,23 +249,28 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       // 获取当前图像的 blob 数据
       const response = await fetch(imageUrl);
       const blob = await response.blob();
-
-      // 计算像素距离
-      const pixelWidth = Math.sqrt(
-        Math.pow(points[1].x - points[0].x, 2) + 
-        Math.pow(points[1].y - points[0].y, 2)
-      );
-
-      // 调用父组件的回调
-      onCalibrate({
-        calibration: {
-          pixel_width: pixelWidth,
-          points: points,
-          belt_width: beltWidth,
-          frame_size: frameSize,
-          frame: blob  // 添加图像数据
-        }
-      });
+      
+      // 将 blob 转换为 base64
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      
+      reader.onloadend = () => {
+        const base64data = reader.result;
+        
+        // 调用父组件的回调
+        onCalibrate({
+          calibration: {
+            points: points,
+            belt_width: beltWidth,
+            pixel_width: Math.sqrt(
+              Math.pow(points[1].x - points[0].x, 2) + 
+              Math.pow(points[1].y - points[0].y, 2)
+            ),
+            frame_size: frameSize,
+            frame: base64data  // 使用 base64 编码的图像数据
+          }
+        });
+      };
 
       setOpen(false);
     } catch (error) {

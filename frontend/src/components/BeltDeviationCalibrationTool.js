@@ -255,17 +255,25 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
       // 获取当前图像的 blob 数据
       const response = await fetch(imageUrl);
       const blob = await response.blob();
-
-      // 调用父组件的回调
-      onCalibrate({
-        calibration: {
-          boundary_lines: lines,
-          boundary_distance: boundaryDistance,
-          deviation_threshold: deviationThreshold,
-          frame_size: frameSize,
-          frame: blob  // 添加图像数据
-        }
-      });
+      
+      // 将 blob 转换为 base64
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      
+      reader.onloadend = () => {
+        const base64data = reader.result;
+        
+        // 调用父组件的回调
+        onCalibrate({
+          calibration: {
+            boundary_lines: lines,
+            boundary_distance: boundaryDistance,
+            deviation_threshold: deviationThreshold,
+            frame_size: frameSize,
+            frame: base64data  // 使用 base64 编码的图像数据
+          }
+        });
+      };
 
       setOpen(false);
     } catch (error) {
