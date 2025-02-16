@@ -1,4 +1,5 @@
-from app import db
+from app import db, app
+from app.utils.calibration import save_calibration_image
 from datetime import datetime
 
 class Task(db.Model):
@@ -31,3 +32,27 @@ class Task(db.Model):
             'created_at': self.created_at.isoformat()
         } 
     
+    def save_calibration_image(self):
+        """保存标定图像"""
+        if not self.algorithm_parameters or 'calibration' not in self.algorithm_parameters:
+            return
+        
+        calibration = self.algorithm_parameters['calibration']
+        if 'frame' not in calibration:
+            return
+        
+        try:
+            # 保存图像
+            frame_data = calibration.pop('frame')  # 移除 frame 数据并获取它
+            image_path = save_calibration_image(frame_data, self.id)
+            
+            # 更新标定参数
+            calibration['image_path'] = image_path
+            
+            # 更新任务参数
+            self.algorithm_parameters['calibration'] = calibration
+            db.session.commit()
+            
+        except Exception as e:
+            app.logger.error(f"Error saving calibration image: {str(e)}")
+            raise

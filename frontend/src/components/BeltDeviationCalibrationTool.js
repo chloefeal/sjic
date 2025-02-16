@@ -248,18 +248,29 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
   };
 
   // 计算标定结果
-  const handleCalibrate = () => {
-    if (lines.length !== 2 || !boundaryDistance || !deviationThreshold) return;
+  const handleCalibrate = async () => {
+    if (!imageUrl || lines.length !== 2 || !boundaryDistance || !deviationThreshold) return;
 
-    onCalibrate({
-      calibration: {
-        boundary_lines: lines,          // 边界线坐标
-        frame_size: frameSize,          // 当前帧的尺寸
-        boundary_distance: boundaryDistance,  // 边界线间实际距离(cm)
-        deviation_threshold: deviationThreshold  // 跑偏报警阈值(cm)
-      }
-    });
-    setOpen(false);
+    try {
+      // 获取当前图像的 blob 数据
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+
+      // 调用父组件的回调
+      onCalibrate({
+        calibration: {
+          boundary_lines: lines,
+          boundary_distance: boundaryDistance,
+          deviation_threshold: deviationThreshold,
+          frame_size: frameSize,
+          frame: blob  // 添加图像数据
+        }
+      });
+
+      setOpen(false);
+    } catch (error) {
+      console.error('Error in calibration:', error);
+    }
   };
 
   // 重置标定

@@ -3,9 +3,9 @@ import {
   Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Switch, FormControlLabel, Select, MenuItem, IconButton,
-  Typography
+  Typography, Divider, Box
 } from '@mui/material';
-import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
+import { Add, Edit, Delete, PlayArrow, Stop, Info } from '@mui/icons-material';
 import axios from '../utils/axios';
 import BeltCalibrationTool from '../components/BeltCalibrationTool';
 import BeltDeviationCalibrationTool from '../components/BeltDeviationCalibrationTool';
@@ -35,6 +35,8 @@ function Tasks() {
     }
   });
   const [runningTasks, setRunningTasks] = useState(new Set());
+  const [openDetailDialog, setOpenDetailDialog] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
 
   useEffect(() => {
     fetchAll();
@@ -204,6 +206,155 @@ function Tasks() {
     }
   };
 
+  // 处理查看详情
+  const handleViewDetail = async (task) => {
+    try {
+      // 获取任务详情，包括标定图像
+      const response = await axios.get(`/api/tasks/${task.id}/detail`);
+      setSelectedTask(response);
+      setOpenDetailDialog(true);
+    } catch (error) {
+      console.error('Error fetching task detail:', error);
+    }
+  };
+
+  // 渲染算法参数
+  const renderAlgorithmParams = (task) => {
+    const algorithm = algorithms.find(a => a.id === task.algorithm_id);
+    if (!algorithm) return null;
+
+    switch (algorithm.type) {
+      case 'belt_broken':
+        return (
+          <>
+            <Typography variant="subtitle2" gutterBottom>皮带破损检测参数：</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <Typography>
+                  最小异常面积：{task.algorithm_parameters.min_area_cm2} cm²
+                </Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography>
+                  皮带宽度：{task.algorithm_parameters.calibration.belt_width} cm
+                </Typography>
+              </Grid>
+              {task.algorithm_parameters.calibration.image_url && (
+                <Grid item xs={12}>
+                  <Typography gutterBottom>标定图像：</Typography>
+                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
+                    <img 
+                      src={task.algorithm_parameters.calibration.image_url} 
+                      alt="Calibration"
+                      style={{ width: '100%', height: 'auto' }}
+                    />
+                    {/* 绘制标定点 */}
+                    <svg
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      {task.algorithm_parameters.calibration.points.map((point, index) => (
+                        <circle
+                          key={index}
+                          cx={`${point.x * 100 / task.algorithm_parameters.calibration.frame_size.width}%`}
+                          cy={`${point.y * 100 / task.algorithm_parameters.calibration.frame_size.height}%`}
+                          r="5"
+                          fill="red"
+                          stroke="white"
+                        />
+                      ))}
+                      {task.algorithm_parameters.calibration.points.length === 2 && (
+                        <line
+                          x1={`${task.algorithm_parameters.calibration.points[0].x * 100 / task.algorithm_parameters.calibration.frame_size.width}%`}
+                          y1={`${task.algorithm_parameters.calibration.points[0].y * 100 / task.algorithm_parameters.calibration.frame_size.height}%`}
+                          x2={`${task.algorithm_parameters.calibration.points[1].x * 100 / task.algorithm_parameters.calibration.frame_size.width}%`}
+                          y2={`${task.algorithm_parameters.calibration.points[1].y * 100 / task.algorithm_parameters.calibration.frame_size.height}%`}
+                          stroke="red"
+                          strokeWidth="2"
+                        />
+                      )}
+                    </svg>
+                  </Box>
+                </Grid>
+              )}
+            </Grid>
+          </>
+        );
+      case 'belt_deviation_detecion':
+        return (
+          <>
+            <Typography variant="subtitle2" gutterBottom>皮带跑偏检测参数：</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <Typography>
+                  边界线间距离：{task.algorithm_parameters.calibration.boundary_distance} cm
+                </Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography>
+                  跑偏报警阈值：{task.algorithm_parameters.calibration.deviation_threshold} cm
+                </Typography>
+              </Grid>
+              {task.algorithm_parameters.calibration.image_url && (
+                <Grid item xs={12}>
+                  <Typography gutterBottom>标定图像：</Typography>
+                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
+                    <img 
+                      src={task.algorithm_parameters.calibration.image_url} 
+                      alt="Calibration"
+                      style={{ width: '100%', height: 'auto' }}
+                    />
+                    {/* 绘制标定线 */}
+                    <svg
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      {task.algorithm_parameters.calibration.boundary_lines.map((line, index) => (
+                        <g key={index}>
+                          <line
+                            x1={`${line[0].x * 100 / task.algorithm_parameters.calibration.frame_size.width}%`}
+                            y1={`${line[0].y * 100 / task.algorithm_parameters.calibration.frame_size.height}%`}
+                            x2={`${line[1].x * 100 / task.algorithm_parameters.calibration.frame_size.width}%`}
+                            y2={`${line[1].y * 100 / task.algorithm_parameters.calibration.frame_size.height}%`}
+                            stroke={index === 0 ? "blue" : "red"}
+                            strokeWidth="2"
+                          />
+                          {line.map((point, pointIndex) => (
+                            <circle
+                              key={pointIndex}
+                              cx={`${point.x * 100 / task.algorithm_parameters.calibration.frame_size.width}%`}
+                              cy={`${point.y * 100 / task.algorithm_parameters.calibration.frame_size.height}%`}
+                              r="5"
+                              fill="yellow"
+                              stroke="white"
+                            />
+                          ))}
+                        </g>
+                      ))}
+                    </svg>
+                  </Box>
+                </Grid>
+              )}
+            </Grid>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
@@ -259,6 +410,9 @@ function Tasks() {
                         <PlayArrow />
                       </IconButton>
                     )}
+                    <IconButton onClick={() => handleViewDetail(task)}>
+                      <Info />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -393,6 +547,67 @@ function Tasks() {
           <Button onClick={editingTask ? handleUpdate : handleCreate} variant="contained">
             {editingTask ? '更新' : '创建'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 详情对话框 */}
+      <Dialog 
+        open={openDetailDialog} 
+        onClose={() => setOpenDetailDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>任务详情</DialogTitle>
+        <DialogContent>
+          {selectedTask && (
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Typography variant="subtitle1">基本信息</Typography>
+                <Divider sx={{ my: 1 }} />
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography>
+                      任务名称：{selectedTask.name}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography>
+                      视频源：{cameras.find(c => c.id === selectedTask.cameraId)?.name}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography>
+                      模型：{models.find(m => m.id === selectedTask.modelId)?.name}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography>
+                      算法：{algorithms.find(a => a.id === selectedTask.algorithm_id)?.name}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography>
+                      置信度：{selectedTask.confidence}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography>
+                      告警间隔：{selectedTask.alertThreshold}秒
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Grid>
+              
+              <Grid item xs={12}>
+                <Typography variant="subtitle1">算法参数</Typography>
+                <Divider sx={{ my: 1 }} />
+                {renderAlgorithmParams(selectedTask)}
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDetailDialog(false)}>关闭</Button>
         </DialogActions>
       </Dialog>
     </Grid>

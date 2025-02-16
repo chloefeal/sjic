@@ -242,25 +242,35 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   };
 
   // 计算标定结果
-  const handleCalibrate = () => {
-    if (points.length !== 2 || !beltWidth) return;
+  const handleCalibrate = async () => {
+    if (!imageUrl || points.length !== 2 || !beltWidth) return;
 
-    // 计算像素距离
-    const pixelWidth = Math.sqrt(
-      Math.pow(points[1].x - points[0].x, 2) + 
-      Math.pow(points[1].y - points[0].y, 2)
-    );
+    try {
+      // 获取当前图像的 blob 数据
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
 
-    // 传递所有必要参数给后端
-    onCalibrate({
-      calibration: {
-        belt_width: beltWidth,      // 真实宽度(cm)
-        pixel_width: pixelWidth,    // 像素宽度
-        frame_size: frameSize,      // 当前帧的尺寸
-        points: points              // 标定点
-      }
-    });
-    setOpen(false);
+      // 计算像素距离
+      const pixelWidth = Math.sqrt(
+        Math.pow(points[1].x - points[0].x, 2) + 
+        Math.pow(points[1].y - points[0].y, 2)
+      );
+
+      // 调用父组件的回调
+      onCalibrate({
+        calibration: {
+          pixel_width: pixelWidth,
+          points: points,
+          belt_width: beltWidth,
+          frame_size: frameSize,
+          frame: blob  // 添加图像数据
+        }
+      });
+
+      setOpen(false);
+    } catch (error) {
+      console.error('Error in calibration:', error);
+    }
   };
 
   // 重置标定

@@ -11,6 +11,7 @@ from config import Config
 from app.middleware.auth import token_required
 import cv2
 import time
+from app.utils.calibration import get_calibration_image
 
 
 # 初始化服务
@@ -234,6 +235,7 @@ def create_tasks():
     data = request.json
     app.logger.info(f"Creating new task: {data}")
     task = Task(**data)
+    task.save_calibration_image()
     db.session.add(task)
     db.session.commit()
     return jsonify(task.to_dict()), 201
@@ -247,6 +249,7 @@ def update_tasks(task_id):
     for key, value in data.items():
         if hasattr(task, key):
             setattr(task, key, value)
+    task.save_calibration_image()
     db.session.commit()
     return jsonify(task.to_dict())
 
@@ -257,6 +260,24 @@ def delete_tasks(task_id):
     db.session.delete(task)
     db.session.commit()
     return '', 204
+
+@app.route('/api/tasks/<int:task_id>/detail', methods=['GET'])
+def get_task_detail(task_id):
+    task = Task.query.get_or_404(task_id)
+    
+    # 获取任务详情，包括标定图像
+    task_data = task.to_dict()
+    
+    # 如果有标定图像，添加图像数据
+    if task.algorithm_parameters and 'calibration' in task.algorithm_parameters:
+        calibration = task.algorithm_parameters['calibration']
+        if 'image_path' in calibration:
+            # 获取图像数据
+            image_data = get_calibration_image(task_id)
+            if image_data:
+                calibration['image_data'] = image_data
+    
+    return jsonify(task_data)
 
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
