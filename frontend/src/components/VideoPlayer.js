@@ -1,80 +1,87 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, CircularProgress, Typography } from '@mui/material';
-import io from 'socket.io-client';
+import { Box } from '@mui/material';
+import { io } from 'socket.io-client';
 
-function VideoPlayer({ streamUrl }) {
-  const canvasRef = useRef(null);
+function VideoPlayer({ cameraId, onClose }) {
+  const [frameUrl, setFrameUrl] = useState(null);
   const socketRef = useRef(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [frameSize, setFrameSize] = useState({ width: 800, height: 600 });
+
+  // 计算缩放后的尺寸
+  const calculateAspectRatio = (originalWidth, originalHeight, maxWidth = 800) => {
+    const ratio = originalWidth / originalHeight;
+    let width = maxWidth;
+    let height = maxWidth / ratio;
+    return { width, height };
+  };
 
   useEffect(() => {
-    // 创建WebSocket连接
-    socketRef.current = io(process.env.REACT_APP_API_URL);
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    // 创建 Socket.IO 连接
+    socketRef.current = io(process.env.REACT_APP_API_URL, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5
+    });
 
-    // 监听视频帧数据
+    // 连接成功后开始请求视频流
+    socketRef.current.on('connect', () => {
+      console.log('Connected to stream server');
+      socketRef.current.emit('start_stream', { camera_id: cameraId });
+    });
+
+    // 处理接收到的视频帧
     socketRef.current.on('frame', (frameData) => {
-      setLoading(false);
+      const blob = new Blob([frameData], { type: 'image/jpeg' });
+      if (frameUrl) {
+        URL.revokeObjectURL(frameUrl);
+      }
+      const url = URL.createObjectURL(blob);
+      
+      // 获取图像实际尺寸
       const img = new Image();
       img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const size = calculateAspectRatio(img.width, img.height);
+        setFrameSize(size);
+        URL.revokeObjectURL(img.src);
       };
-      img.src = `data:image/jpeg;base64,${frameData}`;
+      img.src = url;
+      
+      setFrameUrl(url);
     });
-
-    // 监听错误
-    socketRef.current.on('stream_error', (error) => {
-      setError(error.message);
-      setLoading(false);
-    });
-
-    // 请求开始流式传输
-    socketRef.current.emit('start_stream', { url: streamUrl });
 
     // 清理函数
     return () => {
       if (socketRef.current) {
-        socketRef.current.emit('stop_stream');
         socketRef.current.disconnect();
       }
+      if (frameUrl) {
+        URL.revokeObjectURL(frameUrl);
+      }
     };
-  }, [streamUrl]);
+  }, [cameraId]);
 
   return (
-    <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16/9', bgcolor: 'black' }}>
-      {loading && (
-        <Box sx={{ 
-          position: 'absolute', 
-          top: '50%', 
-          left: '50%', 
-          transform: 'translate(-50%, -50%)'
-        }}>
-          <CircularProgress />
-        </Box>
+    <Box
+      sx={{
+        width: '100%',
+        maxWidth: frameSize.width,
+        margin: '0 auto',
+        position: 'relative'
+      }}
+    >
+      {frameUrl && (
+        <img
+          src={frameUrl}
+          alt="Camera Stream"
+          style={{
+            width: '100%',
+            height: 'auto',
+            display: 'block'
+          }}
+        />
       )}
-      {error && (
-        <Box sx={{ 
-          position: 'absolute', 
-          top: '50%', 
-          left: '50%', 
-          transform: 'translate(-50%, -50%)',
-          color: 'error.main'
-        }}>
-          <Typography>{error}</Typography>
-        </Box>
-      )}
-      <canvas
-        ref={canvasRef}
-        style={{ 
-          width: '100%', 
-          height: '100%',
-          display: loading || error ? 'none' : 'block'
-        }}
-        width={640}
-        height={360}
-      />
     </Box>
   );
 }

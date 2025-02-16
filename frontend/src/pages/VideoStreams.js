@@ -4,7 +4,7 @@ import {
   DialogContent, DialogActions, TextField, Alert, Table, TableBody, 
   TableCell, TableContainer, TableHead, TableRow, Paper, IconButton 
 } from '@mui/material';
-import { Add, Visibility, Delete } from '@mui/icons-material';
+import { Add, Visibility, Delete, Close } from '@mui/icons-material';
 import axios from '../utils/axios';
 import VideoPlayer from '../components/VideoPlayer';
 
@@ -15,6 +15,7 @@ function VideoStreams() {
   const [selectedStream, setSelectedStream] = useState(null);
   const [newStream, setNewStream] = useState({ name: '', url: '' });
   const [error, setError] = useState(null);
+  const [previewingCamera, setPreviewingCamera] = useState(null);
 
   useEffect(() => {
     fetchStreams();
@@ -43,9 +44,12 @@ function VideoStreams() {
     }
   };
 
-  const handlePreview = (stream) => {
-    setSelectedStream(stream);
-    setOpenPreview(true);
+  const handlePreview = (camera) => {
+    setPreviewingCamera(camera);
+  };
+
+  const handleClosePreview = () => {
+    setPreviewingCamera(null);
   };
 
   const handleDelete = async (id) => {
@@ -140,19 +144,29 @@ function VideoStreams() {
       </Dialog>
 
       {/* 预览对话框 */}
-      <Dialog 
-        open={openPreview} 
-        onClose={() => setOpenPreview(false)}
-        maxWidth="md"
+      <Dialog
+        open={Boolean(previewingCamera)}
+        onClose={handleClosePreview}
+        maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>{selectedStream?.name}</DialogTitle>
+        <DialogTitle>
+          预览 - {previewingCamera?.name}
+          <IconButton
+            onClick={handleClosePreview}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
         <DialogContent>
-          {selectedStream && <VideoPlayer streamUrl={selectedStream.url} />}
+          {previewingCamera && (
+            <VideoPlayer
+              cameraId={previewingCamera.id}
+              onClose={handleClosePreview}
+            />
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPreview(false)}>关闭</Button>
-        </DialogActions>
       </Dialog>
     </>
   );
