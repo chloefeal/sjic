@@ -145,8 +145,8 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     }
   };
 
-  // 处理画布点击
-  const handleCanvasClick = (event) => {
+  // 处理鼠标按下
+  const handleMouseDown = (event) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
@@ -163,8 +163,24 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     if (clickedPointIndex !== -1) {
       // 如果点击了已存在的点，开始拖动
       setDraggingPointIndex(clickedPointIndex);
-    } else if (points.length < 2) {
-      // 如果没有点击已存在的点且点数小于2，添加新点
+    }
+  };
+
+  // 处理画布点击
+  const handleCanvasClick = (event) => {
+    if (draggingPointIndex !== null) {
+      // 如果正在拖动，则点击时确认新位置
+      setDraggingPointIndex(null);
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    if (points.length < 2) {
+      // 如果点数小于2，添加新点
       setPoints([...points, { x, y }]);
     }
   };
@@ -298,22 +314,41 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>皮带宽度标定</DialogTitle>
         <DialogContent>
+          {/* 操作说明 */}
+          <Paper style={{ padding: 16, marginBottom: 16, backgroundColor: '#f5f5f5' }}>
+            <div style={{ marginBottom: 8 }}>操作说明：</div>
+            <ol style={{ margin: 0, paddingLeft: 20 }}>
+              <li>点击"开始预览"查看摄像头画面</li>
+              <li>点击"截取当前帧"或"停止预览"保存当前画面</li>
+              <li>在图像上标记皮带两边的点（可拖动调整位置）：
+                <ul>
+                  <li>单击添加标定点（需要标记2个点）</li>
+                  <li>拖动已有的点可以微调位置</li>
+                  <li>点击鼠标确认拖动后的新位置</li>
+                </ul>
+              </li>
+              <li>输入皮带实际宽度(cm)</li>
+              <li>点击"确定"完成标定</li>
+            </ol>
+          </Paper>
+
+          {/* 操作按钮 */}
           <Paper style={{ padding: 16, marginBottom: 16 }}>
             <Button 
-                variant="contained" 
-                onClick={isStreaming ? stopStreaming : startStreaming}
-                disabled={!cameraId}
-                style={{ marginRight: 16 }}
+              variant="contained" 
+              onClick={isStreaming ? stopStreaming : startStreaming}
+              disabled={!cameraId}
+              style={{ marginRight: 16 }}
             >
-                {isStreaming ? '停止预览' : '开始预览'}
+              {isStreaming ? '停止预览' : '开始预览'}
             </Button>
             <Button 
-                variant="contained" 
-                onClick={captureFrame}
-                disabled={!cameraId || !isStreaming}  // 只有在预览时才能截取
-                style={{ marginRight: 16 }}
+              variant="contained" 
+              onClick={captureFrame}
+              disabled={!cameraId || !isStreaming}
+              style={{ marginRight: 16 }}
             >
-                截取当前帧
+              截取当前帧
             </Button>
             <Button 
               variant="outlined" 
@@ -352,27 +387,26 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
           {/* 标定区域 */}
           {imageUrl && (
             <>
-              <Box 
-                sx={{ 
-                  width: '100%',
-                  maxWidth: 800,
-                  display: 'flex',
-                  justifyContent: 'center'
-                }}
-              >
+              <Box sx={{ 
+                width: '100%',
+                maxWidth: 800,
+                display: 'flex',
+                justifyContent: 'center'
+              }}>
                 <canvas
                   ref={canvasRef}
                   width={frameSize.width}
                   height={frameSize.height}
                   onClick={handleCanvasClick}
+                  onMouseDown={handleMouseDown}
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
-                  onMouseLeave={handleMouseUp}  // 鼠标离开时也停止拖动
+                  onMouseLeave={handleMouseUp}
                   style={{ 
                     border: '1px solid #ccc', 
                     marginBottom: 16,
                     objectFit: 'contain',
-                    cursor: draggingPointIndex !== null ? 'grabbing' : 'crosshair'  // 根据状态改变鼠标样式
+                    cursor: draggingPointIndex !== null ? 'grabbing' : 'crosshair'
                   }}
                 />
               </Box>
