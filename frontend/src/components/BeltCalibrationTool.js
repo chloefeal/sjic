@@ -95,29 +95,9 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   // 从视频流中截取当前帧
   const captureFrame = async () => {
     if (isStreaming && frameUrl) {
-/*       // 创建新的 Image 对象来加载当前帧
-      const img = new Image();
-      img.onload = () => {
-        // 创建 canvas 来复制图像
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        
-        // 将 canvas 转换为新的 blob URL
-        canvas.toBlob((blob) => {
-          const newUrl = URL.createObjectURL(blob);
-          setImageUrl(newUrl);  // 设置新的 imageUrl
-          
-          // 清理旧的 frameUrl
-          if (frameUrl) {
-            URL.revokeObjectURL(frameUrl);
-            setFrameUrl(null);
-          }
-        }, 'image/jpeg');
-      };
-      img.src = frameUrl;  // 加载当前帧 */
+      // 直接使用当前的 frameUrl
+      setImageUrl(frameUrl);
+      setFrameUrl(null);  // 清除 frameUrl
       
       // 停止视频流
       stopStreaming();
@@ -129,8 +109,6 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         }, {
           responseType: 'blob'  // 确保响应类型是 blob
         });
-        console.log(response);
-        console.log(response.data);
 
         // 确保我们有一个有效的 Blob 对象
         if (response instanceof Blob) {
