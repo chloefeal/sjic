@@ -1,15 +1,30 @@
 from .base import BaseAlgorithm
-from app import app
+from app import db
+from app.models import Algorithm
 import cv2
 import numpy as np
 
 class BeltDeviationDetection(BaseAlgorithm):
     """皮带跑偏检测算法"""
+    __tablename__ = 'algorithms'
+    __mapper_args__ = {
+        'polymorphic_identity': 'belt_broken'
+    }
     
-    def __init__(self):
-        super().__init__()
-        self.name = "皮带跑偏检测"
-        self.description = "检测皮带是否发生跑偏"
+    @classmethod
+    def register(cls):
+        type_name = cls.__mapper_args__['polymorphic_identity']
+        print(type_name)
+        algorithm = Algorithm.query.filter_by(type=type_name).first()
+        print(algorithm)
+        if not algorithm:
+            algorithm = cls(
+                name='皮带跑偏检测',
+                type=type_name,
+                description='皮带跑偏检测算法，当跑偏超过设置阈值时推送告警'
+            )
+            db.session.add(algorithm)
+            db.session.commit()
     
     def process(self, camera, parameters):
         """处理图像"""
