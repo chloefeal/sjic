@@ -8,6 +8,7 @@ import {
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
 import BeltCalibrationTool from '../components/BeltCalibrationTool';
+import BeltDeviationCalibrationTool from '../components/BeltDeviationCalibrationTool';
 
 function Tasks() {
   const [tasks, setTasks] = useState([]);
@@ -173,6 +174,33 @@ function Tasks() {
         calibration: calibrationData.calibration  // 直接传递所有标定数据
       }
     });
+  };
+
+  // 根据算法类型返回对应的标定工具
+  const renderCalibrationTool = () => {
+    if (!formData.algorithm_id) return null;
+
+    const algorithm = algorithms.find(a => a.id === formData.algorithm_id);
+    if (!algorithm) return null;
+
+    switch (algorithm.name) {
+      case '皮带破损检测':
+        return (
+          <BeltCalibrationTool 
+            cameraId={formData.cameraId}
+            onCalibrate={handleCalibrate}
+          />
+        );
+      case '皮带跑偏检测':
+        return (
+          <BeltDeviationCalibrationTool
+            cameraId={formData.cameraId}
+            onCalibrate={handleCalibrate}
+          />
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -354,10 +382,7 @@ function Tasks() {
             </Grid>
 
             <Grid item xs={12}>
-              <BeltCalibrationTool 
-                cameraId={formData.cameraId}
-                onCalibrate={handleCalibrate}
-              />
+              {renderCalibrationTool()}
             </Grid>
             
           </Grid>
