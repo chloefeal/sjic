@@ -129,6 +129,8 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         }, {
           responseType: 'blob'  // 确保响应类型是 blob
         });
+        console.log(response);
+        console.log(response.data);
 
         // 确保我们有一个有效的 Blob 对象
         if (response.data instanceof Blob) {
