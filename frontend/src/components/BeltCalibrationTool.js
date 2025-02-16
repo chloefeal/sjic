@@ -133,12 +133,14 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         console.log(response.data);
 
         // 确保我们有一个有效的 Blob 对象
-        if (response.data instanceof Blob) {
-          const url = URL.createObjectURL(response.data);
+        if (response instanceof Blob) {
+          const url = URL.createObjectURL(response);
           setImageUrl(url);
         } else {
-          console.error('Invalid response data:', response.data);
-          throw new Error('Invalid response data type');
+          console.error('Invalid response data, not blob type:', response);
+          const blob = new Blob([response], { type: 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          setImageUrl(url);
         }
       } catch (error) {
         console.error('Error capturing frame:', error);
