@@ -355,6 +355,40 @@ function Tasks() {
     }
   };
 
+  // 渲染算法特定参数
+  const renderAlgorithmSpecificParams = () => {
+    if (!formData.algorithm_id) return null;
+
+    const algorithm = algorithms.find(a => a.id === formData.algorithm_id);
+    if (!algorithm) return null;
+
+    switch (algorithm.type) {
+      case 'belt_broken':
+        return (
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="最小异常面积(cm²)"
+              value={formData.algorithm_parameters.min_area_cm2}
+              onChange={(e) => setFormData({
+                ...formData,
+                algorithm_parameters: {
+                  ...formData.algorithm_parameters,
+                  min_area_cm2: parseInt(e.target.value)
+                }
+              })}
+              inputProps={{ min: 1 }}
+            />
+          </Grid>
+        );
+      case 'belt_deviation_detecion':
+        return null; // 跑偏检测不需要额外参数
+      default:
+        return null;
+    }
+  };
+
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
@@ -518,23 +552,8 @@ function Tasks() {
                 label="启用通知"
               />
             </Grid>
-
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                type="number"
-                label="最小异常面积(cm²)"
-                value={formData.algorithm_parameters.min_area_cm2}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  algorithm_parameters: {
-                    ...formData.algorithm_parameters,
-                    min_area_cm2: parseInt(e.target.value)
-                  }
-                })}
-                inputProps={{ min: 1 }}
-              />
-            </Grid>
+            
+            {renderAlgorithmSpecificParams()}
 
             <Grid item xs={12}>
               {renderCalibrationTool()}
