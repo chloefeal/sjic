@@ -83,16 +83,33 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
     
     setFrameUrl(url);
   }
+
+  // 从 Blob URL 创建新的 Blob URL
+  const cloneBlob = async (url) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (error) {
+      console.error('Error cloning blob:', error);
+      return null;
+    }
+  };
+
   // 停止视频流预览
-  const stopStreaming = () => {
+  const stopStreaming = async () => {
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
     }
     // 如果有当前帧，保存为标定图像
     if (frameUrl) {
-      setImageUrl(frameUrl);
-      setFrameUrl(null);
+      const newUrl = await cloneBlob(frameUrl);
+      if (newUrl) {
+        setImageUrl(newUrl);
+        URL.revokeObjectURL(frameUrl);
+        setFrameUrl(null);
+      }
     }
     setIsStreaming(false);
   };
@@ -100,9 +117,6 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   // 从视频流中截取当前帧
   const captureFrame = async () => {
     if (isStreaming && frameUrl) {
-      // 直接使用当前的 frameUrl
-      setImageUrl(frameUrl);
-      setFrameUrl(null);
       stopStreaming();
     } else {
       // 如果没有视频流，直接从摄像头获取图片
