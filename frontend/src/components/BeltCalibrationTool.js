@@ -33,6 +33,14 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const startStreaming = () => {
     if (!cameraId) return;
     
+    // 清除之前的标定图像和点
+    if (imageUrl) {
+      URL.revokeObjectURL(imageUrl);
+      setImageUrl(null);
+      setPoints([]);
+      setBeltWidth(0);
+    }
+    
     setIsStreaming(true);
     
     // 创建 Socket.IO 连接
@@ -208,6 +216,10 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const handleReset = () => {
     setPoints([]);
     setBeltWidth(0);
+    if (imageUrl) {
+      URL.revokeObjectURL(imageUrl);
+      setImageUrl(null);
+    }
   };
 
   useEffect(() => {
