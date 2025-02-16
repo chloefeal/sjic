@@ -315,16 +315,33 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         <DialogTitle>皮带宽度标定</DialogTitle>
         <DialogContent>
           {/* 操作说明 */}
-          <Paper style={{ padding: 16, marginBottom: 16, backgroundColor: '#f5f5f5' }}>
-            <div style={{ marginBottom: 8 }}>操作说明：</div>
-            <ol style={{ margin: 0, paddingLeft: 20 }}>
+          <Paper style={{ 
+            padding: 16, 
+            marginBottom: 16, 
+            backgroundColor: '#2f2f2f',
+            color: '#ffffff'
+          }}>
+            <div style={{ 
+              marginBottom: 8, 
+              fontSize: '0.9rem', 
+              fontWeight: 500 
+            }}>
+              操作说明：
+            </div>
+            <ol style={{ 
+              margin: 0, 
+              paddingLeft: 20,
+              fontSize: '0.85rem'
+            }}>
               <li>点击"开始预览"查看摄像头画面</li>
               <li>点击"截取当前帧"或"停止预览"保存当前画面</li>
               <li>在图像上标记皮带两边的点（可拖动调整位置）：
-                <ul>
+                <ul style={{ 
+                  fontSize: '0.8rem',
+                  color: '#e0e0e0'
+                }}>
                   <li>单击添加标定点（需要标记2个点）</li>
                   <li>拖动已有的点可以微调位置</li>
-                  <li>点击鼠标确认拖动后的新位置</li>
                 </ul>
               </li>
               <li>输入皮带实际宽度(cm)</li>
