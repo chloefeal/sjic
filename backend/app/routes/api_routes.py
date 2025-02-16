@@ -311,11 +311,17 @@ def capture_frame():
         # 将图片编码为JPEG
         _, buffer = cv2.imencode('.jpg', frame)
         
+        # 确保返回正确的 MIME 类型和二进制数据
         return Response(
             buffer.tobytes(),
-            mimetype='image/jpeg'
+            mimetype='image/jpeg',
+            headers={
+                'Content-Type': 'image/jpeg',
+                'Content-Disposition': 'inline'
+            }
         )
     except Exception as e:
+        app.logger.error(f"Capture frame error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @socketio.on('connect')
@@ -358,11 +364,5 @@ def handle_start_stream(data):
         if cap:
             cap.release()
 
-@app.route('/api/stream/<int:camera_id>')
-def video_stream(camera_id):
-    """视频流端点"""
-    return Response(
-        generate_frames(camera_id),
-        mimetype='multipart/x-mixed-replace; boundary=frame'
-    )
+
 

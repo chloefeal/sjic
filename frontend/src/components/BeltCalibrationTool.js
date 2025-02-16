@@ -127,10 +127,17 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         const response = await axios.post('/api/cameras/capture', {
           camera_id: cameraId
         }, {
-          responseType: 'blob'
+          responseType: 'blob'  // 确保响应类型是 blob
         });
-        const url = URL.createObjectURL(response.data);
-        setImageUrl(url);
+
+        // 确保我们有一个有效的 Blob 对象
+        if (response.data instanceof Blob) {
+          const url = URL.createObjectURL(response.data);
+          setImageUrl(url);
+        } else {
+          console.error('Invalid response data:', response.data);
+          throw new Error('Invalid response data type');
+        }
       } catch (error) {
         console.error('Error capturing frame:', error);
       }
