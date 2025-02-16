@@ -95,7 +95,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   // 从视频流中截取当前帧
   const captureFrame = async () => {
     if (isStreaming && frameUrl) {
-      // 创建新的 Image 对象来加载当前帧
+/*       // 创建新的 Image 对象来加载当前帧
       const img = new Image();
       img.onload = () => {
         // 创建 canvas 来复制图像
@@ -117,7 +117,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
           }
         }, 'image/jpeg');
       };
-      img.src = frameUrl;  // 加载当前帧
+      img.src = frameUrl;  // 加载当前帧 */
       
       // 停止视频流
       stopStreaming();

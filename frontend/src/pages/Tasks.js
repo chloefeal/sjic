@@ -7,7 +7,6 @@ import {
 } from '@mui/material';
 import { Add, Edit, Delete, PlayArrow, Stop } from '@mui/icons-material';
 import axios from '../utils/axios';
-import CalibrationTool from '../components/CalibrationTool';
 import BeltCalibrationTool from '../components/BeltCalibrationTool';
 
 function Tasks() {
@@ -26,7 +25,6 @@ function Tasks() {
     notificationEnabled: true,
     algorithm_id: '',
     algorithm_parameters: {
-      pixel_to_cm: 0.1,
       min_area_cm2: 100,
       calibration: {
         belt_width: 0,
@@ -99,7 +97,6 @@ function Tasks() {
       notificationEnabled: task.notificationEnabled,
       algorithm_id: task.algorithm_id,
       algorithm_parameters: task.algorithm_parameters || {
-        pixel_to_cm: 0.1,
         min_area_cm2: 100,
         calibration: {
           belt_width: 0,
@@ -122,7 +119,6 @@ function Tasks() {
       notificationEnabled: true,
       algorithm_id: '',
       algorithm_parameters: {
-        pixel_to_cm: 0.1,
         min_area_cm2: 100,
         calibration: {
           belt_width: 0,
@@ -344,22 +340,6 @@ function Tasks() {
               <TextField
                 fullWidth
                 type="number"
-                label="像素到厘米转换比例"
-                value={formData.algorithm_parameters.pixel_to_cm}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  algorithm_parameters: {
-                    ...formData.algorithm_parameters,
-                    pixel_to_cm: parseFloat(e.target.value)
-                  }
-                })}
-                inputProps={{ step: 0.01, min: 0.01 }}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                type="number"
                 label="最小异常面积(cm²)"
                 value={formData.algorithm_parameters.min_area_cm2}
                 onChange={(e) => setFormData({
@@ -373,7 +353,6 @@ function Tasks() {
               />
             </Grid>
 
-            
             <Grid item xs={12}>
               <BeltCalibrationTool 
                 cameraId={formData.cameraId}
