@@ -204,14 +204,13 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
       Math.pow(points[1].y - points[0].y, 2)
     );
 
-    // 计算像素到厘米的转换比例
-    const pixel_to_cm = beltWidth / pixelWidth;
-
+    // 传递所有必要参数给后端
     onCalibrate({
-      pixel_to_cm,
       calibration: {
-        belt_width: beltWidth,
-        points: points
+        belt_width: beltWidth,      // 真实宽度(cm)
+        pixel_width: pixelWidth,    // 像素宽度
+        frame_size: frameSize,      // 当前帧的尺寸
+        points: points              // 标定点
       }
     });
     setOpen(false);

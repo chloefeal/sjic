@@ -170,14 +170,13 @@ function Tasks() {
   };
 
   const handleCalibrate = (calibrationData) => {
-    setFormData(prev => ({
-      ...prev,
+    setFormData({
+      ...formData,
       algorithm_parameters: {
-        ...prev.algorithm_parameters,
-        pixel_to_cm: calibrationData.pixel_to_cm,
-        calibration: calibrationData.calibration
+        ...formData.algorithm_parameters,
+        calibration: calibrationData.calibration  // 直接传递所有标定数据
       }
-    }));
+    });
   };
 
   return (
