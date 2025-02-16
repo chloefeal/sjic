@@ -239,12 +239,12 @@ function Tasks() {
                   皮带宽度：{task.algorithm_parameters.calibration.belt_width} cm
                 </Typography>
               </Grid>
-              {task.algorithm_parameters.calibration.image_url && (
+              {task.algorithm_parameters.calibration.image_data && (
                 <Grid item xs={12}>
                   <Typography gutterBottom>标定图像：</Typography>
                   <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
                     <img 
-                      src={task.algorithm_parameters.calibration.image_url} 
+                      src={task.algorithm_parameters.calibration.image_data} 
                       alt="Calibration"
                       style={{ width: '100%', height: 'auto' }}
                     />
@@ -301,12 +301,12 @@ function Tasks() {
                   跑偏报警阈值：{task.algorithm_parameters.calibration.deviation_threshold} cm
                 </Typography>
               </Grid>
-              {task.algorithm_parameters.calibration.image_url && (
+              {task.algorithm_parameters.calibration.image_data && (
                 <Grid item xs={12}>
                   <Typography gutterBottom>标定图像：</Typography>
                   <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
                     <img 
-                      src={task.algorithm_parameters.calibration.image_url} 
+                      src={task.algorithm_parameters.calibration.image_data}
                       alt="Calibration"
                       style={{ width: '100%', height: 'auto' }}
                     />
