@@ -251,26 +251,22 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
         <DialogTitle>皮带宽度标定</DialogTitle>
         <DialogContent>
           <Paper style={{ padding: 16, marginBottom: 16 }}>
-            {!imageUrl && (  // 只在没有标定图像时显示这些按钮
-              <>
-                <Button 
-                  variant="contained" 
-                  onClick={isStreaming ? stopStreaming : startStreaming}
-                  disabled={!cameraId}
-                  style={{ marginRight: 16 }}
-                >
-                  {isStreaming ? '停止预览' : '开始预览'}
-                </Button>
-                <Button 
-                  variant="contained" 
-                  onClick={captureFrame}
-                  disabled={!cameraId || !isStreaming}  // 只有在预览时才能截取
-                  style={{ marginRight: 16 }}
-                >
-                  截取当前帧
-                </Button>
-              </>
-            )}
+            <Button 
+                variant="contained" 
+                onClick={isStreaming ? stopStreaming : startStreaming}
+                disabled={!cameraId}
+                style={{ marginRight: 16 }}
+            >
+                {isStreaming ? '停止预览' : '开始预览'}
+            </Button>
+            <Button 
+                variant="contained" 
+                onClick={captureFrame}
+                disabled={!cameraId || !isStreaming}  // 只有在预览时才能截取
+                style={{ marginRight: 16 }}
+            >
+                截取当前帧
+            </Button>
             <Button 
               variant="outlined" 
               onClick={handleReset}
