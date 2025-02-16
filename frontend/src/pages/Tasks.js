@@ -183,15 +183,16 @@ function Tasks() {
     const algorithm = algorithms.find(a => a.id === formData.algorithm_id);
     if (!algorithm) return null;
 
-    switch (algorithm.name) {
-      case '皮带破损检测':
+    console.log('algorithm.type=', algorithm.type)
+    switch (algorithm.type) {
+      case 'belt_broken':
         return (
           <BeltCalibrationTool 
             cameraId={formData.cameraId}
             onCalibrate={handleCalibrate}
           />
         );
-      case '皮带跑偏检测':
+      case 'belt_deviation_detecion':
         return (
           <BeltDeviationCalibrationTool
             cameraId={formData.cameraId}

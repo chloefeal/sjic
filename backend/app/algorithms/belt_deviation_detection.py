@@ -8,7 +8,7 @@ class BeltDeviationDetection(BaseAlgorithm):
     """皮带跑偏检测算法"""
     __tablename__ = 'algorithms'
     __mapper_args__ = {
-        'polymorphic_identity': 'belt_broken'
+        'polymorphic_identity': 'belt_deviation_detecion'
     }
     
     @classmethod
