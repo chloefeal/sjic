@@ -308,7 +308,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   return (
     <>
       <Button variant="outlined" onClick={() => setOpen(true)}>
-        皮带标定
+        皮带宽度标定
       </Button>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
