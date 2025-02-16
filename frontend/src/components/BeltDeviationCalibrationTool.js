@@ -372,7 +372,6 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
           {isStreaming && !imageUrl && frameUrl && (
             <Box 
               mb={2} 
-              ref={containerRef}
               sx={{ 
                 width: '100%',
                 maxWidth: 800,

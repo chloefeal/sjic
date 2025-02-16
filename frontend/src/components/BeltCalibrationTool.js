@@ -17,7 +17,6 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   const socketRef = useRef(null);
   const [frameUrl, setFrameUrl] = useState(null);  // 新增状态
   const [frameSize, setFrameSize] = useState({ width: 800, height: 600 });
-  const containerRef = useRef(null);
   const lastFrameData = useRef(null);
   const [draggingPointIndex, setDraggingPointIndex] = useState(null);  // 新增：当前拖动的点索引
 
@@ -380,7 +379,6 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
           {isStreaming && !imageUrl && frameUrl && (  // 确保有 frameUrl 时才显示
             <Box 
               mb={2} 
-              ref={containerRef}
               sx={{ 
                 width: '100%',
                 maxWidth: 800,
