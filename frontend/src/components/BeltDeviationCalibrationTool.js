@@ -17,6 +17,7 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
   const [deviationThreshold, setDeviationThreshold] = useState(0); // 跑偏报警阈值(cm)
   const [currentLine, setCurrentLine] = useState(null); // 当前正在绘制的线
   const [draggingPoint, setDraggingPoint] = useState(null); // 当前拖动的点 {lineIndex, pointIndex}
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   
   // 添加缺失的 refs
   const canvasRef = useRef(null);
@@ -181,16 +182,19 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
 
   // 处理鼠标移动
   const handleMouseMove = (event) => {
-    if (!draggingPoint) return;
-
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = Math.max(0, Math.min(event.clientX - rect.left, canvas.width));
     const y = Math.max(0, Math.min(event.clientY - rect.top, canvas.height));
+    
+    setMousePosition({ x, y });
 
-    const newLines = [...lines];
-    newLines[draggingPoint.lineIndex][draggingPoint.pointIndex] = { x, y };
-    setLines(newLines);
+    if (draggingPoint) {
+      // 更新拖动点的位置
+      const newLines = [...lines];
+      newLines[draggingPoint.lineIndex][draggingPoint.pointIndex] = { x, y };
+      setLines(newLines);
+    }
   };
 
   // 绘制画布
@@ -234,10 +238,12 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
     if (currentLine?.length === 1) {
       ctx.beginPath();
       ctx.moveTo(currentLine[0].x, currentLine[0].y);
-      ctx.lineTo(currentPoint.x, currentPoint.y);
+      ctx.lineTo(mousePosition.x, mousePosition.y);
       ctx.strokeStyle = 'gray';
+      ctx.setLineDash([5, 5]); // 添加虚线效果
       ctx.lineWidth = 1;
       ctx.stroke();
+      ctx.setLineDash([]); // 恢复实线
     }
   };
 
@@ -255,6 +261,39 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
     });
     setOpen(false);
   };
+
+  // 重置标定
+  const handleReset = () => {
+    setLines([]);
+    setBoundaryDistance(0);
+    setDeviationThreshold(0);
+    setCurrentLine(null);
+    if (imageUrl) {
+      URL.revokeObjectURL(imageUrl);
+      setImageUrl(null);
+    }
+  };
+
+  // 添加 useEffect 来监听鼠标位置变化
+  useEffect(() => {
+    if (canvasRef.current) {
+      drawCanvas();
+    }
+  }, [lines, currentLine, mousePosition, imageUrl]);
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      stopStreaming();
+      if (imageUrl) {
+        URL.revokeObjectURL(imageUrl);
+      }
+      if (frameUrl) {
+        URL.revokeObjectURL(frameUrl);
+      }
+      lastFrameData.current = null;
+    };
+  }, []);
 
   return (
     <>
@@ -341,6 +380,23 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <canvas
+        ref={canvasRef}
+        width={frameSize.width}
+        height={frameSize.height}
+        onClick={handleCanvasClick}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={() => setDraggingPoint(null)}
+        onMouseLeave={() => setDraggingPoint(null)}
+        style={{ 
+          border: '1px solid #ccc', 
+          marginBottom: 16,
+          objectFit: 'contain',
+          cursor: draggingPoint ? 'grabbing' : currentLine ? 'crosshair' : 'default'
+        }}
+      />
     </>
   );
 }
