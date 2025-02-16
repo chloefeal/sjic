@@ -95,19 +95,42 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
   // 从视频流中截取当前帧
   const captureFrame = async () => {
     if (isStreaming && frameUrl) {
-      // 直接使用当前显示的帧
-      setImageUrl(frameUrl);
+      // 创建新的 Image 对象来加载当前帧
+      const img = new Image();
+      img.onload = () => {
+        // 创建 canvas 来复制图像
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        
+        // 将 canvas 转换为新的 blob URL
+        canvas.toBlob((blob) => {
+          const newUrl = URL.createObjectURL(blob);
+          setImageUrl(newUrl);  // 设置新的 imageUrl
+          
+          // 清理旧的 frameUrl
+          if (frameUrl) {
+            URL.revokeObjectURL(frameUrl);
+            setFrameUrl(null);
+          }
+        }, 'image/jpeg');
+      };
+      img.src = frameUrl;  // 加载当前帧
+      
       // 停止视频流
       stopStreaming();
     } else {
-      // 如果没有视频流，使用原来的方式获取图片
+      // 如果没有视频流，直接从摄像头获取图片
       try {
         const response = await axios.post('/api/cameras/capture', {
           camera_id: cameraId
         }, {
           responseType: 'blob'
         });
-        drawFrame(response.data);
+        const url = URL.createObjectURL(response.data);
+        setImageUrl(url);
       } catch (error) {
         console.error('Error capturing frame:', error);
       }
