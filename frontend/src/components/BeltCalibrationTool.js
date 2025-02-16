@@ -333,7 +333,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
               paddingLeft: 20,
               fontSize: '0.85rem'
             }}>
-              <li>点击"开始预览"查看摄像头画面</li>
+              <li>点击"开始预览"查看视频源画面</li>
               <li>点击"截取当前帧"或"停止预览"保存当前画面</li>
               <li>在图像上标记皮带两边的点（可拖动调整位置）：
                 <ul style={{ 

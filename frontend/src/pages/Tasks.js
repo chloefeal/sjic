@@ -199,7 +199,7 @@ function Tasks() {
             <TableHead>
               <TableRow>
                 <TableCell>名称</TableCell>
-                <TableCell>摄像头</TableCell>
+                <TableCell>视频源</TableCell>
                 <TableCell>模型</TableCell>
                 <TableCell>算法</TableCell>
                 <TableCell>状态</TableCell>
@@ -277,7 +277,7 @@ function Tasks() {
                 onChange={(e) => setFormData({ ...formData, cameraId: e.target.value })}
                 displayEmpty
               >
-                <MenuItem value="">选择摄像头</MenuItem>
+                <MenuItem value="">选择视频源</MenuItem>
                 {cameras.map(camera => (
                   <MenuItem key={camera.id} value={camera.id}>
                     {camera.name}

@@ -40,7 +40,7 @@ function Alerts() {
                 <TableHead>
                   <TableRow>
                     <TableCell>时间</TableCell>
-                    <TableCell>摄像头</TableCell>
+                    <TableCell>视频源</TableCell>
                     <TableCell>类型</TableCell>
                     <TableCell>置信度</TableCell>
                     <TableCell>图片</TableCell>

@@ -6,7 +6,7 @@ import { Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Co
 const drawerWidth = 240;
 
 const menuItems = [
-  { text: '视频流', icon: <Videocam />, path: '/streams' },
+  { text: '视频源', icon: <Videocam />, path: '/streams' },
   { text: '模型管理', icon: <ModelTraining />, path: '/models' },
   { text: '算法管理', icon: <Code />, path: '/algorithms' },
   { text: '任务', icon: <Task />, path: '/tasks' },
