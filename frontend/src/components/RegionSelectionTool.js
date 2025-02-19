@@ -17,6 +17,9 @@ function RegionSelectionTool({ cameraId, onSelect }) {
   const canvasRef = useRef(null);
   const socketRef = useRef(null);
   const lastFrameData = useRef(null);
+  const [currentPoint, setCurrentPoint] = useState(null);
+  const [draggingPointIndex, setDraggingPointIndex] = useState(null);
+  const [isComplete, setIsComplete] = useState(false);
 
   // 计算缩放后的尺寸
   const calculateAspectRatio = (originalWidth, originalHeight, maxWidth = 800) => {
@@ -113,6 +116,14 @@ function RegionSelectionTool({ cameraId, onSelect }) {
 
   const handleCanvasClick = (event) => {
     if (!imageUrl) return;
+    
+    // 处理右键点击 - 完成绘制
+    if (event.button === 2) {
+      if (points.length >= 3) {
+        setIsComplete(true);
+      }
+      return;
+    }
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -126,8 +137,51 @@ function RegionSelectionTool({ cameraId, onSelect }) {
       y: y * scaleY
     };
 
-    setPoints(prev => [...prev, point]);
+    // 检查是否点击了已存在的点（用于拖动）
+    const clickedPointIndex = points.findIndex(p => 
+      Math.hypot(p.x - point.x, p.y - point.y) < 10
+    );
+
+    if (clickedPointIndex !== -1) {
+      setDraggingPointIndex(clickedPointIndex);
+      return;
+    }
+
+    if (!isComplete) {
+      setPoints(prev => [...prev, point]);
+    }
+  };
+
+  const handleMouseMove = (event) => {
+    if (!imageUrl) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const currentPos = {
+      x: x * scaleX,
+      y: y * scaleY
+    };
+
+    if (draggingPointIndex !== null) {
+      // 拖动已存在的点
+      setPoints(prev => prev.map((p, index) => 
+        index === draggingPointIndex ? currentPos : p
+      ));
+    } else if (!isComplete) {
+      // 更新当前鼠标位置
+      setCurrentPoint(currentPos);
+    }
+
     drawCanvas();
+  };
+
+  const handleMouseUp = () => {
+    setDraggingPointIndex(null);
   };
 
   const drawCanvas = () => {
@@ -140,8 +194,8 @@ function RegionSelectionTool({ cameraId, onSelect }) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      // 绘制多边形
       if (points.length > 0) {
+        // 绘制已确定的点和线段
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
         points.forEach((point, index) => {
@@ -149,22 +203,29 @@ function RegionSelectionTool({ cameraId, onSelect }) {
             ctx.lineTo(point.x, point.y);
           }
         });
-        if (points.length > 2) {
+
+        // 如果完成绘制，连接首尾点
+        if (isComplete) {
           ctx.closePath();
+        } else if (currentPoint && points.length > 0) {
+          // 绘制当前移动的线段
+          ctx.lineTo(currentPoint.x, currentPoint.y);
         }
+
         ctx.strokeStyle = 'yellow';
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // 填充半透明的颜色
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.2)';
-        ctx.fill();
+        if (isComplete) {
+          ctx.fillStyle = 'rgba(255, 255, 0, 0.2)';
+          ctx.fill();
+        }
 
         // 绘制顶点
-        points.forEach(point => {
+        points.forEach((point, index) => {
           ctx.beginPath();
           ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = 'red';
+          ctx.fillStyle = draggingPointIndex === index ? 'blue' : 'red';
           ctx.fill();
           ctx.strokeStyle = 'white';
           ctx.stroke();
@@ -175,6 +236,8 @@ function RegionSelectionTool({ cameraId, onSelect }) {
 
   const handleReset = () => {
     setPoints([]);
+    setCurrentPoint(null);
+    setIsComplete(false);
     drawCanvas();
   };
 
@@ -190,6 +253,12 @@ function RegionSelectionTool({ cameraId, onSelect }) {
     });
     setOpen(false);
   };
+
+  useEffect(() => {
+    if (imageUrl) {
+      drawCanvas();
+    }
+  }, [imageUrl, points, currentPoint, isComplete, draggingPointIndex]);
 
   return (
     <>
@@ -258,9 +327,17 @@ function RegionSelectionTool({ cameraId, onSelect }) {
                 width={frameSize.width}
                 height={frameSize.height}
                 onClick={handleCanvasClick}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleCanvasClick(e);
+                }}
                 style={{ 
                   border: '1px solid #ccc',
-                  cursor: 'crosshair'
+                  cursor: draggingPointIndex !== null ? 'grabbing' : 
+                         isComplete ? 'default' : 'crosshair'
                 }}
               />
             )}
