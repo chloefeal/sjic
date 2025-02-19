@@ -126,6 +126,9 @@ function RegionSelectionTool({ cameraId, onSelect }) {
       return;
     }
 
+    // 如果已经完成绘制，不再添加新点
+    if (isComplete) return;
+
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
@@ -138,10 +141,8 @@ function RegionSelectionTool({ cameraId, onSelect }) {
       y: y * scaleY
     };
 
-    // 如果没有在拖动点，且未完成绘制，则添加新点
-    if (!isComplete && hoveredPointIndex === null) {
-      setPoints(prev => [...prev, point]);
-    }
+    // 添加新点
+    setPoints(prev => [...prev, point]);
   };
 
   const handleMouseMove = (event) => {
@@ -160,12 +161,10 @@ function RegionSelectionTool({ cameraId, onSelect }) {
     };
 
     // 检查是否悬停在某个点上
-    if (!draggingPointIndex) {
-      const hoverIndex = points.findIndex(p => 
-        Math.hypot(p.x - currentPos.x, p.y - currentPos.y) < 10
-      );
-      setHoveredPointIndex(hoverIndex);
-    }
+    const hoverIndex = points.findIndex(p => 
+      Math.hypot(p.x - currentPos.x, p.y - currentPos.y) < 10
+    );
+    setHoveredPointIndex(hoverIndex);
 
     if (draggingPointIndex !== null) {
       // 拖动已存在的点
@@ -182,6 +181,7 @@ function RegionSelectionTool({ cameraId, onSelect }) {
 
   const handleMouseDown = (event) => {
     if (event.button === 0 && hoveredPointIndex !== null) { // 左键点击
+      event.preventDefault(); // 防止触发 click 事件
       setDraggingPointIndex(hoveredPointIndex);
     }
   };
