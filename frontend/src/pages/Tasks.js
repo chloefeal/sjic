@@ -9,6 +9,7 @@ import { Add, Edit, Delete, PlayArrow, Stop, Info } from '@mui/icons-material';
 import axios from '../utils/axios';
 import BeltCalibrationTool from '../components/BeltCalibrationTool';
 import BeltDeviationCalibrationTool from '../components/BeltDeviationCalibrationTool';
+import RegionSelectionTool from '../components/RegionSelectionTool';
 
 function Tasks() {
   const [tasks, setTasks] = useState([]);
@@ -218,12 +219,63 @@ function Tasks() {
     }
   };
 
+  // 处理区域选择
+  const handleRegionSelect = (regionData) => {
+    setFormData(prev => ({
+      ...prev,
+      algorithm_parameters: {
+        ...prev.algorithm_parameters,
+        detection_region: regionData
+      }
+    }));
+  };
+
   // 渲染算法参数
   const renderAlgorithmParams = (task) => {
     const algorithm = algorithms.find(a => a.id === task.algorithm_id);
     if (!algorithm) return null;
 
     switch (algorithm.type) {
+      case 'object_detection':
+        return (
+          <>
+            <Typography variant="subtitle2" gutterBottom>目标检测参数：</Typography>
+            <Grid container spacing={2}>
+              {task.algorithm_parameters?.detection_region && (
+                <Grid item xs={12}>
+                  <Typography gutterBottom>检测区域：</Typography>
+                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
+                    <img 
+                      src={task.algorithm_parameters.detection_region.image_data} 
+                      alt="Detection Region"
+                      style={{ width: '100%', height: 'auto' }}
+                    />
+                    {/* 绘制检测区域 */}
+                    <svg
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      <polygon
+                        points={task.algorithm_parameters.detection_region.points
+                          .map(p => `${p.x * 100 / task.algorithm_parameters.detection_region.frame_size.width},${p.y * 100 / task.algorithm_parameters.detection_region.frame_size.height}`)
+                          .join(' ')}
+                        fill="rgba(255, 255, 0, 0.2)"
+                        stroke="yellow"
+                        strokeWidth="2"
+                      />
+                    </svg>
+                  </Box>
+                </Grid>
+              )}
+            </Grid>
+          </>
+        );
       case 'belt_broken':
         return (
           <>
@@ -363,6 +415,17 @@ function Tasks() {
     if (!algorithm) return null;
 
     switch (algorithm.type) {
+      case 'object_detection':
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <RegionSelectionTool
+                cameraId={formData.cameraId}
+                onSelect={handleRegionSelect}
+              />
+            </Grid>
+          </Grid>
+        );
       case 'belt_broken':
         return (
           <Grid item xs={12} md={6}>
