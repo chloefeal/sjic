@@ -20,6 +20,7 @@ function RegionSelectionTool({ cameraId, onSelect }) {
   const [currentPoint, setCurrentPoint] = useState(null);
   const [draggingPointIndex, setDraggingPointIndex] = useState(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
 
   // 计算缩放后的尺寸
   const calculateAspectRatio = (originalWidth, originalHeight, maxWidth = 800) => {
@@ -137,17 +138,8 @@ function RegionSelectionTool({ cameraId, onSelect }) {
       y: y * scaleY
     };
 
-    // 检查是否点击了已存在的点（用于拖动）
-    const clickedPointIndex = points.findIndex(p => 
-      Math.hypot(p.x - point.x, p.y - point.y) < 10
-    );
-
-    if (clickedPointIndex !== -1) {
-      setDraggingPointIndex(clickedPointIndex);
-      return;
-    }
-
-    if (!isComplete) {
+    // 如果没有在拖动点，且未完成绘制，则添加新点
+    if (!isComplete && hoveredPointIndex === null) {
       setPoints(prev => [...prev, point]);
     }
   };
@@ -167,17 +159,31 @@ function RegionSelectionTool({ cameraId, onSelect }) {
       y: y * scaleY
     };
 
+    // 检查是否悬停在某个点上
+    if (!draggingPointIndex) {
+      const hoverIndex = points.findIndex(p => 
+        Math.hypot(p.x - currentPos.x, p.y - currentPos.y) < 10
+      );
+      setHoveredPointIndex(hoverIndex);
+    }
+
     if (draggingPointIndex !== null) {
       // 拖动已存在的点
       setPoints(prev => prev.map((p, index) => 
         index === draggingPointIndex ? currentPos : p
       ));
     } else if (!isComplete) {
-      // 更新当前鼠标位置
+      // 更新当前鼠标位置（用于绘制临时线段）
       setCurrentPoint(currentPos);
     }
 
     drawCanvas();
+  };
+
+  const handleMouseDown = (event) => {
+    if (event.button === 0 && hoveredPointIndex !== null) { // 左键点击
+      setDraggingPointIndex(hoveredPointIndex);
+    }
   };
 
   const handleMouseUp = () => {
@@ -225,7 +231,8 @@ function RegionSelectionTool({ cameraId, onSelect }) {
         points.forEach((point, index) => {
           ctx.beginPath();
           ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-          ctx.fillStyle = draggingPointIndex === index ? 'blue' : 'red';
+          ctx.fillStyle = draggingPointIndex === index ? 'blue' : 
+                         hoveredPointIndex === index ? 'yellow' : 'red';
           ctx.fill();
           ctx.strokeStyle = 'white';
           ctx.stroke();
@@ -328,8 +335,12 @@ function RegionSelectionTool({ cameraId, onSelect }) {
                 height={frameSize.height}
                 onClick={handleCanvasClick}
                 onMouseMove={handleMouseMove}
+                onMouseDown={handleMouseDown}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseLeave={() => {
+                  setHoveredPointIndex(null);
+                  setDraggingPointIndex(null);
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   handleCanvasClick(e);
@@ -337,6 +348,7 @@ function RegionSelectionTool({ cameraId, onSelect }) {
                 style={{ 
                   border: '1px solid #ccc',
                   cursor: draggingPointIndex !== null ? 'grabbing' : 
+                         hoveredPointIndex !== null ? 'grab' :
                          isComplete ? 'default' : 'crosshair'
                 }}
               />
