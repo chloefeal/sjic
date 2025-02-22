@@ -33,3 +33,11 @@ class Algorithm(db.Model):
         if not algorithm:
             raise ValueError(f"Unknown algorithm type: {algorithm_type}")
         return algorithm 
+    
+    @classmethod
+    def get_algorithm_by_id(cls, algorithm_id):
+        """获取算法实例"""
+        algorithm = cls.query.get(algorithm_id)
+        if not algorithm:
+            raise ValueError(f"Unknown algorithm id: {algorithm_id}")
+        return algorithm 

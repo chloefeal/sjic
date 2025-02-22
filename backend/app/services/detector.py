@@ -128,7 +128,7 @@ class DetectorService:
             try:
                 detector = self.active_detectors[task_id]
                 task = Task.query.get(detector['task_id'])
-                algorithm = Algorithm.get_algorithm(task.algorithm_type)
+                algorithm = Algorithm.get_algorithm_by_id(task.algorithm_id)
                 
                 while detector['running']:
                     # 使用选定的算法处理帧
