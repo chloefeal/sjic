@@ -124,29 +124,57 @@ class DetectorService:
             
     def _detect_loop(self, task_id):
         """检测循环"""
-        detector = self.active_detectors[task_id]
-        task = Task.query.get(detector['task_id'])
-        algorithm = Algorithm.get_algorithm(task.algorithm_type)
-        
-        while detector['running']:
+        with app.app_context():  # 添加应用上下文
+            try:
+                detector = self.active_detectors[task_id]
+                task = Task.query.get(detector['task_id'])
+                algorithm = Algorithm.get_algorithm(task.algorithm_type)
                 
-            # 使用选定的算法处理帧
-            results = algorithm.process(detector['camera'], {
-                'model': detector['model'],
-                'confidence': task.confidence,
-                'alertThreshold': task.alertThreshold,
-                'algorithm_parameters': task.algorithm_parameters
-            })
-            
-            # 处理结果并创建告警
-            self._handle_results(task_id, results)
-            frame = results['frame']
-            
-            # 发送结果到前端
-            socketio.emit('detection_result', {
-                'task_id': task_id,
-                'frame': cv2.imencode('.jpg', frame)[1].tobytes()
-            })
+                while detector['running']:
+                    # 使用选定的算法处理帧
+                    results = algorithm.process(detector['camera'], {
+                        'model': detector['model'],
+                        'confidence': task.confidence,
+                        'alertThreshold': task.alertThreshold,
+                        'algorithm_parameters': task.algorithm_parameters
+                    })
+                    
+                    # 处理结果并创建告警
+                    self._handle_results(task_id, results)
+                    frame = results['frame']
+                    
+                    # 发送结果到前端
+                    socketio.emit('detection_result', {
+                        'task_id': task_id,
+                        'frame': cv2.imencode('.jpg', frame)[1].tobytes()
+                    })
+            except Exception as e:
+                app.logger.error(f"Error in detection loop: {str(e)}")
+                self.stop(task_id)
+
+    def _handle_results(self, task_id, results):
+        """处理检测结果"""
+        with app.app_context():  # 添加应用上下文
+            try:
+                if results.get('alert'):
+                    detector = self.active_detectors[task_id]
+                    task = Task.query.get(detector['task_id'])
+                    
+                    # 创建告警记录
+                    alert = Alert(
+                        task_id=task_id,
+                        camera_id=task.cameraId,
+                        alert_type=task.algorithm_type,
+                        confidence=results.get('confidence', 0),
+                        image_path=self._save_detection_image(results['frame'], results)
+                    )
+                    db.session.add(alert)
+                    db.session.commit()
+                    
+                    # 发送告警到前端
+                    socketio.emit('new_alert', alert.to_dict())
+            except Exception as e:
+                app.logger.error(f"Error handling results: {str(e)}")
 
     def _save_detection_image(self, frame, result):
         """保存检测图片"""
