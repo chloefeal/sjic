@@ -8,7 +8,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # 文件存储配置
-    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'models')
     ALLOWED_EXTENSIONS = {'pt', 'pth', 'weights'}
     
     # 模型配置

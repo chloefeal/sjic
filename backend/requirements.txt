@@ -12,3 +12,5 @@ python-socketio==5.10.0
 flask-restful==0.3.10
 flask-migrate==4.0.0
 pyjwt==2.10.1
+torchvision==0.19
+torch==2.4.0
