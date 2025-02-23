@@ -31,7 +31,42 @@ function Settings() {
   const fetchSettings = async () => {
     try {
       const response = await axios.get('/api/settings');
-      setSettings(response.data);
+      console.log(response);
+      // 确保返回的数据包含所有必要的字段
+      const defaultSettings = {
+        external_alert_api: {
+          url: '',
+          token: '',
+          secret: ''
+        },
+        alert: {
+          retention_days: 30,
+          image_quality: 95
+        },
+        system: {
+          log_level: 'INFO'
+        }
+      };
+
+      // 深度合并默认值和返回的数据
+      const mergedSettings = {
+        ...defaultSettings,
+        ...response,
+        external_alert_api: {
+          ...defaultSettings.external_alert_api,
+          ...(response.external_alert_api || {})
+        },
+        alert: {
+          ...defaultSettings.alert,
+          ...(response.alert || {})
+        },
+        system: {
+          ...defaultSettings.system,
+          ...(response.system || {})
+        }
+      };
+
+      setSettings(mergedSettings);
     } catch (error) {
       setMessage({
         type: 'error',
@@ -74,11 +109,11 @@ function Settings() {
         <Typography variant="h5" gutterBottom>系统设置</Typography>
       </Grid>
 
-      {/* 外部API设置 */}
+      {/* 外部告警API设置 */}
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
-            <Typography variant="h6" gutterBottom>外部API设置</Typography>
+            <Typography variant="h6" gutterBottom>外部告警API设置</Typography>
             <TextField
               fullWidth
               label="API地址"
