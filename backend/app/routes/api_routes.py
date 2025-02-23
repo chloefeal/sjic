@@ -413,6 +413,8 @@ def get_settings():
     try:
         settings = Setting.query.first()
         app.logger.info(f"settings: {settings}")
+        app.logger.info(f"settings.config: {settings.config}")
+        app.logger.info(f"settings.to_dict(): {settings.to_dict()}")
         if not settings:
             settings = Setting()  # 使用默认值
             db.session.add(settings)
@@ -436,9 +438,6 @@ def update_settings():
         # 更新设置
         settings.update(data)
         db.session.commit()
-        
-        # 重新加载配置
-        app.config.from_object(settings)
         
         return jsonify({'message': 'Settings updated successfully'})
     except Exception as e:
