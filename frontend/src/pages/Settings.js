@@ -8,7 +8,7 @@ import axios from '../utils/axios';
 
 function Settings() {
   const [settings, setSettings] = useState({
-    external_api: {
+    external_alert_api: {
       url: '',
       token: '',
       secret: ''
@@ -82,23 +82,23 @@ function Settings() {
             <TextField
               fullWidth
               label="API地址"
-              value={settings.external_api.url}
-              onChange={handleChange('external_api', 'url')}
+              value={settings.external_alert_api.url}
+              onChange={handleChange('external_alert_api', 'url')}
               margin="normal"
             />
             <TextField
               fullWidth
               label="Token"
-              value={settings.external_api.token}
-              onChange={handleChange('external_api', 'token')}
+              value={settings.external_alert_api.token}
+              onChange={handleChange('external_alert_api', 'token')}
               margin="normal"
             />
             <TextField
               fullWidth
               label="Secret"
               type="password"
-              value={settings.external_api.secret}
-              onChange={handleChange('external_api', 'secret')}
+              value={settings.external_alert_api.secret}
+              onChange={handleChange('external_alert_api', 'secret')}
               margin="normal"
             />
           </CardContent>
