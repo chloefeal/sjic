@@ -1,7 +1,7 @@
 """Update algorithm and task models
 
-Revision ID: 1
-Revises: 0
+Revision ID: 001
+Revises: 000
 Create Date: 2025-02-12 10:00:00.000
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '1'
-down_revision = '0'
+revision = '001'
+down_revision = '000'
 branch_labels = None
 depends_on = None
 

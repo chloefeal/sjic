@@ -1,6 +1,6 @@
 from flask import jsonify, request, Response
 from app import app, db, socketio
-from app.models import Alert, Camera, DetectionModel, Algorithm
+from app.models import Alert, Camera, DetectionModel, Algorithm, Setting
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
 from app.models import Task, Log
@@ -384,6 +384,44 @@ def handle_start_stream(data):
     finally:
         if cap:
             cap.release()
+
+@app.route('/api/settings', methods=['GET'])
+@token_required
+def get_settings():
+    """获取系统设置"""
+    try:
+        settings = Setting.query.first()
+        if not settings:
+            settings = Setting()  # 使用默认值
+            db.session.add(settings)
+            db.session.commit()
+        return jsonify(settings.to_dict())
+    except Exception as e:
+        app.logger.error(f"Error getting settings: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings', methods=['POST'])
+@token_required
+def update_settings():
+    """更新系统设置"""
+    try:
+        data = request.get_json()
+        settings = Setting.query.first()
+        if not settings:
+            settings = Setting()
+            db.session.add(settings)
+        
+        # 更新设置
+        settings.update(data)
+        db.session.commit()
+        
+        # 重新加载配置
+        app.config.from_object(settings)
+        
+        return jsonify({'message': 'Settings updated successfully'})
+    except Exception as e:
+        app.logger.error(f"Error updating settings: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 

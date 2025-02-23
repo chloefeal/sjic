@@ -11,6 +11,7 @@ import Tasks from './pages/Tasks';
 import Training from './pages/Training';
 import Alerts from './pages/Alerts';
 import Algorithms from './pages/Algorithms';
+import Settings from './pages/Settings';
 
 const theme = createTheme({
   palette: {
@@ -77,6 +78,13 @@ function App() {
             <PrivateRoute>
               <Layout>
                 <Algorithms />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/settings" element={
+            <PrivateRoute>
+              <Layout>
+                <Settings />
               </Layout>
             </PrivateRoute>
           } />
