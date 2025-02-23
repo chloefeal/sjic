@@ -12,6 +12,7 @@ from app.middleware.auth import token_required
 import cv2
 import time
 from app.utils.calibration import get_calibration_image
+from sqlalchemy.orm.attributes import flag_modified
 
 
 # 初始化服务
@@ -258,9 +259,14 @@ def update_tasks(task_id):
     try:
         data = request.json
         app.logger.info(f"Updating task: {data}")
-        
         task = Task.query.get_or_404(task_id)
-        task.update(data)
+        for key, value in data.items():
+            if hasattr(task, key):
+                setattr(task, key, value)
+        task.save_calibration_image()
+
+        # JSON格式字段需要明确地标记字段已修改
+        flag_modified(task, 'algorithm_parameters')
         
         db.session.commit()
         return jsonify(task.to_dict())
