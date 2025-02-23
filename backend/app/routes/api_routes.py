@@ -432,13 +432,26 @@ def update_settings():
         settings = Setting.query.first()
         if not settings:
             settings = Setting()
+            db.session.add(settings)
         
         # 更新设置
         settings.update(data)
-        db.session.add(settings)
-        db.session.commit()
         
-        return jsonify({'message': 'Settings updated successfully'})
+        # 提交更改
+        try:
+            db.session.commit()
+            app.logger.info("Settings committed to database")
+            
+            # 验证更新
+            updated_settings = Setting.query.get(settings.id)
+            app.logger.info(f"Verified settings after commit: {updated_settings.config}")
+            
+            return jsonify({'message': 'Settings updated successfully'})
+        except Exception as e:
+            app.logger.error(f"Error committing settings: {str(e)}")
+            db.session.rollback()
+            raise
+            
     except Exception as e:
         app.logger.error(f"Error updating settings: {str(e)}")
         db.session.rollback()

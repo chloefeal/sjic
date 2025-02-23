@@ -1,5 +1,6 @@
 from app import db, app
 from datetime import datetime
+import json
 
 class Setting(db.Model):
     __tablename__ = 'settings'
@@ -26,14 +27,24 @@ class Setting(db.Model):
 
     def __init__(self):
         super().__init__()
-        app.logger.info(f"Setting init")
+        app.logger.info("Creating new Setting instance")
         self.config = self.DEFAULT_CONFIG.copy()
+        app.logger.info(f"Initial config: {self.config}")
 
     def to_dict(self):
+        app.logger.info(f"Converting to dict, current config: {self.config}")
         return self.config
 
     def update(self, data):
         """更新设置"""
+        app.logger.info(f"Updating config with data: {data}")
+        app.logger.info(f"Current config before update: {self.config}")
+
+        # 确保 config 不是 None
+        if self.config is None:
+            app.logger.warning("Config was None, resetting to default")
+            self.config = self.DEFAULT_CONFIG.copy()
+
         # 递归更新配置
         def update_dict(current, new):
             for key, value in new.items():
@@ -41,10 +52,16 @@ class Setting(db.Model):
                     if isinstance(value, dict) and isinstance(current[key], dict):
                         update_dict(current[key], value)
                     else:
+                        app.logger.info(f"Updating {key}: {current[key]} -> {value}")
                         current[key] = value
-                        continue
 
-        update_dict(self.config, data)
-        
-        # 记录更新后的配置
-        app.logger.info(f"Updated config: {self.config}")
+        try:
+            update_dict(self.config, data)
+            app.logger.info(f"Config after update: {self.config}")
+            
+            # 确保更改被标记为"脏"数据
+            db.session.add(self)
+            
+        except Exception as e:
+            app.logger.error(f"Error updating config: {str(e)}")
+            raise
