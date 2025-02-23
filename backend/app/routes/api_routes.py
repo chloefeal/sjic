@@ -412,9 +412,6 @@ def get_settings():
     """获取系统设置"""
     try:
         settings = Setting.query.first()
-        app.logger.info(f"settings: {settings}")
-        app.logger.info(f"settings.config: {settings.config}")
-        app.logger.info(f"settings.to_dict(): {settings.to_dict()}")
         if not settings:
             settings = Setting()  # 使用默认值
             db.session.add(settings)
@@ -430,18 +427,21 @@ def update_settings():
     """更新系统设置"""
     try:
         data = request.get_json()
+        app.logger.info(f"Received settings update: {data}")
+        
         settings = Setting.query.first()
         if not settings:
             settings = Setting()
-            db.session.add(settings)
         
         # 更新设置
         settings.update(data)
+        db.session.add(settings)
         db.session.commit()
         
         return jsonify({'message': 'Settings updated successfully'})
     except Exception as e:
         app.logger.error(f"Error updating settings: {str(e)}")
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 
