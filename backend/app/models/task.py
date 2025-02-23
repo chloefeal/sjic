@@ -67,7 +67,10 @@ class Task(db.Model):
             self.algorithm_parameters['calibration'] = calibration
             # JSON格式字段需要明确地标记字段已修改
             flag_modified(self, 'algorithm_parameters')
-            
+
+            app.logger.info(f"Saving calibration image to: {image_path}")
+            app.logger.info(f"Saving calibration image algorithm_parameters: {self.algorithm_parameters}")
+
             db.session.commit()
             
         except Exception as e:
