@@ -331,7 +331,6 @@ def delete_log(id):
     return jsonify({"status": "success"})
 
 @app.route('/api/cameras/capture', methods=['POST'])
-@token_required
 def capture_frame():
     """获取摄像头当前帧"""
     try:
@@ -369,19 +368,16 @@ def capture_frame():
         return jsonify({'error': str(e)}), 500
 
 @socketio.on('connect')
-@token_required
 def handle_connect():
     """处理连接"""
     app.logger.info('Client connected')
 
 @socketio.on('disconnect')
-@token_required
 def handle_disconnect():
     """处理断开连接"""
     app.logger.info('Client disconnected')
 
 @socketio.on('start_stream')
-@token_required
 def handle_start_stream(data):
     """处理开始流请求"""
     cap = None
