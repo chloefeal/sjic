@@ -3,6 +3,7 @@ from app.models import Algorithm
 from app import db,app
 import cv2
 import numpy as np
+import time
 
 class ObjectDetectionAlgorithm(BaseAlgorithm):
     """目标检测算法"""
@@ -30,6 +31,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             model = parameters.get('model')
             confidence = parameters.get('confidence', 0.5)
             algorithm_parameters = parameters.get('algorithm_parameters', {})
+            on_alert = parameters.get('on_alert')  # 获取告警处理回调
             
             # 获取检测区域
             detection_region = algorithm_parameters.get('detection_region')
@@ -73,7 +75,8 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             while True:
                 ret, frame = camera.read()
                 if not ret:
-                    return None
+                    time.sleep(1)
+                    continue
                 # 使用模型检测目标
                 if mask is not None:
                     # 只在指定区域内检测
@@ -102,12 +105,14 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                             'class': int(box.cls)
                         })
             
-            return {
-                'frame': frame,
-                'detections': detections,
-                'alert': len(detections) > 0
-            }
-                
+                # 如果有检测结果，调用告警处理回调
+                if detections and on_alert:
+                    on_alert(frame, {
+                        'detections': detections,
+                        'confidence': max(d['confidence'] for d in detections),
+                        'alert': True
+                    })
+                               
         except Exception as e:
             app.logger.error(f"Error in object detection: {str(e)}")
             raise

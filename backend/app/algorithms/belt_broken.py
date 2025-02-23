@@ -1,6 +1,6 @@
 from .base import BaseAlgorithm
 from app.models import Algorithm
-from app import db
+from app import db, app
 import cv2
 import numpy as np
 
@@ -32,6 +32,7 @@ class BeltBroken(BaseAlgorithm):
             model = parameters.get('model')
             confidence = parameters.get('confidence', 0.5)
             algorithm_parameters = parameters.get('algorithm_parameters', {})
+            on_alert = parameters.get('on_alert')  # 获取告警处理回调
             
             # 从标定数据计算像素到厘米的转换比例
             calibration = algorithm_parameters.get('calibration', {})

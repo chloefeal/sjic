@@ -20,6 +20,8 @@ class Config:
     # 前端标定后的图像
     IMAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
 
+    ALERT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alerts')
+
     # 日志配置
     LOG_FOLDER = 'logs'
     LOG_FILENAME = f'app_{datetime.now().strftime("%Y%m%d")}.log'

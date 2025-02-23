@@ -8,6 +8,8 @@ import os
 from app.models.algorithm import Algorithm
 from config import Config
 import logging
+import requests
+from datetime import datetime
 
 app.logger = logging.getLogger(__name__)
 
@@ -124,59 +126,86 @@ class DetectorService:
             
     def _detect_loop(self, task_id):
         """检测循环"""
-        with app.app_context():  # 添加应用上下文
+        with app.app_context():
             try:
                 detector = self.active_detectors[task_id]
                 task = Task.query.get(detector['task_id'])
                 algorithm = Algorithm.get_algorithm_by_id(task.algorithm_id)
                 
-                while detector['running']:
-                    # 使用选定的算法处理帧
-                    results = algorithm.process(detector['camera'], {
-                        'model': detector['model'],
-                        'confidence': task.confidence,
-                        'alertThreshold': task.alertThreshold,
-                        'algorithm_parameters': task.algorithm_parameters
-                    })
-                    
-                    # 处理结果并创建告警
-                    self._handle_results(task_id, results)
-                    frame = results['frame']
-                    
-                    # 发送结果到前端
-                    socketio.emit('detection_result', {
-                        'task_id': task_id,
-                        'frame': cv2.imencode('.jpg', frame)[1].tobytes()
-                    })
+                def handle_alert(frame, results):
+                    try:
+                        # 创建告警记录
+                        alert = Alert(
+                            task_id=task_id,
+                            camera_id=task.cameraId,
+                            alert_type=task.algorithm_type,
+                            confidence=results.get('confidence', 0),
+                            image_path=self._save_detection_image(frame, results)
+                        )
+                        db.session.add(alert)
+                        db.session.commit()
+                        
+                        # 调用第三方 REST API 发送告警
+                        self._send_alert_to_external_api(alert.to_dict())
+                        
+                    except Exception as e:
+                        app.logger.error(f"Error handling alert: {str(e)}")
+
+                # 启动算法处理
+                algorithm.process(detector['camera'], {
+                    'model': detector['model'],
+                    'confidence': task.confidence,
+                    'alertThreshold': task.alertThreshold,
+                    'algorithm_parameters': task.algorithm_parameters,
+                    'on_alert': handle_alert  # 传递告警处理回调
+                })
+
             except Exception as e:
                 app.logger.error(f"Error in detection loop: {str(e)}")
                 self.stop(task_id)
 
-    def _handle_results(self, task_id, results):
-        """处理检测结果"""
-        with app.app_context():  # 添加应用上下文
-            try:
-                if results.get('alert'):
-                    detector = self.active_detectors[task_id]
-                    task = Task.query.get(detector['task_id'])
-                    
-                    # 创建告警记录
-                    alert = Alert(
-                        task_id=task_id,
-                        camera_id=task.cameraId,
-                        alert_type=task.algorithm_type,
-                        confidence=results.get('confidence', 0),
-                        image_path=self._save_detection_image(results['frame'], results)
-                    )
-                    db.session.add(alert)
-                    db.session.commit()
-                    
-                    # 发送告警到前端
-                    socketio.emit('new_alert', alert.to_dict())
-            except Exception as e:
-                app.logger.error(f"Error handling results: {str(e)}")
+    def _send_alert_to_external_api(self, alert_data):
+        """发送告警到外部 API"""
+        try:
+            # 配置外部 API 的 URL
+            api_url = app.config.get('EXTERNAL_ALERT_API_URL')
+            if not api_url:
+                app.logger.warning("External alert API URL not configured")
+                return
 
-    def _save_detection_image(self, frame, result):
+            # 发送 POST 请求
+            response = requests.post(
+                api_url,
+                json=alert_data,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': f"Bearer {app.config.get('EXTERNAL_API_TOKEN')}"
+                }
+            )
+            
+            if not response.ok:
+                app.logger.error(f"Failed to send alert to external API: {response.text}")
+                
+        except Exception as e:
+            app.logger.error(f"Error sending alert to external API: {str(e)}")
+
+    def _save_detection_image(self, frame, results):
         """保存检测图片"""
-        # TODO: 实现图片保存逻辑
-        return None 
+        try:
+            # 创建保存目录
+            save_dir = os.path.join(app.config['ALERT_FOLDER'], 'detections')
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 生成文件名
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            filename = f'detection_{timestamp}.jpg'
+            filepath = os.path.join(save_dir, filename)
+            
+            # 保存图像
+            cv2.imwrite(filepath, frame)
+            
+            return filepath
+            
+        except Exception as e:
+            app.logger.error(f"Error saving detection image: {str(e)}")
+            return None 
