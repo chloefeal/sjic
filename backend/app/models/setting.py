@@ -44,3 +44,4 @@ class Setting(db.Model):
                         continue
 
         update_dict(self.config, data)
+        app.logger.info(f"updated config: {self.config}")
