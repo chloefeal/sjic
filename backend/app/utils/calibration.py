@@ -20,7 +20,9 @@ def save_calibration_frame(frame_data, task_id):
         # 生成文件名
         filename = f'calibration_{task_id}.jpg'
         filepath = os.path.join(save_dir, filename)
-        
+
+        app.logger.info(f"Saving calibration image to: {filepath}")
+
         # 将图像数据转换为 numpy 数组
         if isinstance(frame_data, str) and frame_data.startswith('data:image'):
             # 处理 base64 编码的图像
@@ -52,6 +54,7 @@ def get_calibration_image(task_id):
         save_dir = os.path.join(Config.IMAGE_FOLDER, 'calibration_images')
         filename = f'calibration_{task_id}.jpg'
         filepath = os.path.join(save_dir, filename)
+        app.logger.info(f"Getting calibration image from: {filepath}")
         if not os.path.exists(filepath):
             return None
             
