@@ -412,6 +412,7 @@ def get_settings():
     """获取系统设置"""
     try:
         settings = Setting.query.first()
+        app.logger.info(f"settings: {settings}")
         if not settings:
             settings = Setting()  # 使用默认值
             db.session.add(settings)

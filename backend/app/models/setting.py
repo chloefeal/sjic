@@ -35,8 +35,6 @@ class Setting(db.Model):
         """更新设置"""
         # 递归更新配置
         def update_dict(current, new):
-            app.logger.info(f"current: {current}")
-            app.logger.info(f"new: {new}")
             for key, value in new.items():
                 if key in current:
                     if isinstance(value, dict) and isinstance(current[key], dict):
