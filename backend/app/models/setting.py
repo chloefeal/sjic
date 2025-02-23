@@ -26,6 +26,7 @@ class Setting(db.Model):
 
     def __init__(self):
         super().__init__()
+        app.logger.info(f"Setting init")
         self.config = self.DEFAULT_CONFIG.copy()
 
     def to_dict(self):
