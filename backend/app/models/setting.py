@@ -1,6 +1,7 @@
 from app import db, app
 from datetime import datetime
 import json
+from sqlalchemy.orm.attributes import flag_modified
 
 class Setting(db.Model):
     __tablename__ = 'settings'
@@ -59,8 +60,8 @@ class Setting(db.Model):
             update_dict(self.config, data)
             app.logger.info(f"Config after update: {self.config}")
             
-            # 确保更改被标记为"脏"数据
-            db.session.add(self)
+            # 显式标记 config 字段已被修改
+            flag_modified(self, 'config')
             
         except Exception as e:
             app.logger.error(f"Error updating config: {str(e)}")

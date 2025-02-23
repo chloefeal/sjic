@@ -1,5 +1,6 @@
 from app import db, app
 from app.utils.calibration import save_calibration_frame
+from sqlalchemy.orm.attributes import flag_modified
 from datetime import datetime
 
 class Task(db.Model):
@@ -32,6 +33,19 @@ class Task(db.Model):
             'created_at': self.created_at.isoformat()
         } 
     
+    def update_algorithm_parameters(self, parameters):
+        """更新算法参数"""
+        if self.algorithm_parameters is None:
+            self.algorithm_parameters = {}
+            
+        # 更新参数
+        self.algorithm_parameters.update(parameters)
+        
+        # 标记字段已修改
+        flag_modified(self, 'algorithm_parameters')
+        
+        app.logger.info(f"Updated algorithm parameters: {self.algorithm_parameters}")
+
     def save_calibration_image(self):
         """保存标定图像"""
         if not self.algorithm_parameters or 'calibration' not in self.algorithm_parameters:
@@ -51,8 +65,24 @@ class Task(db.Model):
             
             # 更新任务参数
             self.algorithm_parameters['calibration'] = calibration
+            # JSON格式字段需要明确地标记字段已修改
+            flag_modified(self, 'algorithm_parameters')
+            
             db.session.commit()
             
         except Exception as e:
             app.logger.error(f"Error saving calibration image: {str(e)}")
             raise
+
+    def update(self, data):
+        """更新任务数据"""
+        for key, value in data.items():
+            if hasattr(self, key):
+                if key == 'algorithm_parameters':
+                    # 特殊处理 JSON 字段
+                    if self.algorithm_parameters is None:
+                        self.algorithm_parameters = {}
+                    self.algorithm_parameters.update(value)
+                    flag_modified(self, 'algorithm_parameters')
+                else:
+                    setattr(self, key, value)

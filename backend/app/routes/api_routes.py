@@ -252,18 +252,23 @@ def create_tasks():
     return jsonify(task.to_dict()), 201
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
-@token_required 
+@token_required
 def update_tasks(task_id):
     """更新算法设置"""
-    data = request.json
-    app.logger.info(f"Updating task: {data}")
-    task = Task.query.get_or_404(task_id)
-    for key, value in data.items():
-        if hasattr(task, key):
-            setattr(task, key, value)
-    task.save_calibration_image()
-    db.session.commit()
-    return jsonify(task.to_dict())
+    try:
+        data = request.json
+        app.logger.info(f"Updating task: {data}")
+        
+        task = Task.query.get_or_404(task_id)
+        task.update(data)
+        
+        db.session.commit()
+        return jsonify(task.to_dict())
+        
+    except Exception as e:
+        app.logger.error(f"Error updating task: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
 @token_required 
