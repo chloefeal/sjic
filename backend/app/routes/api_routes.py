@@ -260,15 +260,16 @@ def update_tasks(task_id):
         data = request.json
         #app.logger.info(f"Updating task: {data}")
         task = Task.query.get_or_404(task_id)
+        
         for key, value in data.items():
             if hasattr(task, key):
                 setattr(task, key, value)
-        task.save_calibration_image()
-
-        # JSON格式字段需要明确地标记字段已修改
-        flag_modified(task, 'algorithm_parameters')
         
+        task.save_calibration_image()
+        db.session.add(task)  # 确保对象被跟踪
         db.session.commit()
+        
+        app.logger.info(f"Task updated successfully: {task.to_dict()}")
         return jsonify(task.to_dict())
         
     except Exception as e:
