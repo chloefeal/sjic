@@ -258,7 +258,7 @@ def update_tasks(task_id):
     """更新算法设置"""
     try:
         data = request.json
-        app.logger.info(f"Updating task: {data}")
+        #app.logger.info(f"Updating task: {data}")
         task = Task.query.get_or_404(task_id)
         for key, value in data.items():
             if hasattr(task, key):

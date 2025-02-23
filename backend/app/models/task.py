@@ -34,13 +34,14 @@ class Task(db.Model):
 
     def save_calibration_image(self):
         """保存标定图像"""
+        app.logger.info(f"Saving calibration image")
         if not self.algorithm_parameters or 'calibration' not in self.algorithm_parameters:
             return
-        
+        app.logger.info(f"Saving calibration image")
         calibration = self.algorithm_parameters['calibration']
         if 'frame' not in calibration or not calibration['frame'] or calibration['frame'] == '':
             return
-        
+        app.logger.info(f"Saving calibration image")
         try:
             # 保存图像
             frame_data = calibration.pop('frame')  # 移除 frame 数据并获取它
@@ -52,7 +53,7 @@ class Task(db.Model):
             # 更新任务参数
             self.algorithm_parameters['calibration'] = calibration
 
-            #app.logger.info(f"Saving calibration image algorithm_parameters: {self.algorithm_parameters}")
+            app.logger.info(f"Saving calibration image algorithm_parameters: {self.algorithm_parameters}")
             app.logger.info(f"Saving calibration image to: {image_path}")
 
             db.session.commit()
