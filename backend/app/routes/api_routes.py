@@ -111,6 +111,7 @@ def upload_model():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/models/<int:model_id>', methods=['DELETE'])
+@token_required 
 def delete_model(model_id):
     """删除模型"""
     model = DetectionModel.query.get_or_404(model_id)
@@ -120,6 +121,7 @@ def delete_model(model_id):
 
 # 检测相关路由
 @app.route('/api/detection/start', methods=['POST'])
+@token_required 
 def start_detection():
     """启动检测"""
     data = request.json
@@ -134,6 +136,7 @@ def start_detection():
         return jsonify({'error': str(e)}), 400
 
 @app.route('/api/detection/stop', methods=['POST'])
+@token_required 
 def stop_detection():
     """停止检测"""
     data = request.json
@@ -145,12 +148,14 @@ def stop_detection():
 
 # 告警相关路由
 @app.route('/api/alerts', methods=['GET'])
+@token_required 
 def get_alerts():
     """获取告警记录"""
     alerts = Alert.query.order_by(Alert.timestamp.desc()).all()
     return jsonify([alert.to_dict() for alert in alerts])
 
 @app.route('/api/alerts', methods=['POST'])
+@token_required 
 def create_alert():
     """创建新告警"""
     data = request.json
@@ -175,6 +180,7 @@ def create_alert():
     return jsonify(alert.to_dict()), 201
 
 @app.route('/api/alerts/<int:alert_id>', methods=['DELETE'])
+@token_required 
 def delete_alert(alert_id):
     """删除告警记录"""
     alert = Alert.query.get_or_404(alert_id)
@@ -184,6 +190,7 @@ def delete_alert(alert_id):
 
 # 训练相关路由
 @app.route('/api/training/start', methods=['POST'])
+@token_required 
 def start_training():
     """开始模型训练"""
     if 'dataset' not in request.files:
@@ -209,12 +216,14 @@ def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/algorithms', methods=['GET'])
+@token_required 
 def get_algorithms():
     """获取算法"""
     algorithms = Algorithm.query.all()
     return jsonify([algorithm.to_dict() for algorithm in algorithms])
 
 @app.route('/api/algorithms', methods=['POST'])
+@token_required 
 def create_algorithm():
     """创建新算法"""
     data = request.json
@@ -224,12 +233,14 @@ def create_algorithm():
     return jsonify(algorithm.to_dict()), 201
 
 @app.route('/api/tasks', methods=['GET'])
+@token_required 
 def get_tasks():
     """获取算法设置"""
     tasks = Task.query.all()
     return jsonify([task.to_dict() for task in tasks])
 
 @app.route('/api/tasks', methods=['POST'])
+@token_required 
 def create_tasks():
     """创建算法设置"""
     data = request.json
@@ -241,6 +252,7 @@ def create_tasks():
     return jsonify(task.to_dict()), 201
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
+@token_required 
 def update_tasks(task_id):
     """更新算法设置"""
     data = request.json
@@ -254,6 +266,7 @@ def update_tasks(task_id):
     return jsonify(task.to_dict())
 
 @app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
+@token_required 
 def delete_tasks(task_id):
     """删除算法设置"""
     task = Task.query.get_or_404(task_id)
@@ -262,6 +275,7 @@ def delete_tasks(task_id):
     return '', 204
 
 @app.route('/api/tasks/<int:task_id>/detail', methods=['GET'])
+@token_required 
 def get_task_detail(task_id):
     task = Task.query.get_or_404(task_id)
     
@@ -280,6 +294,7 @@ def get_task_detail(task_id):
     return jsonify(task_data)
 
 @app.route('/api/logs', methods=['GET'])
+@token_required
 def get_logs():
     """获取系统日志"""
     page = request.args.get('page', 1, type=int)
@@ -295,6 +310,7 @@ def get_logs():
     })
 
 @app.route('/api/logs', methods=['DELETE'])
+@token_required
 def clear_logs():
     """清除所有日志"""
     Log.query.delete()
@@ -302,6 +318,7 @@ def clear_logs():
     return '', 204
 
 @app.route('/api/logs/delete/<int:id>', methods=['DELETE'])
+@token_required
 def delete_log(id):
     log = Log.query.get(id)
     db.session.delete(log)
@@ -309,6 +326,7 @@ def delete_log(id):
     return jsonify({"status": "success"})
 
 @app.route('/api/cameras/capture', methods=['POST'])
+@token_required
 def capture_frame():
     """获取摄像头当前帧"""
     try:
@@ -346,16 +364,19 @@ def capture_frame():
         return jsonify({'error': str(e)}), 500
 
 @socketio.on('connect')
+@token_required
 def handle_connect():
     """处理连接"""
     app.logger.info('Client connected')
 
 @socketio.on('disconnect')
+@token_required
 def handle_disconnect():
     """处理断开连接"""
     app.logger.info('Client disconnected')
 
 @socketio.on('start_stream')
+@token_required
 def handle_start_stream(data):
     """处理开始流请求"""
     cap = None

@@ -193,7 +193,7 @@ class DetectorService:
         """保存检测图片"""
         try:
             # 创建保存目录
-            save_dir = os.path.join(app.config['ALERT_FOLDER'], 'detections')
+            save_dir = app.config['ALERT_FOLDER']
             os.makedirs(save_dir, exist_ok=True)
             
             # 生成文件名
