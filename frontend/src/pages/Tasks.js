@@ -23,7 +23,7 @@ function Tasks() {
     modelId: '',
     cameraId: '',
     confidence: 0.5,
-    alertThreshold: 3,
+    alert_interval: 3,
     notificationEnabled: true,
     algorithm_id: '',
     algorithm_parameters: {
@@ -451,6 +451,16 @@ function Tasks() {
         return null;
     }
   };
+
+  const columns = [
+    {
+      field: 'alert_interval',
+      headerName: '报警间隔(秒)',
+      width: 130,
+      type: 'number',
+      editable: true
+    },
+  ];
 
   return (
     <Grid container spacing={3}>

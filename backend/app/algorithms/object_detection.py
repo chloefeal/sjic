@@ -87,6 +87,8 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                             'confidence': float(box.conf),
                             'class': int(box.cls)
                         })
+                cv2.imshow('frame', results[0].plot())
+                cv2.waitKey(0)
             
                 # 如果有检测结果，调用告警处理回调
                 if detections and on_alert:

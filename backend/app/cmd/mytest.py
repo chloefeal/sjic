@@ -24,7 +24,7 @@ def main():
     task = Task.query.filter_by(id=task_id).first()
 
     camera = Camera.query.filter_by(id=task.cameraId).first()
-    rtsp_url = camera.url
+    rtsp_url = camera.get_rtsp_url()
     cap = cv2.VideoCapture(rtsp_url)
 
     modelId = task.modelId
