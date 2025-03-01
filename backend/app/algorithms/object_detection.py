@@ -45,8 +45,6 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             if not ret:
                 return None
                 
-            # 如果指定了检测区域，创建掩码
-            mask = None
             if points and frame_size:
                 # 计算实际图像和前端显示比例
                 app.logger.debug(f"points: {points}")
@@ -66,38 +64,23 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 ], np.int32)
 
                 app.logger.debug(f"roi_points: {roi_points}")
-                
-                # 创建掩码
-                mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-                cv2.fillPoly(mask, [roi_points], 255)
             
-
             while True:
                 ret, frame = camera.read()
                 if not ret:
                     time.sleep(1)
                     continue
                 # 使用模型检测目标
-                if mask is not None:
-                    # 只在指定区域内检测
-                    masked_frame = cv2.bitwise_and(frame, frame, mask=mask)
-                    results = model(masked_frame, conf=confidence)
-                else:
-                    # 在整个画面检测
-                    results = model(frame, conf=confidence)
+                results = model(frame, conf=confidence)
                 
                 # 处理检测结果
                 detections = []
                 for r in results:
                     boxes = r.boxes
                     for box in boxes:
-                        # 如果有掩码，检查检测框是否在区域内
-                        if mask is not None:
-                            x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            app.logger.debug(f"box: {box.xyxy[0]}")
-                            box_center = ((x1 + x2) // 2, (y1 + y2) // 2)
-                            if mask[box_center[1], box_center[0]] == 0:
-                                continue
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        app.logger.debug(f"box: {box.xyxy[0]}")
+                        box_center = ((x1 + x2) // 2, (y1 + y2) // 2)
                         
                         detections.append({
                             'box': box.xyxy[0].tolist(),
