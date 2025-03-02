@@ -27,7 +27,7 @@ class Config:
     LOG_FILENAME = f'app_{datetime.now().strftime("%Y%m%d")}.log'
     LOG_PATH = os.path.join(LOG_FOLDER, LOG_FILENAME)
     LOG_FORMAT = '%(asctime)s [%(levelname)s] %(message)s'
-    LOG_LEVEL = 'INFO'  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    LOG_LEVEL = 'DEBUG'  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     LOG_MAX_BYTES = 10 * 1024 * 1024  # 10MB
     LOG_BACKUP_COUNT = 10  # 保留10个备份文件
     
