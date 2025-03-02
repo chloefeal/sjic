@@ -39,10 +39,12 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             alertThreshold = parameters.get('alertThreshold', 5)
             last_alert_time = None
             camera_id = parameters.get('camera_id')
+            
             # 获取检测区域
             detection_region = algorithm_parameters.get('detection_region')
             points = None
             frame_size = None
+            roi_points = None
             if detection_region:
                 points = detection_region.get('points', [])
                 frame_size = detection_region.get('frame_size', {})
@@ -56,15 +58,24 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 
             if points and frame_size:
                 # 计算实际图像和前端显示比例
-                app.logger.debug(f"points: {points}")
+                app.logger.debug(f"Original points: {points}")
                 app.logger.debug(f"frame_size: {frame_size}")
-                app.logger.debug(f"frame: {frame.shape}")
+                app.logger.debug(f"frame shape: {frame.shape}")
 
                 scale_x = frame.shape[1] / frame_size['width']
                 scale_y = frame.shape[0] / frame_size['height']
 
-                app.logger.debug(f"scale_x: {scale_x}")
-                app.logger.debug(f"scale_y: {scale_y}")
+                app.logger.debug(f"scale_x: {scale_x}, scale_y: {scale_y}")
+                
+                # 转换点坐标 (左下角原点 -> 左上角原点) 并应用缩放
+                roi_points = []
+                for p in points:
+                    x = int(p['x'] * scale_x)
+                    # 将y坐标从左下角原点转换为左上角原点
+                    y = int(frame.shape[0] - (p['y'] * scale_y))
+                    roi_points.append((x, y))
+                
+                app.logger.debug(f"Converted roi_points: {roi_points}")
 
             while True:
                 ret, frame = camera.read()
@@ -83,16 +94,17 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                     boxes = r.boxes
                     for box in boxes:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
-                        app.logger.debug(f"box: {box.xyxy[0]}")
+                        app.logger.debug(f"Detection box: {box.xyxy[0]}")
                         box_center = ((x1 + x2) // 2, (y1 + y2) // 2)
-                        #foot_center = ((x1 + x2) // 2, y2)
+                        # foot_center = ((x1 + x2) // 2, y2)
+                        app.logger.debug(f"Box center: {box_center}")
 
-                        if points and frame_size:
-                            # 检查点是否在检测框内
-                            if self.is_point_in_roi(box_center, points):
+                        if roi_points:
+                            # 检查点是否在检测区域内
+                            if self.is_point_in_roi(box_center, roi_points):
                                 is_exception = True
                                 result_confidence = float(box.conf)
-                                app.logger.debug(f"is_point_in_roi: True. is_exception: {is_exception}")
+                                app.logger.debug(f"Point in ROI: True.")
                                 app.logger.debug(f"result_confidence: {result_confidence}")
                                 break
 
@@ -113,7 +125,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
         
                     # 如果有检测结果，调用告警处理回调
                     if on_alert:
-                        app.logger.debug(f"on_alert: {on_alert}")
+                        app.logger.debug(f"Calling on_alert")
                         on_alert(frame, {
                             'confidence': result_confidence,
                             'image_url': save_filename,
