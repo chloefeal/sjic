@@ -1,30 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
-import io from 'socket.io-client';
+import { 
+  Grid, Card, CardContent, Typography, Table, TableBody, TableCell, 
+  TableContainer, TableHead, TableRow, Paper, Dialog, DialogContent,
+  TablePagination, IconButton 
+} from '@mui/material';
+import { ZoomIn } from '@mui/icons-material';
 import axios from '../utils/axios';
 
 function Alerts() {
   const [alerts, setAlerts] = useState([]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [previewImage, setPreviewImage] = useState(null);
 
   useEffect(() => {
     fetchAlerts();
-    // 设置WebSocket监听实时告警
-    const socket = io(process.env.REACT_APP_API_URL);
-    socket.on('new_alert', (alert) => {
-      setAlerts((prev) => [alert, ...prev]);
-    });
-
-    return () => socket.disconnect();
-  }, []);
+  }, [page, rowsPerPage]);
 
   const fetchAlerts = async () => {
     try {
-      const response = await axios.get('/api/alerts');
-      setAlerts(response || []);  // 确保始终是数组
-      console.log('Alerts:', response);
+      const response = await axios.get('/api/alerts', {
+        params: {
+          page: page + 1,
+          per_page: rowsPerPage
+        }
+      });
+      setAlerts(response.items || []);
+      setTotal(response.total || 0);
     } catch (error) {
       console.error('Error fetching alerts:', error);
     }
+  };
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const handlePreviewImage = (imageUrl) => {
+    setPreviewImage(imageUrl);
   };
 
   return (
@@ -44,6 +63,7 @@ function Alerts() {
                     <TableCell>类型</TableCell>
                     <TableCell>置信度</TableCell>
                     <TableCell>图片</TableCell>
+                    <TableCell>操作</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -57,18 +77,52 @@ function Alerts() {
                         <img
                           src={alert.image_url}
                           alt="告警截图"
-                          style={{ width: 100, height: 'auto', cursor: 'pointer' }}
-                          onClick={() => {/* 显示大图 */}}
+                          style={{ width: 100, height: 'auto' }}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <IconButton 
+                          onClick={() => handlePreviewImage(alert.image_url)}
+                          title="预览"
+                        >
+                          <ZoomIn />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              <TablePagination
+                component="div"
+                count={total}
+                page={page}
+                onPageChange={handleChangePage}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                labelRowsPerPage="每页行数"
+              />
             </TableContainer>
           </CardContent>
         </Card>
       </Grid>
+
+      {/* 图片预览对话框 */}
+      <Dialog
+        open={Boolean(previewImage)}
+        onClose={() => setPreviewImage(null)}
+        maxWidth="lg"
+      >
+        <DialogContent>
+          {previewImage && (
+            <img
+              src={previewImage}
+              alt="告警大图"
+              style={{ width: '100%', height: 'auto' }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Grid>
   );
 }

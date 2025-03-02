@@ -1,4 +1,4 @@
-from flask import jsonify, request, Response
+from flask import jsonify, request, Response, send_from_directory
 from app import app, db, socketio
 from app.models import Alert, Camera, DetectionModel, Algorithm, Setting
 from app.services.detector import DetectorService
@@ -149,11 +149,32 @@ def stop_detection():
 
 # 告警相关路由
 @app.route('/api/alerts', methods=['GET'])
-@token_required 
+@token_required
 def get_alerts():
-    """获取告警记录"""
-    alerts = Alert.query.order_by(Alert.timestamp.desc()).all()
-    return jsonify([alert.to_dict() for alert in alerts])
+    """获取告警记录，支持分页"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        
+        # 获取分页数据
+        pagination = Alert.query.order_by(Alert.timestamp.desc()).paginate(
+            page=page, 
+            per_page=per_page,
+            error_out=False
+        )
+        
+        alerts = pagination.items
+        
+        return jsonify({
+            'items': [alert.to_dict() for alert in alerts],
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'current_page': page
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/alerts', methods=['POST'])
 @token_required 
@@ -464,6 +485,15 @@ def update_settings():
         app.logger.error(f"Error updating settings: {str(e)}")
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/alerts/images/<path:filename>')
+def get_alert_image(filename):
+    """获取告警图片"""
+    try:
+        return send_from_directory(app.config['ALERT_FOLDER'], filename)
+    except Exception as e:
+        app.logger.error(f"Error getting alert image: {str(e)}")
+        return jsonify({'error': str(e)}), 404
 
 
 

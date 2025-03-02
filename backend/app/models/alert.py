@@ -12,12 +12,21 @@ class Alert(db.Model):
     image_url = db.Column(db.String(200))
     
     def to_dict(self):
+        # 构建完整的图片URL
+        image_url = None
+        if self.image_url:
+            if self.image_url.startswith('http'):
+                image_url = self.image_url
+            else:
+                # 使用相对路径
+                image_url = f'/api/alerts/images/{self.image_url}'
+        
         return {
             'id': self.id,
-            'timestamp': self.timestamp.isoformat(),
             'camera_id': self.camera_id,
-            'camera_name': self.camera.name,
+            'camera_name': self.camera.name if self.camera else None,
             'alert_type': self.alert_type,
             'confidence': self.confidence,
-            'image_url': self.image_url
+            'image_url': image_url,
+            'timestamp': self.timestamp.isoformat()
         } 
