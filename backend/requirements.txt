@@ -14,3 +14,4 @@ flask-migrate==4.0.0
 pyjwt==2.10.1
 torchvision==0.19
 torch==2.4.0
+shapely==1.8.5

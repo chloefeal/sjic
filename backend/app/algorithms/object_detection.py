@@ -65,27 +65,20 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
 
                 app.logger.debug(f"scale_x: {scale_x}")
                 app.logger.debug(f"scale_y: {scale_y}")
-                
-                # 转换点坐标
-                roi_points = np.array([
-                    [int(p['x'] * scale_x), int(p['y'] * scale_y)]
-                    for p in points
-                ], np.int32)
-
-                app.logger.debug(f"roi_points: {roi_points}")
-
 
             while True:
                 ret, frame = camera.read()
                 if not ret:
                     time.sleep(1)
                     continue
+                
                 # 使用模型检测目标
                 results = model(frame, conf=confidence)
                 
                 # 处理检测结果
                 is_exception = False
                 result_confidence = 0
+                
                 for r in results:
                     boxes = r.boxes
                     for box in boxes:
@@ -96,8 +89,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
 
                         if points and frame_size:
                             # 检查点是否在检测框内
-                            #if self.is_foot_center_in_roi(foot_center, roi_points):
-                            if self.is_box_center_in_roi(box_center, roi_points):
+                            if self.is_point_in_roi(box_center, points):
                                 is_exception = True
                                 result_confidence = float(box.conf)
                                 break
@@ -111,7 +103,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                     save_filename = self.save_detection_image(frame, results)
                     ## save_dir = increment_path(Path("ultralytics_rc_output") / "exp", exist_ok=True, sep="", mkdir=True)
                     # save_dir = app.config['ALERT_FOLDER']
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                    # timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
                     # save_filename = f'{task_name}_{timestamp}.mp4'
                     # video_writer = cv2.VideoWriter(str(save_dir / save_filename), fourcc, fps, (frame_width, frame_height))
         

@@ -5,6 +5,7 @@ import requests
 import os
 from datetime import datetime
 import cv2
+from shapely.geometry import Point, Polygon
 
 class BaseAlgorithm(Algorithm):
     """算法基类"""
@@ -92,14 +93,19 @@ class BaseAlgorithm(Algorithm):
             return True
         return (datetime.now() - last_alert_time).total_seconds() >= alertThreshold
 
-    def is_box_center_in_roi(self, point, box):
-        """判断中心点是否在检测框内"""
-        x, y = point
-        x1, y1, x2, y2 = box
-        return x1 <= x <= x2 and y1 <= y <= y2
+    def is_point_in_roi(self, point, points):
+        """
+        判断点是否在检测区域内
+        :param point: 点 (x, y)
+        :param points: 检测区域的边界点列表 [(x1, y1), (x2, y2), ..., (xn, yn)]
+        :return: 如果点在检测区域内返回True，否则返回False
+        """
+        # 创建一个Point对象
+        center_point = Point(point)
+        # 创建一个Polygon对象
+        roi_polygon = Polygon(points)
+        # 使用contains方法判断点是否在多边形内
+        return roi_polygon.contains(center_point)
     
-    def is_foot_center_in_roi(self, point, box):
-        """判断脚中心点是否在检测框内"""
-        x, y = point
-        x1, y1, x2, y2 = box
-        return x1 <= x <= x2 and y1 <= y <= y2
+
+
