@@ -1,9 +1,12 @@
 from .base import BaseAlgorithm
-from app.models import Algorithm
+from app.models import Algorithm, Alert
 from app import db,app
 import cv2
 import numpy as np
 import time
+from datetime import datetime
+from ultralytics.utils.files import increment_path
+from pathlib import Path
 
 class ObjectDetectionAlgorithm(BaseAlgorithm):
     """目标检测算法"""
@@ -29,10 +32,13 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
         """目标检测算法"""
         try:
             model = parameters.get('model')
+            task_name = parameters.get('task_name')
             confidence = parameters.get('confidence', 0.5)
             algorithm_parameters = parameters.get('algorithm_parameters', {})
             on_alert = parameters.get('on_alert')  # 获取告警处理回调
-            
+            alertThreshold = parameters.get('alertThreshold', 5)
+            last_alert_time = None
+            camera_id = parameters.get('camera_id')
             # 获取检测区域
             detection_region = algorithm_parameters.get('detection_region')
             points = None
@@ -40,7 +46,10 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             if detection_region:
                 points = detection_region.get('points', [])
                 frame_size = detection_region.get('frame_size', {})
-            
+
+            frame_width, frame_height = int(camera.get(3)), int(camera.get(4))
+            fps, fourcc = int(camera.get(5)), cv2.VideoWriter_fourcc(*"mp4v")
+           
             ret, frame = camera.read()
             if not ret:
                 return None
@@ -64,7 +73,8 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 ], np.int32)
 
                 app.logger.debug(f"roi_points: {roi_points}")
-            
+
+
             while True:
                 ret, frame = camera.read()
                 if not ret:
@@ -74,29 +84,43 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 results = model(frame, conf=confidence)
                 
                 # 处理检测结果
-                detections = []
+                is_exception = False
+                result_confidence = 0
                 for r in results:
                     boxes = r.boxes
                     for box in boxes:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         app.logger.debug(f"box: {box.xyxy[0]}")
                         box_center = ((x1 + x2) // 2, (y1 + y2) // 2)
-                        
-                        detections.append({
-                            'box': box.xyxy[0].tolist(),
-                            'confidence': float(box.conf),
-                            'class': int(box.cls)
+                        #foot_center = ((x1 + x2) // 2, y2)
+
+                        if points and frame_size:
+                            # 检查点是否在检测框内
+                            #if self.is_foot_center_in_roi(foot_center, roi_points):
+                            if self.is_box_center_in_roi(box_center, roi_points):
+                                is_exception = True
+                                result_confidence = float(box.conf)
+                                break
+
+                #cv2.imshow('frame', results[0].plot())
+                #cv2.waitKey(0)
+
+                if is_exception and self.need_alert_again(last_alert_time, alertThreshold):
+                    last_alert_time = datetime.now()
+                    # TODO: 保存检测结果
+                    save_filename = self.save_detection_image(frame, results)
+                    ## save_dir = increment_path(Path("ultralytics_rc_output") / "exp", exist_ok=True, sep="", mkdir=True)
+                    # save_dir = app.config['ALERT_FOLDER']
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+                    # save_filename = f'{task_name}_{timestamp}.mp4'
+                    # video_writer = cv2.VideoWriter(str(save_dir / save_filename), fourcc, fps, (frame_width, frame_height))
+        
+                    # 如果有检测结果，调用告警处理回调
+                    if on_alert:
+                        on_alert(frame, {
+                            'confidence': result_confidence,
+                            'image_url': save_filename,
                         })
-                cv2.imshow('frame', results[0].plot())
-                cv2.waitKey(0)
-            
-                # 如果有检测结果，调用告警处理回调
-                if detections and on_alert:
-                    on_alert(frame, {
-                        'detections': detections,
-                        'confidence': max(d['confidence'] for d in detections),
-                        'alert': True
-                    })
                                
         except Exception as e:
             app.logger.error(f"Error in object detection: {str(e)}")

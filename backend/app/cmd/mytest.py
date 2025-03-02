@@ -14,6 +14,22 @@ from config import Config
 from ultralytics import YOLO
 from app import app, db
 from app.models import Camera
+from app.models import Alert
+from datetime import datetime
+
+
+# 创建告警记录
+def create_alert(task_id, camera_id, alert_type, confidence, image_url):
+    alert = Alert(
+        task_id=task_id,
+        camera_id=task.cameraId,
+        alert_type=task.algorithm_type,
+        confidence=alert_data.get('confidence', 0),
+        image_url=alert_data.get('image_url', ''),
+        timestamp=datetime.now()
+    )
+    db.session.add(alert)
+    db.session.commit()
 
 def main():
     algo = ObjectDetectionAlgorithm()
@@ -43,7 +59,7 @@ def main():
                     'confidence': task.confidence,
                     'alertThreshold': task.alertThreshold,
                     'algorithm_parameters': task.algorithm_parameters,
-                    'on_alert': None  # 传递告警处理回调
+                    'on_alert': Detector.handle_alert  # 传递告警处理回调
                 }
 
     result = algo.process(cap, parameters)

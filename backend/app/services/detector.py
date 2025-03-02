@@ -132,15 +132,16 @@ class DetectorService:
                 task = Task.query.get(detector['task_id'])
                 algorithm = Algorithm.get_algorithm_by_id(task.algorithm_id)
                 
-                def handle_alert(frame, results):
+                def handle_alert(frame, alert_data):
                     try:
                         # 创建告警记录
                         alert = Alert(
                             task_id=task_id,
                             camera_id=task.cameraId,
                             alert_type=task.algorithm_type,
-                            confidence=results.get('confidence', 0),
-                            image_path=self._save_detection_image(frame, results)
+                            confidence=alert_data.get('confidence', 0),
+                            image_url=alert_data.get('image_url', ''),
+                            timestamp=datetime.now()
                         )
                         db.session.add(alert)
                         db.session.commit()
@@ -154,6 +155,8 @@ class DetectorService:
                 # 启动算法处理
                 algorithm.process(detector['camera'], {
                     'model': detector['model'],
+                    'camera_id': task.cameraId,
+                    'task_name': task.name,
                     'confidence': task.confidence,
                     'alertThreshold': task.alertThreshold,
                     'algorithm_parameters': task.algorithm_parameters,
@@ -204,7 +207,7 @@ class DetectorService:
             # 保存图像
             cv2.imwrite(filepath, frame)
             
-            return filepath
+            return filename
             
         except Exception as e:
             app.logger.error(f"Error saving detection image: {str(e)}")

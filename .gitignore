@@ -82,3 +82,6 @@ coverage/
 *.tmp
 .DS_Store
 Thumbs.db 
+
+# alert images
+backend/alerts/

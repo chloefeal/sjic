@@ -10,8 +10,12 @@ class ModelTrainer:
         self.model = None
         
     def load_config(self):
-        with open(self.config_path) as f:
-            self.config = yaml.safe_load(f)
+        try:
+            with open(self.config_path) as f:
+                self.config = yaml.safe_load(f)
+        except Exception as e:
+            # TODO: 处理错误
+            app.logger.error(f"Error loading config: {str(e)}")
             
     def prepare_dataset(self, data_path):
         """准备训练数据集"""

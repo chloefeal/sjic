@@ -17,7 +17,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 # 初始化服务
 detector_service = DetectorService()
-#model_trainer = ModelTrainer()
+model_trainer = ModelTrainer()
 
 # 摄像头相关路由
 @app.route('/api/cameras', methods=['GET'])
