@@ -92,12 +92,15 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                             if self.is_point_in_roi(box_center, points):
                                 is_exception = True
                                 result_confidence = float(box.conf)
+                                app.logger.debug(f"is_point_in_roi: True. is_exception: {is_exception}")
+                                app.logger.debug(f"result_confidence: {result_confidence}")
                                 break
 
                 #cv2.imshow('frame', results[0].plot())
                 #cv2.waitKey(0)
 
                 if is_exception and self.need_alert_again(last_alert_time, alertThreshold):
+                    app.logger.debug(f"need_alert_again: True")
                     last_alert_time = datetime.now()
                     # TODO: 保存检测结果
                     save_filename = self.save_detection_image(frame, results)
@@ -106,9 +109,11 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                     # timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
                     # save_filename = f'{task_name}_{timestamp}.mp4'
                     # video_writer = cv2.VideoWriter(str(save_dir / save_filename), fourcc, fps, (frame_width, frame_height))
+                    app.logger.debug(f"save_filename: {save_filename}")
         
                     # 如果有检测结果，调用告警处理回调
                     if on_alert:
+                        app.logger.debug(f"on_alert: {on_alert}")
                         on_alert(frame, {
                             'confidence': result_confidence,
                             'image_url': save_filename,

@@ -101,6 +101,7 @@ class BaseAlgorithm(Algorithm):
         :return: 如果点在检测区域内返回True，否则返回False
         """
         # 创建一个Point对象
+        app.logger.debug(f"is_point_in_roi:point: {point}")
         center_point = Point(point)
         # 创建一个Polygon对象
         roi_polygon = Polygon(points)
