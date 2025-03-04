@@ -138,7 +138,7 @@ class DetectorService:
                         alert = Alert(
                             task_id=task_id,
                             camera_id=task.cameraId,
-                            alert_type=task.algorithm_type,
+                            alert_type=algorithm.type,
                             confidence=alert_data.get('confidence', 0),
                             image_url=alert_data.get('image_url', ''),
                             timestamp=datetime.now()

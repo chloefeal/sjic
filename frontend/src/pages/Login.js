@@ -36,7 +36,7 @@ function Login() {
         <Card sx={{ width: '100%' }}>
           <CardContent>
             <Typography variant="h5" align="center" gutterBottom>
-              登录系统
+              智算检测平台
             </Typography>
             {error && (
               <Alert severity="error" sx={{ mb: 2 }}>
