@@ -48,7 +48,6 @@ yarn-error.log*
 Thumbs.db
 
 # Project specific
-/models/*
 !/models/.gitkeep
 /data/*
 !/data/.gitkeep
