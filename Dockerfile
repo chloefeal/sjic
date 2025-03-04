@@ -59,6 +59,8 @@ WORKDIR /app/backend
 # 环境变量
 ENV PYTHONPATH=/app/backend
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
 
 # 启动脚本
 COPY start.sh /start.sh

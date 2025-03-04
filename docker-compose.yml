@@ -10,15 +10,20 @@ services:
       - "38881:38881"
     volumes:
       - ./backend:/app
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./alerts:/app/alerts
     environment:
       - FLASK_ENV=development
       - DATABASE_URL=sqlite:///app.db
-      - PYTHONUNBUFFERED=1  # 确保Python输出不被缓存
+      - PYTHONUNBUFFERED=1
     deploy:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]  # 如果有GPU可用
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   frontend:
     build: ./frontend
