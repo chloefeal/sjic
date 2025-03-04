@@ -48,7 +48,6 @@ yarn-error.log*
 Thumbs.db
 
 # Project specific
-!/models/.gitkeep
 /data/*
 !/data/.gitkeep
 /uploads/*
@@ -58,7 +57,7 @@ Thumbs.db
 /backend/app.db
 
 # YOLO
-*.pt
+#*.pt
 runs/
 *.onnx
 
