@@ -46,6 +46,17 @@ function Alerts() {
     setPreviewImage(imageUrl);
   };
 
+  // 添加一个处理图片 URL 的函数
+  const getImageUrl = (imageUrl) => {
+    if (!imageUrl) return '';
+    if (imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    // 使用环境变量中的 API URL
+    const baseUrl = process.env.REACT_APP_API_URL || '';
+    return `${baseUrl}${imageUrl}`;
+  };
+
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
@@ -75,14 +86,14 @@ function Alerts() {
                       <TableCell>{(alert.confidence * 100).toFixed(2)}%</TableCell>
                       <TableCell>
                         <img
-                          src={alert.image_url}
+                          src={getImageUrl(alert.image_url)}
                           alt="告警截图"
                           style={{ width: 100, height: 'auto' }}
                         />
                       </TableCell>
                       <TableCell>
                         <IconButton 
-                          onClick={() => handlePreviewImage(alert.image_url)}
+                          onClick={() => handlePreviewImage(getImageUrl(alert.image_url))}
                           title="预览"
                         >
                           <ZoomIn />
