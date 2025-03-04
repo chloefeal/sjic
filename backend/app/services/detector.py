@@ -136,7 +136,6 @@ class DetectorService:
                     try:
                         # 创建告警记录
                         alert = Alert(
-                            task_id=task_id,
                             camera_id=task.cameraId,
                             alert_type=algorithm.type,
                             confidence=alert_data.get('confidence', 0),
