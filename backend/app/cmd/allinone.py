@@ -3,7 +3,7 @@ import numpy as np
 from ultralytics import YOLO
 import sys, time
 import torch
-from utils.calc import get_letterbox_params, preprocess
+from app.utils.calc import get_letterbox_params, preprocess
 
 def main(url):
     # 加载模型
