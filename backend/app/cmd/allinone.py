@@ -85,45 +85,48 @@ def main(url):
         if len(batch) == batch_size:
             # 合并批次并推理
             batch_tensor = torch.cat(batch)
+            print("batch_tensor.shape:=================================", batch_tensor.shape)
+            batch = []
+        else:
+            continue
 
         # 推理
-        results = model(processed, imgsz=640, verbose=False)  # 指定输入尺寸
+        results = model(batch_tensor, imgsz=640, verbose=False)  # 指定输入尺寸
         print("results.lenght:=================================", len(results))
 
         #processed = frame
         #results = model(processed, verbose=False)  # 指定输入尺寸
         
-        # 后处理（绘制结果）
-        annotated_frame = results[0].plot()  # 自动还原到原始尺寸
+        for result in results:
+            # 后处理（绘制结果）
+            annotated_frame = result.plot()  # 自动还原到原始尺寸
+            
+            # 显示
+            cv2.imshow("YOLO RTSP", annotated_frame)
+
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+
+            # 增加帧计数
+            frame_count += 1
+
+            # 计算当前帧的处理时间
+            frame_elapsed_time = time.time() - frame_start_time
         
-        # 显示
-        cv2.imshow("YOLO RTSP", annotated_frame)
+            # 计算需要延迟的时间
+            sleep_time = frame_delay - frame_elapsed_time
+        
+            # 如果需要延迟，则进行延迟
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-
-        # 增加帧计数
-        frame_count += 1
-
-        # 计算当前帧的处理时间
-        frame_elapsed_time = time.time() - frame_start_time
-    
-        # 计算需要延迟的时间
-        sleep_time = frame_delay - frame_elapsed_time
-    
-        # 如果需要延迟，则进行延迟
-        if sleep_time > 0:
-            time.sleep(sleep_time)
-
-        # 每隔一段时间计算一次处理帧率
-        if frame_count % 30 == 0:  # 每30帧计算一次
-            elapsed_time = time.time() - start_time
-            processing_fps = frame_count / elapsed_time
-            print(f"处理帧率: {processing_fps:.2f} FPS")
-            start_time = time.time()
-            frame_count = 0
-
-        batch = []  # 清空批次	
+            # 每隔一段时间计算一次处理帧率
+            if frame_count % 30 == 0:  # 每30帧计算一次
+                elapsed_time = time.time() - start_time
+                processing_fps = frame_count / elapsed_time
+                print(f"处理帧率: {processing_fps:.2f} FPS")
+                start_time = time.time()
+                frame_count = 0
 
     cap.release()
     cv2.destroyAllWindows()
