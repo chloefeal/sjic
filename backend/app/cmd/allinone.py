@@ -3,49 +3,7 @@ import numpy as np
 from ultralytics import YOLO
 import sys, time
 import torch
-
-
-def preprocess(frame, target_size=640):
-    # 1. 检查输入有效性
-    if frame is None or frame.size == 0:
-        return None
-
-    # 获取原始尺寸
-    print(frame.shape)
-    h, w = frame.shape[:2]
-    
-    # 计算缩放比例
-    scale = min(target_size / h, target_size / w)
-    new_h, new_w = int(h * scale), int(w * scale)
-
-    print(h, w)
-    print(new_h, new_w)
-
-    dh = target_size - new_h
-    dw = target_size - new_w
-    top = dh // 2
-    bottom = dh - top
-    left = dw // 2
-    right = dw - left
-    print(dh, dw)
-    print(top, bottom, left, right)
-    
-    # Resize 并添加灰边
-    resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    padded = cv2.copyMakeBorder(
-        resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
-    )
-    
-    padded = padded.transpose(2, 0, 1).astype(np.float32) / 255.0  # HWC -> CHW, 归一化
-    padded = np.ascontiguousarray(padded)       # 确保内存连续
-    # 转换为Tensor并添加批次维度
-    padded = torch.tensor(padded, dtype=torch.float32).unsqueeze(0).cuda()  # 转为张量并移至 GPU
-    #padded = torch.tensor(padded).unsqueeze(0).cuda()  # 转为张量并移至 GPU
-
-    print("预处理输出形状:", padded.shape)  # 应为 [1,3,640,640]
-    print("数据类型:", padded.dtype)     # 应为 float32
-    
-    return padded
+from utils.calc import get_letterbox_params, preprocess
 
 def main(url):
     # 加载模型
@@ -54,6 +12,13 @@ def main(url):
     # 打开 RTSP 流
     rtsp_url = url
     cap = cv2.VideoCapture(rtsp_url)
+
+    h, w = cap.get(cv2.CAP_PROP_FRAME_HEIGHT), cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    new_h, new_w, top, bottom, left, right = get_letterbox_params(h, w, target_size=640)
+    if new_h is None:
+        print(f"error: get_letterbox_params return None")
+        return
+
     # 获取原始帧率
     fps = cap.get(cv2.CAP_PROP_FPS)
     print(f"原始帧率: {fps} FPS")
@@ -72,15 +37,19 @@ def main(url):
     while cap.isOpened():
         # 记录当前帧的开始时间
         frame_start_time = time.time()
+        # 增加帧计数
+        frame_count += 1
 
         ret, frame = cap.read()
         if not ret:
             break
         
         # 预处理（Letterbox）
-        processed = preprocess(frame, target_size=640)
+        processed = preprocess(frame, new_h, new_w, top, bottom, left, right)
         if processed is not None:
             batch.append(processed)
+        else:
+            continue
 
         if len(batch) == batch_size:
             # 合并批次并推理
@@ -107,15 +76,10 @@ def main(url):
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
-            # 增加帧计数
-            frame_count += 1
-
             # 计算当前帧的处理时间
             frame_elapsed_time = time.time() - frame_start_time
-        
             # 计算需要延迟的时间
             sleep_time = frame_delay - frame_elapsed_time
-        
             # 如果需要延迟，则进行延迟
             if sleep_time > 0:
                 time.sleep(sleep_time)

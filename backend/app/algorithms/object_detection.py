@@ -2,11 +2,12 @@ from .base import BaseAlgorithm
 from app.models import Algorithm, Alert
 from app import db,app
 import cv2
-import numpy as np
+import torch
 import time
 from datetime import datetime
 from ultralytics.utils.files import increment_path
 from pathlib import Path
+from app.utils.calc import transform_points_from_frontend_to_backend, get_letterbox_params, preprocess
 
 class ObjectDetectionAlgorithm(BaseAlgorithm):
     """目标检测算法"""
@@ -49,33 +50,32 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 points = detection_region.get('points', [])
                 frame_size = detection_region.get('frame_size', {})
 
-            frame_width, frame_height = int(camera.get(3)), int(camera.get(4))
             fps, fourcc = int(camera.get(5)), cv2.VideoWriter_fourcc(*"mp4v")
-           
-            ret, frame = camera.read()
-            if not ret:
-                return None
-                
-            if points and frame_size:
-                # 计算实际图像和前端显示比例
-                app.logger.debug(f"Original points: {points}")
-                app.logger.debug(f"frame_size: {frame_size}")
-                app.logger.debug(f"frame shape: {frame.shape}")
+            h, w = camera.get(cv2.CAP_PROP_FRAME_HEIGHT), camera.get(cv2.CAP_PROP_FRAME_WIDTH)
+            new_h, new_w, top, bottom, left, right = get_letterbox_params(h, w, target_size=640)
+            app.logger.info(f"new_h: {new_h}, new_w: {new_w}, top: {top}, bottom: {bottom}, left: {left}, right: {right}")
+            if new_h is None:
+                app.logger.error(f"error: get_letterbox_params return None")
+                return
 
-                scale_x = frame.shape[1] / frame_size['width']
-                scale_y = frame.shape[0] / frame_size['height']
+            if points:
+                roi_points = transform_points_from_frontend_to_backend(points, frame_size['height'], frame_size['width'], new_h, new_w)
+                app.logger.debug(f"points: {points}")
+                app.logger.debug(f"roi_points: {roi_points}")
+                if roi_points is None:
+                    app.logger.error(f"error: roi_points is None")
+                    return
 
-                app.logger.debug(f"scale_x: {scale_x}, scale_y: {scale_y}")
-                
-                # 转换点坐标 (左下角原点 -> 左上角原点) 并应用缩放
-                roi_points = []
-                for p in points:
-                    x = int(p['x'] * scale_x)
-                    # 将y坐标从左下角原点转换为左上角原点
-                    y = int(frame.shape[0] - (p['y'] * scale_y))
-                    roi_points.append((x, y))
-                
-                app.logger.debug(f"Converted roi_points: {roi_points}")
+            # 目标帧率
+            target_fps = 20
+            frame_delay = 1.0 / target_fps  # 每帧的延迟时间
+
+            # 初始化计数器和时间戳
+            frame_count = 0
+            start_time = time.time()
+
+            batch_size = 8
+            batch = []
 
             while True:
                 ret, frame = camera.read()
@@ -83,6 +83,26 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                     time.sleep(1)
                     continue
                 
+                # 预处理（Letterbox）
+                processed = preprocess(frame, new_h, new_w, top, bottom, left, right)
+                if processed is not None:
+                    batch.append(processed)
+                else:
+                    continue
+
+                if len(batch) == batch_size:
+                    # 合并批次并推理
+                    batch_tensor = torch.cat(batch)
+                    print("batch_tensor.shape:=================================", batch_tensor.shape)
+                    batch = []
+                else:
+                    continue
+
+                # 推理
+                results = model(batch_tensor, imgsz=640, verbose=False)  # 指定输入尺寸
+                print("results.lenght:=================================", len(results))
+
+
                 # 使用模型检测目标
                 results = model(frame, conf=confidence)
                 
