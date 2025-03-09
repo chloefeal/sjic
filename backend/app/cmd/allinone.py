@@ -1,7 +1,12 @@
+import sys
+import os
+# 添加项目根目录到 Python 路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
 import cv2
 import numpy as np
 from ultralytics import YOLO
-import sys, time
+import time
 import torch
 from app.utils.calc import get_letterbox_params, preprocess
 
@@ -23,74 +28,67 @@ def main(url):
     fps = cap.get(cv2.CAP_PROP_FPS)
     print(f"原始帧率: {fps} FPS")
 
-    # 目标帧率
+    # 目标帧率和批处理大小
     target_fps = 20
-    frame_delay = 1.0 / target_fps  # 每帧的延迟时间
-
-    # 初始化计数器和时间戳
-    frame_count = 0
-    start_time = time.time()
-
+    frame_delay = 1.0 / target_fps
     batch_size = 8
     batch = []
+    
+    # FPS 计算相关变量
+    frame_count = 0
+    batch_count = 0
+    start_time = time.time()
+    fps_update_interval = 2.0  # 每2秒更新一次FPS
 
     while cap.isOpened():
-        # 记录当前帧的开始时间
-        frame_start_time = time.time()
-        # 增加帧计数
-        frame_count += 1
-
-        ret, frame = cap.read()
-        if not ret:
-            break
+        batch_start_time = time.time()
         
-        # 预处理（Letterbox）
-        processed = preprocess(frame, new_h, new_w, top, bottom, left, right)
-        if processed is not None:
-            batch.append(processed)
-        else:
-            continue
-
-        if len(batch) == batch_size:
-            # 合并批次并推理
-            batch_tensor = torch.cat(batch)
-            print("batch_tensor.shape:=================================", batch_tensor.shape)
-            batch = []
-        else:
-            continue
-
-        # 推理
-        results = model(batch_tensor, imgsz=640, verbose=False)  # 指定输入尺寸
-        print("results.lenght:=================================", len(results))
-
-        #processed = frame
-        #results = model(processed, verbose=False)  # 指定输入尺寸
-        
-        for result in results:
-            # 后处理（绘制结果）
-            annotated_frame = result.plot()  # 自动还原到原始尺寸
+        # 收集一个批次的帧
+        while len(batch) < batch_size:
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            # 预处理
+            processed = preprocess(frame, new_h, new_w, top, bottom, left, right)
+            if processed is not None:
+                batch.append(processed)
+                frame_count += 1
             
-            # 显示
-            cv2.imshow("YOLO RTSP", annotated_frame)
+            # 控制采集帧率
+            elapsed = time.time() - batch_start_time
+            if elapsed < frame_delay * len(batch):
+                time.sleep(frame_delay * len(batch) - elapsed)
 
+        if not batch:
+            break
+
+        # 批量推理
+        batch_tensor = torch.cat(batch)
+        results = model(batch_tensor, imgsz=640, verbose=False)
+        batch_count += 1
+        
+        # 显示结果
+        for result in results:
+            annotated_frame = result.plot()
+            cv2.imshow("YOLO RTSP", annotated_frame)
+            
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
-            # 计算当前帧的处理时间
-            frame_elapsed_time = time.time() - frame_start_time
-            # 计算需要延迟的时间
-            sleep_time = frame_delay - frame_elapsed_time
-            # 如果需要延迟，则进行延迟
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+        # 计算和显示FPS
+        current_time = time.time()
+        elapsed_total = current_time - start_time
+        if elapsed_total >= fps_update_interval:
+            processing_fps = frame_count / elapsed_total
+            print(f"处理帧率: {processing_fps:.2f} FPS (frames: {frame_count}, batches: {batch_count})")
+            # 重置计数器
+            start_time = current_time
+            frame_count = 0
+            batch_count = 0
 
-            # 每隔一段时间计算一次处理帧率
-            if frame_count % 30 == 0:  # 每30帧计算一次
-                elapsed_time = time.time() - start_time
-                processing_fps = frame_count / elapsed_time
-                print(f"处理帧率: {processing_fps:.2f} FPS")
-                start_time = time.time()
-                frame_count = 0
+        # 清空批次
+        batch = []
 
     cap.release()
     cv2.destroyAllWindows()
