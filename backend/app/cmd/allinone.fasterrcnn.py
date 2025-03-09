@@ -10,7 +10,7 @@ import torch
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from torchvision.transforms import functional as F
 from PIL import Image
-from app.utils.calc import get_letterbox_params, preprocess
+from app.utils.calc import get_letterbox_params
 
 def main(url):
     # 设置设备
@@ -52,7 +52,7 @@ def main(url):
     h, w = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     print(f"原始帧率: {fps} FPS, 尺寸: {w}x{h}")
     
-    # 计算缩放参数 (使用与 YOLO 相同的 letterbox 函数)
+    # 计算缩放参数
     target_size = 800  # Faster R-CNN 通常使用更大的输入尺寸
     new_h, new_w, top, bottom, left, right = get_letterbox_params(h, w, target_size=target_size)
     if new_h is None:
@@ -73,20 +73,45 @@ def main(url):
     confidence_threshold = 0.5
 
     def preprocess_for_rcnn(image):
-        # 使用 letterbox 缩放
-        processed = preprocess(image, new_h, new_w, top, bottom, left, right)
-        if processed is None:
-            return None
+        """自定义预处理函数，不依赖于 app.utils.calc.preprocess"""
+        try:
+            # 计算缩放比例
+            scale = min(target_size / h, target_size / w)
             
-        # 转换为 RGB
-        image_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
-        # 转换为 PIL Image
-        pil_image = Image.fromarray(image_rgb)
-        # 转换为张量
-        tensor = F.to_tensor(pil_image)
-        return tensor, processed
+            # 计算新尺寸
+            resize_h, resize_w = int(h * scale), int(w * scale)
+            
+            # 缩放图像
+            resized = cv2.resize(image, (resize_w, resize_h))
+            
+            # 创建画布
+            canvas = np.zeros((target_size, target_size, 3), dtype=np.uint8)
+            
+            # 计算偏移量以居中放置
+            offset_x = (target_size - resize_w) // 2
+            offset_y = (target_size - resize_h) // 2
+            
+            # 将缩放后的图像放在画布中央
+            canvas[offset_y:offset_y+resize_h, offset_x:offset_x+resize_w] = resized
+            
+            # 转换为 RGB
+            image_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
+            
+            # 转换为 PIL Image
+            pil_image = Image.fromarray(image_rgb)
+            
+            # 转换为张量
+            tensor = F.to_tensor(pil_image)
+            
+            return tensor, canvas, (offset_x, offset_y, scale)
+            
+        except Exception as e:
+            print(f"预处理错误: {e}")
+            return None
 
-    def draw_boxes(output_image, boxes, labels, scores, scale_x, scale_y):
+    def draw_boxes(output_image, boxes, labels, scores, preprocess_info):
+        """在图像上绘制检测框"""
+        offset_x, offset_y, scale = preprocess_info
         
         # 绘制检测结果
         for box, label, score in zip(boxes, labels, scores):
@@ -101,39 +126,25 @@ def main(url):
                 color_map[class_name] = tuple(np.random.randint(0, 255, 3).tolist())
             color = color_map[class_name]
             
-            # 将边界框坐标从缩放图像映射回原始图像
+            # 获取边界框坐标
             x1, y1, x2, y2 = box
-            """
-            x1 = (x1 - left) * scale_x
-            y1 = (y1 - top) * scale_y
-            x2 = (x2 - left) * scale_x
-            y2 = (y2 - top) * scale_y
             
-            # 确保坐标在图像范围内
-            x1 = max(0, min(w-1, int(x1)))
-            y1 = max(0, min(h-1, int(y1)))
-            x2 = max(0, min(w-1, int(x2)))
-            y2 = max(0, min(h-1, int(y2)))
-            """
             # 绘制边界框
-            cv2.rectangle(output_image, (x1, y1), (x2, y2), color, 2)
+            cv2.rectangle(output_image, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
             
             # 绘制标签
             label_text = f"{class_name}: {score:.2f}"
-            cv2.putText(output_image, label_text, (x1, y1 - 10), 
+            cv2.putText(output_image, label_text, (int(x1), int(y1) - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
         return output_image
 
     # 创建窗口
     cv2.namedWindow("Faster R-CNN RTSP", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("原始视频", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("预处理后", cv2.WINDOW_NORMAL)
     
     print("开始处理视频流...")
-
-    # 计算缩放比例
-    scale_x = w / (new_w - left - right)
-    scale_y = h / (new_h - top - bottom)
-    print(f"缩放比例: x={scale_x}, y={scale_y}")
 
     while True:
         # 读取一帧
@@ -142,7 +153,7 @@ def main(url):
             print("无法读取视频帧，退出...")
             break
         
-        # 显示原始帧（确保视频显示正常）
+        # 显示原始帧
         cv2.imshow("原始视频", frame)
         
         # 预处理
@@ -151,7 +162,7 @@ def main(url):
             print("预处理失败，跳过当前帧")
             continue
             
-        tensor, processed_frame = result
+        tensor, processed_frame, preprocess_info = result
         
         # 显示处理后的帧
         cv2.imshow("预处理后", processed_frame)
@@ -167,7 +178,7 @@ def main(url):
         scores = result['scores'].cpu().numpy()
         
         # 绘制检测结果
-        annotated_frame = draw_boxes(processed_frame, boxes, labels, scores, scale_x, scale_y)
+        annotated_frame = draw_boxes(processed_frame.copy(), boxes, labels, scores, preprocess_info)
         
         # 显示帧率
         current_time = time.time()
