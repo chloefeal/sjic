@@ -47,9 +47,19 @@ def main(url):
         print(f"错误: 无法打开视频流 {url}")
         return
 
-    # 获取原始帧率
+    # 获取原始帧率和尺寸
     fps = cap.get(cv2.CAP_PROP_FPS)
-    print(f"原始帧率: {fps} FPS")
+    h, w = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    print(f"原始帧率: {fps} FPS, 尺寸: {w}x{h}")
+    
+    # 计算缩放参数 (使用与 YOLO 相同的 letterbox 函数)
+    target_size = 800  # Faster R-CNN 通常使用更大的输入尺寸
+    new_h, new_w, top, bottom, left, right = get_letterbox_params(h, w, target_size=target_size)
+    if new_h is None:
+        print(f"错误: get_letterbox_params 返回 None")
+        return
+    
+    print(f"缩放后尺寸: {new_w}x{new_h}, padding: top={top}, bottom={bottom}, left={left}, right={right}")
     
     # FPS 计算相关变量
     frame_count = 0
@@ -63,17 +73,20 @@ def main(url):
     confidence_threshold = 0.5
 
     def preprocess_for_rcnn(image):
+        # 使用 letterbox 缩放
+        processed = preprocess(image, new_h, new_w, top, bottom, left, right)
+        if processed is None:
+            return None
+            
         # 转换为 RGB
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
         # 转换为 PIL Image
         pil_image = Image.fromarray(image_rgb)
         # 转换为张量
         tensor = F.to_tensor(pil_image)
-        return tensor
+        return tensor, processed
 
-    def draw_boxes(image, boxes, labels, scores):
-        # 创建图像副本以避免修改原始图像
-        output_image = image.copy()
+    def draw_boxes(output_image, boxes, labels, scores, scale_x, scale_y):
         
         # 绘制检测结果
         for box, label, score in zip(boxes, labels, scores):
@@ -88,13 +101,26 @@ def main(url):
                 color_map[class_name] = tuple(np.random.randint(0, 255, 3).tolist())
             color = color_map[class_name]
             
-            # 绘制边界框
+            # 将边界框坐标从缩放图像映射回原始图像
             x1, y1, x2, y2 = box
-            cv2.rectangle(output_image, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+            """
+            x1 = (x1 - left) * scale_x
+            y1 = (y1 - top) * scale_y
+            x2 = (x2 - left) * scale_x
+            y2 = (y2 - top) * scale_y
+            
+            # 确保坐标在图像范围内
+            x1 = max(0, min(w-1, int(x1)))
+            y1 = max(0, min(h-1, int(y1)))
+            x2 = max(0, min(w-1, int(x2)))
+            y2 = max(0, min(h-1, int(y2)))
+            """
+            # 绘制边界框
+            cv2.rectangle(output_image, (x1, y1), (x2, y2), color, 2)
             
             # 绘制标签
             label_text = f"{class_name}: {score:.2f}"
-            cv2.putText(output_image, label_text, (int(x1), int(y1) - 10), 
+            cv2.putText(output_image, label_text, (x1, y1 - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
         return output_image
@@ -104,6 +130,11 @@ def main(url):
     
     print("开始处理视频流...")
 
+    # 计算缩放比例
+    scale_x = w / (new_w - left - right)
+    scale_y = h / (new_h - top - bottom)
+    print(f"缩放比例: x={scale_x}, y={scale_y}")
+
     while True:
         # 读取一帧
         ret, frame = cap.read()
@@ -112,10 +143,18 @@ def main(url):
             break
         
         # 显示原始帧（确保视频显示正常）
-        cv2.imshow("Faster R-CNN RTSP", frame)
+        cv2.imshow("原始视频", frame)
         
         # 预处理
-        tensor = preprocess_for_rcnn(frame)
+        result = preprocess_for_rcnn(frame)
+        if result is None:
+            print("预处理失败，跳过当前帧")
+            continue
+            
+        tensor, processed_frame = result
+        
+        # 显示处理后的帧
+        cv2.imshow("预处理后", processed_frame)
         
         # 推理
         with torch.no_grad():
@@ -128,7 +167,7 @@ def main(url):
         scores = result['scores'].cpu().numpy()
         
         # 绘制检测结果
-        annotated_frame = draw_boxes(frame, boxes, labels, scores)
+        annotated_frame = draw_boxes(processed_frame, boxes, labels, scores, scale_x, scale_y)
         
         # 显示帧率
         current_time = time.time()
