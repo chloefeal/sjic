@@ -10,6 +10,49 @@ import torch
 import onnxruntime as ort
 from app.utils.calc import get_letterbox_params, preprocess
 
+def nms(boxes, scores, iou_threshold=0.45):
+    """非极大值抑制的简单实现"""
+    # 按照分数降序排序
+    sorted_indices = np.argsort(scores)[::-1]
+    
+    keep = []
+    while sorted_indices.size > 0:
+        # 保留分数最高的框
+        current = sorted_indices[0]
+        keep.append(current)
+        
+        if sorted_indices.size == 1:
+            break
+            
+        # 计算IoU
+        current_box = boxes[current]
+        other_boxes = boxes[sorted_indices[1:]]
+        
+        ious = compute_iou(current_box, other_boxes)
+        
+        # 保留IoU小于阈值的框
+        mask = ious < iou_threshold
+        sorted_indices = sorted_indices[1:][mask]
+    
+    return keep
+
+def compute_iou(box, boxes):
+    """计算一个框与多个框的IoU"""
+    # 计算交集
+    x1 = np.maximum(box[0], boxes[:, 0])
+    y1 = np.maximum(box[1], boxes[:, 1])
+    x2 = np.minimum(box[2], boxes[:, 2])
+    y2 = np.minimum(box[3], boxes[:, 3])
+    
+    intersection = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    
+    # 计算并集
+    box_area = (box[2] - box[0]) * (box[3] - box[1])
+    boxes_area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    union = box_area + boxes_area - intersection
+    
+    return intersection / (union + 1e-6)
+
 class OnnxModel:
     def __init__(self, model_path):
         # 设置 ONNX Runtime 选项
@@ -19,8 +62,13 @@ class OnnxModel:
         # 优先使用 CUDA 执行提供程序
         providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
         
-        # 创建 ONNX Runtime 会话
-        self.session = ort.InferenceSession(model_path, options, providers=providers)
+        try:
+            # 创建 ONNX Runtime 会话
+            self.session = ort.InferenceSession(model_path, options, providers=providers)
+        except Exception as e:
+            print(f"警告: 使用 CUDA 加载模型失败 ({str(e)})，尝试使用 CPU...")
+            # 如果 CUDA 失败，尝试仅使用 CPU
+            self.session = ort.InferenceSession(model_path, options, providers=['CPUExecutionProvider'])
         
         # 获取模型输入输出信息
         self.input_name = self.session.get_inputs()[0].name
@@ -34,6 +82,35 @@ class OnnxModel:
         # 运行推理
         outputs = self.session.run(self.output_names, {self.input_name: input_tensor})
         return outputs
+
+    def process_outputs(self, outputs):
+        """处理模型输出，返回标准格式的检测结果"""
+        # 这里需要根据实际模型的输出格式进行调整
+        try:
+            # 如果是标准 YOLO 输出格式
+            if len(outputs) == 1 and outputs[0].shape[-1] == 85:  # YOLO 格式 (1, num_boxes, 85)
+                predictions = outputs[0]
+                boxes = predictions[..., :4]
+                scores = predictions[..., 4:5] * predictions[..., 5:]
+                classes = np.argmax(predictions[..., 5:], axis=-1)
+                scores = np.max(scores, axis=-1)
+                
+                # 应用 NMS
+                keep = nms(boxes[0], scores[0])
+                
+                return boxes[0][keep], scores[0][keep], classes[0][keep]
+            
+            # 如果输出已经是分离的格式
+            elif len(outputs) == 3:  # 分离的输出格式 (boxes, scores, classes)
+                return outputs[0][0], outputs[1][0], outputs[2][0]
+            
+            else:
+                print(f"警告: 未知的输出格式，输出数量: {len(outputs)}")
+                return None, None, None
+                
+        except Exception as e:
+            print(f"处理输出时出错: {str(e)}")
+            return None, None, None
 
 def main(url, model_path):
     # 加载 ONNX 模型
@@ -98,19 +175,18 @@ def main(url, model_path):
 
         # 推理
         outputs = model(input_tensor)
-
-        # 处理输出结果（需要根据具体模型的输出格式调整）
-        # 这里假设输出格式与 YOLO 类似
-        boxes = outputs[0]  # 假设第一个输出是边界框
-        scores = outputs[1]  # 假设第二个输出是置信度
-        classes = outputs[2]  # 假设第三个输出是类别
+        
+        # 处理输出结果
+        boxes, scores, classes = model.process_outputs(outputs)
+        if boxes is None:
+            continue
 
         # 绘制检测结果
         annotated_frame = processed.copy()
-        for box, score, cls in zip(boxes[0], scores[0], classes[0]):  # 处理第一个 batch
+        for box, score, cls in zip(boxes, scores, classes):
             if score < 0.5:  # 置信度阈值
                 continue
-
+            
             x1, y1, x2, y2 = box
             cv2.rectangle(annotated_frame, 
                          (int(x1), int(y1)), 
