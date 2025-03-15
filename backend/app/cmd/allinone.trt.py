@@ -90,18 +90,72 @@ class TrtModel:
 
     def __call__(self, batch):
         try:
-            # 将输入数据复制到页锁定内存
-            np.copyto(self.host_inputs[0], batch.ravel())
+            # 打印输入信息
+            print(f"输入批次形状: {batch.shape}")
+            print(f"输入批次类型: {batch.dtype}")
+            
+            # 检查 host_inputs 是否有 shape 属性
+            if hasattr(self.host_inputs[0], 'shape'):
+                print(f"host_inputs[0] 形状: {self.host_inputs[0].shape}")
+            else:
+                print(f"host_inputs[0] 大小: {self.host_inputs[0].size}")
+            
+            # 确保输入形状匹配
+            if batch.size != self.host_inputs[0].size:
+                print(f"警告: 输入大小不匹配! 批次大小: {batch.size}, 期望大小: {self.host_inputs[0].size}")
+                # 尝试调整大小
+                batch_flat = batch.ravel()
+                if batch_flat.size > self.host_inputs[0].size:
+                    print(f"截断输入数据从 {batch_flat.size} 到 {self.host_inputs[0].size}")
+                    batch_flat = batch_flat[:self.host_inputs[0].size]
+                elif batch_flat.size < self.host_inputs[0].size:
+                    print(f"填充输入数据从 {batch_flat.size} 到 {self.host_inputs[0].size}")
+                    # 创建新数组并填充
+                    new_batch = np.zeros(self.host_inputs[0].size, dtype=batch.dtype)
+                    new_batch[:batch_flat.size] = batch_flat
+                    batch_flat = new_batch
+                
+                # 将调整后的数据复制到页锁定内存
+                np.copyto(self.host_inputs[0], batch_flat)
+            else:
+                # 将输入数据复制到页锁定内存
+                np.copyto(self.host_inputs[0], batch.ravel())
             
             # 将输入数据从 CPU 传输到 GPU
             cuda.memcpy_htod_async(self.cuda_inputs[0], self.host_inputs[0], self.stream)
             
             # 设置输入形状（如果需要）
-            if hasattr(self, 'input_name'):
-                self.context.set_input_shape(self.input_name, self.input_shape)
+            if hasattr(self, 'input_name') and hasattr(self, 'input_shape'):
+                try:
+                    # 检查是否支持动态形状
+                    if hasattr(self.context, 'set_binding_shape'):
+                        # 获取输入索引
+                        input_idx = self.engine.get_binding_index(self.input_name)
+                        self.context.set_binding_shape(input_idx, batch.shape)
+                        print(f"已设置绑定形状: {batch.shape} 到索引 {input_idx}")
+                    elif hasattr(self.context, 'set_input_shape'):
+                        self.context.set_input_shape(self.input_name, batch.shape)
+                        print(f"已设置输入形状: {batch.shape}")
+                except Exception as e:
+                    print(f"设置输入形状失败: {str(e)}")
             
-            # 执行推理
-            self.context.execute_async_v2(self.bindings, self.stream.handle)
+            # 执行推理 - 尝试不同的执行方法
+            try:
+                if hasattr(self.context, 'execute_async_v2'):
+                    self.context.execute_async_v2(self.bindings, self.stream.handle)
+                elif hasattr(self.context, 'execute_async'):
+                    self.context.execute_async(batch_size=1, bindings=self.bindings, stream_handle=self.stream.handle)
+                elif hasattr(self.context, 'execute_v2'):
+                    self.context.execute_v2(self.bindings)
+                elif hasattr(self.context, 'execute'):
+                    self.context.execute(batch_size=1, bindings=self.bindings)
+                else:
+                    raise RuntimeError("找不到支持的执行方法")
+            except Exception as e:
+                print(f"执行推理失败: {str(e)}")
+                # 打印可用方法
+                print(f"上下文可用方法: {dir(self.context)}")
+                raise
             
             # 将输出数据从 GPU 传输回 CPU
             for i in range(len(self.cuda_outputs)):
