@@ -21,10 +21,15 @@ class BeltBroken(BaseAlgorithm):
             algorithm = cls(
                 name='皮带表面故障检测',
                 type=type_name,
-                description='使用Segment检测皮带表面异常，当异常面积大于100cm²时推送告警'
+                description='皮带表面故障检测'
             )
             db.session.add(algorithm)
-            db.session.commit()
+        else:
+            # 如果算法已存在，则更新它
+            app.logger.info(f"Algorithm {type_name} already exists, updating")
+            algorithm.name = '皮带表面故障检测'
+            algorithm.description = '皮带表面故障检测'
+        db.session.commit()
 
     def process(self, camera, parameters):
         """处理图像"""
