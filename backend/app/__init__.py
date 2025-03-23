@@ -7,6 +7,7 @@ from config import Config
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+from flask_sock import Sock
 
 # 创建日志目录
 os.makedirs(Config.LOG_FOLDER, exist_ok=True)
@@ -58,12 +59,15 @@ socketio = SocketIO(
     engineio_logger=True
 )
 
+# 初始化 Flask-Sock
+sock = Sock(app)
+
 def init_app():
     with app.app_context():
         app.logger.info('Initializing application...')
         
         # 导入路由和模型
-        from app.routes import api_routes, auth_routes
+        from app.routes import api_routes, auth_routes, socket_routes
         from app.models import camera, detection_model, alert, task, log
         from app.algorithms.base import BaseAlgorithm
         

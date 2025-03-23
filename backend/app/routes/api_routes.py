@@ -1,5 +1,5 @@
 from flask import jsonify, request, Response, send_from_directory, stream_with_context
-from app import app, db, socketio, sock
+from app import app, db, socketio
 from app.models import Alert, Camera, DetectionModel, Algorithm, Setting
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
@@ -15,6 +15,7 @@ from app.utils.calibration import get_calibration_image
 import subprocess
 import tempfile
 import base64
+from app import sock
 
 
 # 初始化服务
@@ -632,7 +633,7 @@ def hls_segment(camera_id, segment_id):
 def ws_stream_camera(ws, camera_id):
     """通过 WebSocket 提供 MPEG-TS 流"""
     try:
-        # 验证 token
+        # 验证 token (简化版本，实际应该使用 token_required 装饰器的逻辑)
         token = request.args.get('token')
         if not token:
             ws.close()
