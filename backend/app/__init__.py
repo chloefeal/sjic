@@ -39,6 +39,9 @@ app.logger.setLevel(Config.LOG_LEVEL)
 
 app.config.from_object(Config)
 
+# 设置最大内容长度
+app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH
+
 # 配置 CORS
 CORS(app, resources={
     r"/*": {
@@ -76,6 +79,15 @@ if not os.access(temp_dir, os.W_OK):
 # 检查磁盘空间
 total, used, free = shutil.disk_usage(temp_dir)
 app.logger.info(f"Disk space: total={total//(1024**3)}GB, used={used//(1024**3)}GB, free={free//(1024**3)}GB")
+
+# 确保上传目录存在
+model_folder = app.config.get('MODEL_FOLDER', Config.MODEL_FOLDER)
+os.makedirs(model_folder, exist_ok=True)
+app.logger.info(f"Model upload directory: {os.path.abspath(model_folder)}")
+
+# 检查目录权限
+if not os.access(model_folder, os.W_OK):
+    app.logger.warning(f"Model upload directory {model_folder} is not writable!")
 
 def init_app():
     with app.app_context():

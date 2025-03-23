@@ -44,6 +44,11 @@ function Models() {
     formData.append('file', modelFile);
     formData.append('name', modelName);
     
+    console.log('FormData entries:');
+    for (let pair of formData.entries()) {
+      console.log(pair[0] + ': ' + pair[1]);
+    }
+    
     try {
       const response = await axios.post('/api/models/upload', formData, {
         headers: {

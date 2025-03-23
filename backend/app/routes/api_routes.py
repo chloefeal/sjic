@@ -17,6 +17,7 @@ import tempfile
 import base64
 from app import sock
 import numpy as np
+import shutil
 
 
 # 初始化服务
@@ -74,18 +75,22 @@ def get_models():
     return jsonify([model.to_dict() for model in models])
 
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
+    """检查文件扩展名是否允许上传"""
+    allowed_extensions = Config.ALLOWED_EXTENSIONS
+    app.logger.info(f"Checking file extension for {filename}, allowed: {allowed_extensions}")
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 @app.route('/api/models/upload', methods=['POST'])
 @token_required
 def upload_model():
     """上传模型文件"""
+    temp_file = None
     try:
         app.logger.info("Model upload request received")
         app.logger.info(f"Request content type: {request.content_type}")
-        app.logger.info(f"Request form data: {request.form}")
-        app.logger.info(f"Request files: {request.files}")
+        app.logger.info(f"Request headers: {dict(request.headers)}")
+        app.logger.info(f"Request files: {list(request.files.keys()) if request.files else 'No files'}")
+        app.logger.info(f"Request form: {dict(request.form) if request.form else 'No form data'}")
         
         # 检查请求中是否有文件
         if 'file' not in request.files:
@@ -111,21 +116,27 @@ def upload_model():
             
         app.logger.info(f"Processing model upload: {name}, file: {file.filename}")
         
-        # 确保模型目录存在
-        os.makedirs(app.config['MODEL_FOLDER'], exist_ok=True)
-        
-        # 保存文件
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['MODEL_FOLDER'], filename)
-        
-        app.logger.info(f"Saving file to: {file_path}")
-        file.save(file_path)
-        
+        # 使用临时文件
+        with tempfile.NamedTemporaryFile(delete=False) as temp:
+            temp_file = temp.name
+            file.save(temp_file)
+            
+            # 确保模型目录存在
+            model_folder = app.config.get('MODEL_FOLDER', Config.MODEL_FOLDER)
+            os.makedirs(model_folder, exist_ok=True)
+            
+            # 保存文件
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(model_folder, filename)
+            
+            # 复制临时文件到目标位置
+            shutil.copy2(temp_file, file_path)
+            
         # 创建模型记录
         model = DetectionModel(
             name=name,
-            file_path=filename,
-            status='ready'
+            path=filename,
+            description=request.form.get('description', '')
         )
         
         db.session.add(model)
@@ -137,6 +148,10 @@ def upload_model():
     except Exception as e:
         app.logger.error(f"Error uploading model: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+    finally:
+        # 清理临时文件
+        if temp_file and os.path.exists(temp_file):
+            os.unlink(temp_file)
 
 @app.route('/api/models/<int:model_id>', methods=['DELETE'])
 @token_required 

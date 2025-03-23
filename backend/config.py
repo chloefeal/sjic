@@ -9,7 +9,7 @@ class Config:
     
     # 文件存储配置
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'models')
-    ALLOWED_EXTENSIONS = {'pt', 'pth', 'weights'}
+    ALLOWED_EXTENSIONS = {'pt', 'pth', 'weights', 'engine', 'onnx'}
     
     # 模型配置
     MODEL_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
@@ -39,7 +39,7 @@ class Config:
     BACKEND_PORT = 38881
     
     # 文件上传配置
-    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB
+    MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 200MB
     
     # CORS 配置
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')  # 默认允许所有
