@@ -175,6 +175,7 @@ function JSMpegPlayer({ cameraId }) {
   const canvasRef = useRef(null);
   const playerRef = useRef(null);
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
     let player = null;
@@ -183,34 +184,51 @@ function JSMpegPlayer({ cameraId }) {
       if (!canvasRef.current) return;
       
       try {
-        // 构建完整的 URL
-        const baseUrl = process.env.REACT_APP_API_URL || '';
-        const url = `${baseUrl}/api/stream/${cameraId}`;
-        console.log('Connecting to stream URL:', url);
-        
+        setLoading(true);
         // 获取 token
         const token = localStorage.getItem('token');
         
+        // 构建 WebSocket URL
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = process.env.REACT_APP_API_URL 
+          ? new URL(process.env.REACT_APP_API_URL).host 
+          : window.location.host;
+        
+        const wsUrl = `${protocol}//${host}/ws/stream/${cameraId}?token=${token}`;
+        console.log('Connecting to WebSocket URL:', wsUrl);
+        
         // 创建 JSMpeg 播放器
-        player = new JSMpeg.Player(url, {
+        player = new JSMpeg.Player(wsUrl, {
           canvas: canvasRef.current,
           autoplay: true,
           audio: false,
           loop: true,
-          pauseWhenHidden: false,
-          videoBufferSize: 1024*1024*2, // 2MB 缓冲区
-          onPlay: () => console.log('Stream started playing'),
+          protocols: ['binary'],  // 使用二进制 WebSocket
+          videoBufferSize: 512 * 1024,
+          onPlay: () => {
+            console.log('Stream started playing');
+            setLoading(false);
+          },
           onError: (err) => {
             console.error('JSMpeg error:', err);
             setError(`播放错误: ${err}`);
+            setLoading(false);
           }
         });
         
         playerRef.current = player;
         console.log('JSMpeg player initialized');
+        
+        // 添加超时检查
+        setTimeout(() => {
+          if (loading && !error) {
+            setError('视频流加载超时，请刷新重试');
+          }
+        }, 10000);
       } catch (err) {
         console.error('Error initializing JSMpeg player:', err);
         setError(`初始化错误: ${err.message}`);
+        setLoading(false);
       }
     };
     
@@ -222,21 +240,11 @@ function JSMpegPlayer({ cameraId }) {
       console.log('Cleaning up JSMpeg player');
       if (playerRef.current) {
         try {
-          // 安全地销毁播放器
           const p = playerRef.current;
-          
-          // 检查 request 是否存在
-          if (p.source && p.source.request) {
-            p.source.request.abort(); // 中止请求
-          }
-          
-          // 销毁播放器
-          if (typeof p.destroy === 'function') {
+          if (p && typeof p.destroy === 'function') {
             p.destroy();
           }
-          
           playerRef.current = null;
-          console.log('JSMpeg player destroyed');
         } catch (err) {
           console.error('Error destroying JSMpeg player:', err);
         }
@@ -259,12 +267,20 @@ function JSMpegPlayer({ cameraId }) {
           </Button>
         </Alert>
       )}
+      {loading && !error && (
+        <div style={{ marginBottom: '10px' }}>
+          <Typography variant="body2" color="textSecondary">
+            正在加载视频流...
+          </Typography>
+        </div>
+      )}
       <canvas 
         ref={canvasRef} 
+        width="640"
+        height="360"
         style={{ 
           width: '100%', 
           maxWidth: '800px', 
-          height: 'auto', 
           backgroundColor: '#000' 
         }}
       />

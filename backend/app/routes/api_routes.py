@@ -1,5 +1,5 @@
 from flask import jsonify, request, Response, send_from_directory, stream_with_context
-from app import app, db, socketio
+from app import app, db, socketio, sock
 from app.models import Alert, Camera, DetectionModel, Algorithm, Setting
 from app.services.detector import DetectorService
 from app.services.model_trainer import ModelTrainer
@@ -13,6 +13,8 @@ import cv2
 import time
 from app.utils.calibration import get_calibration_image
 import subprocess
+import tempfile
+import base64
 
 
 # 初始化服务
@@ -516,33 +518,38 @@ def stream_camera(camera_id):
         }
         
         def generate():
-            # 优化 FFmpeg 参数以减少延迟
+            # 使用更简单、更兼容的 FFmpeg 参数
             cmd = [
                 'ffmpeg',
                 '-i', rtsp_url,
                 '-f', 'mpegts',
                 '-codec:v', 'mpeg1video',
-                '-s', '800x450',  # 16:9 比例，适合大多数摄像头
-                '-b:v', '1000k',  # 比特率
-                '-maxrate', '1000k',
-                '-bufsize', '1000k',
-                '-r', '24',       # 帧率
-                '-bf', '0',       # 禁用 B 帧以减少延迟
-                '-q:v', '3',      # 质量
-                '-tune', 'zerolatency',  # 优化低延迟
-                '-preset', 'ultrafast',  # 最快的编码速度
-                '-an',            # 禁用音频
+                '-s', '640x360',    # 降低分辨率
+                '-b:v', '800k',     # 降低比特率
+                '-r', '30',         # 提高帧率
+                '-bf', '0',
+                '-an',              # 禁用音频
                 '-f', 'mpegts',
                 '-'
             ]
             
             app.logger.info(f"Starting FFmpeg process for camera {camera_id}")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            # 记录 FFmpeg 错误输出（用于调试）
+            def log_stderr():
+                while True:
+                    line = process.stderr.readline()
+                    if not line:
+                        break
+                    app.logger.debug(f"FFmpeg: {line.decode().strip()}")
+            
+            import threading
+            stderr_thread = threading.Thread(target=log_stderr)
+            stderr_thread.daemon = True
+            stderr_thread.start()
             
             try:
-                # 发送初始数据块
-                yield b'\x00' * 8192  # 发送一些初始数据以启动流
-                
                 # 持续发送视频数据
                 while True:
                     data = process.stdout.read(4096)
@@ -620,6 +627,52 @@ def hls_segment(camera_id, segment_id):
         return jsonify({'error': 'Segment not found'}), 404
     
     return send_from_directory(hls_dir, f'segment_{segment_id}.ts', mimetype='video/mp2t')
+
+@sock.route('/ws/stream/<int:camera_id>')
+def ws_stream_camera(ws, camera_id):
+    """通过 WebSocket 提供 MPEG-TS 流"""
+    try:
+        # 验证 token
+        token = request.args.get('token')
+        if not token:
+            ws.close()
+            return
+        
+        # 获取摄像头
+        camera = Camera.query.get_or_404(camera_id)
+        rtsp_url = camera.url
+        
+        cmd = [
+            'ffmpeg',
+            '-i', rtsp_url,
+            '-f', 'mpegts',
+            '-codec:v', 'mpeg1video',
+            '-s', '640x360',
+            '-b:v', '800k',
+            '-r', '30',
+            '-bf', '0',
+            '-an',
+            '-f', 'mpegts',
+            '-'
+        ]
+        
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        app.logger.info(f"Started FFmpeg process for WebSocket stream of camera {camera_id}")
+        
+        try:
+            while True:
+                data = process.stdout.read(4096)
+                if not data:
+                    break
+                ws.send(data, binary=True)
+        except Exception as e:
+            app.logger.error(f"Error in WebSocket stream: {str(e)}")
+        finally:
+            process.kill()
+            app.logger.info(f"Terminated FFmpeg process for WebSocket stream")
+    except Exception as e:
+        app.logger.error(f"Error setting up WebSocket stream: {str(e)}")
+
 
 
 
