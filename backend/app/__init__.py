@@ -8,6 +8,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 from flask_sock import Sock
+import tempfile
+import shutil
 
 # 创建日志目录
 os.makedirs(Config.LOG_FOLDER, exist_ok=True)
@@ -39,7 +41,14 @@ app.config.from_object(Config)
 
 # 配置 CORS
 CORS(app, resources={
-    r"/*": {"origins": "*"},
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 86400
+    },
     r"/ws/*": {"origins": "*"}
 })
 
@@ -55,6 +64,18 @@ socketio = SocketIO(
 
 # 初始化 Flask-Sock
 sock = Sock(app)
+
+# 检查临时目录
+temp_dir = tempfile.gettempdir()
+app.logger.info(f"Using temporary directory: {temp_dir}")
+
+# 确保临时目录可写
+if not os.access(temp_dir, os.W_OK):
+    app.logger.warning(f"Temporary directory {temp_dir} is not writable!")
+    
+# 检查磁盘空间
+total, used, free = shutil.disk_usage(temp_dir)
+app.logger.info(f"Disk space: total={total//(1024**3)}GB, used={used//(1024**3)}GB, free={free//(1024**3)}GB")
 
 def init_app():
     with app.app_context():

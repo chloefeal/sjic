@@ -80,40 +80,62 @@ def allowed_file(filename):
 @app.route('/api/models/upload', methods=['POST'])
 @token_required
 def upload_model():
-    """上传新模型"""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-        
-    file = request.files['file']
-    if not file or not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type'}), 400
-    
+    """上传模型文件"""
     try:
-        # 确保模型目录存在
-        Path(Config.UPLOAD_FOLDER).mkdir(parents=True, exist_ok=True)
+        app.logger.info("Model upload request received")
+        app.logger.info(f"Request content type: {request.content_type}")
+        app.logger.info(f"Request form data: {request.form}")
+        app.logger.info(f"Request files: {request.files}")
         
-        # 安全的文件名
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
+        # 检查请求中是否有文件
+        if 'file' not in request.files:
+            app.logger.error("No file part in the request")
+            return jsonify({'error': '没有文件'}), 400
+            
+        file = request.files['file']
+        
+        # 检查文件名是否为空
+        if file.filename == '':
+            app.logger.error("No selected file")
+            return jsonify({'error': '未选择文件'}), 400
+            
+        # 检查文件类型
+        if not allowed_file(file.filename):
+            app.logger.error(f"File type not allowed: {file.filename}")
+            return jsonify({'error': '不支持的文件类型'}), 400
+            
+        # 获取模型名称
+        name = request.form.get('name', '')
+        if not name:
+            name = os.path.splitext(file.filename)[0]
+            
+        app.logger.info(f"Processing model upload: {name}, file: {file.filename}")
+        
+        # 确保模型目录存在
+        os.makedirs(app.config['MODEL_FOLDER'], exist_ok=True)
         
         # 保存文件
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['MODEL_FOLDER'], filename)
+        
+        app.logger.info(f"Saving file to: {file_path}")
         file.save(file_path)
         
         # 创建模型记录
         model = DetectionModel(
-            name=request.form.get('name', filename),
-            path=filename,
-            description=request.form.get('description', '')
+            name=name,
+            file_path=filename,
+            status='ready'
         )
+        
         db.session.add(model)
         db.session.commit()
         
-        return jsonify(model.to_dict()), 201
+        app.logger.info(f"Model uploaded successfully: {model.id}")
+        return jsonify({'message': '模型上传成功', 'model': model.to_dict()}), 201
         
     except Exception as e:
-        # 如果出错，清理已上传的文件
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        app.logger.error(f"Error uploading model: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/models/<int:model_id>', methods=['DELETE'])

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
-  Paper, IconButton, Box, LinearProgress, Typography
+  Paper, IconButton, Box, LinearProgress, Typography, Alert
 } from '@mui/material';
 import { Delete, Upload } from '@mui/icons-material';
 import axios from '../utils/axios';
@@ -13,6 +13,8 @@ function Models() {
   const [modelFile, setModelFile] = useState(null);
   const [modelName, setModelName] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchModels();
@@ -30,32 +32,43 @@ function Models() {
 
   const handleUpload = async () => {
     if (!modelFile) {
-      console.error('No file selected');
+      setError('请选择文件');
       return;
     }
-
+    
+    setUploading(true);
+    setUploadProgress(0);
+    setError(null);
+    
     const formData = new FormData();
     formData.append('file', modelFile);
     formData.append('name', modelName);
-
+    
     try {
-      await axios.post('/api/models/upload', formData, {
+      const response = await axios.post('/api/models/upload', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round(
             (progressEvent.loaded * 100) / progressEvent.total
           );
           setUploadProgress(percentCompleted);
-        }
+          console.log(`Upload progress: ${percentCompleted}%`);
+        },
+        timeout: 300000,
       });
+      
+      console.log('Upload response:', response);
+      setUploading(false);
       setOpenUpload(false);
       setModelFile(null);
       setModelName('');
       fetchModels();
     } catch (error) {
       console.error('Error uploading model:', error);
+      setError(error.response?.data?.error || '上传失败，请重试');
+      setUploading(false);
     }
   };
 
@@ -118,16 +131,7 @@ function Models() {
       <Dialog open={openUpload} onClose={() => setOpenUpload(false)}>
         <DialogTitle>上传模型</DialogTitle>
         <DialogContent>
-          {uploadProgress > 0 && (
-            <Box sx={{ width: '100%', mt: 2 }}>
-              <LinearProgress variant="determinate" value={uploadProgress} />
-              <Typography variant="caption" align="center" display="block">
-                {uploadProgress}%
-              </Typography>
-            </Box>
-          )}
           <TextField
-            autoFocus
             margin="dense"
             label="模型名称"
             fullWidth
@@ -136,15 +140,35 @@ function Models() {
           />
           <input
             type="file"
-            accept=".pt,.pth"
+            accept=".pt,.pth,.weights,.engine,.onnx"
             onChange={(e) => setModelFile(e.target.files[0])}
-            style={{ marginTop: '16px' }}
+            style={{ marginTop: '20px' }}
           />
+          {uploading && (
+            <div style={{ marginTop: '20px' }}>
+              <Typography variant="body2" color="textSecondary">
+                上传进度: {uploadProgress}%
+              </Typography>
+              <LinearProgress 
+                variant="determinate" 
+                value={uploadProgress} 
+                sx={{ mt: 1 }}
+              />
+            </div>
+          )}
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenUpload(false)}>取消</Button>
-          <Button onClick={handleUpload} color="primary">
-            上传
+          <Button 
+            onClick={handleUpload} 
+            disabled={!modelFile || uploading}
+          >
+            {uploading ? '上传中...' : '上传'}
           </Button>
         </DialogActions>
       </Dialog>
