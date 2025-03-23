@@ -162,11 +162,66 @@ function VideoStreams() {
         </DialogTitle>
         <DialogContent>
           {previewingCamera && (
-            <JSMpegPlayer cameraId={previewingCamera.id} />
+            <VideoPreview cameraId={previewingCamera.id} />
           )}
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function VideoPreview({ cameraId }) {
+  const [streamMethod, setStreamMethod] = useState('websocket'); // 'websocket', 'http', 'hls'
+  
+  // 根据不同的流方法渲染不同的组件
+  const renderPlayer = () => {
+    switch (streamMethod) {
+      case 'websocket':
+        return <JSMpegPlayer 
+          cameraId={cameraId} 
+          onError={() => setStreamMethod('http')} 
+        />;
+      case 'http':
+        return <HttpStreamPlayer 
+          cameraId={cameraId} 
+          onError={() => setStreamMethod('hls')} 
+        />;
+      case 'hls':
+        return <HLSPlayer cameraId={cameraId} />;
+      default:
+        return <div>无法加载视频流</div>;
+    }
+  };
+  
+  return (
+    <div>
+      {renderPlayer()}
+      <div style={{ marginTop: '10px' }}>
+        <Button 
+          size="small" 
+          onClick={() => setStreamMethod('websocket')}
+          variant={streamMethod === 'websocket' ? 'contained' : 'outlined'}
+          sx={{ mr: 1 }}
+        >
+          WebSocket
+        </Button>
+        <Button 
+          size="small" 
+          onClick={() => setStreamMethod('http')}
+          variant={streamMethod === 'http' ? 'contained' : 'outlined'}
+          sx={{ mr: 1 }}
+        >
+          HTTP
+        </Button>
+        <Button 
+          size="small" 
+          onClick={() => setStreamMethod('hls')}
+          variant={streamMethod === 'hls' ? 'contained' : 'outlined'}
+        >
+          HLS
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -176,6 +231,7 @@ function JSMpegPlayer({ cameraId }) {
   const playerRef = useRef(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [useHttpFallback, setUseHttpFallback] = useState(false);
   
   useEffect(() => {
     let player = null;
@@ -185,25 +241,29 @@ function JSMpegPlayer({ cameraId }) {
       
       try {
         setLoading(true);
+        
         // 获取 token
         const token = localStorage.getItem('token');
         
-        // 构建 WebSocket URL
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = process.env.REACT_APP_API_URL 
-          ? new URL(process.env.REACT_APP_API_URL).host 
-          : window.location.host;
-        
-        const wsUrl = `${protocol}//${host}/ws/stream/${cameraId}?token=${token}`;
-        console.log('Connecting to WebSocket URL:', wsUrl);
+        let url;
+        if (useHttpFallback) {
+          // 使用 HTTP 流作为备选方案
+          const baseUrl = process.env.REACT_APP_API_URL || '';
+          url = `${baseUrl}/api/stream/${cameraId}`;
+          console.log('Using HTTP fallback URL:', url);
+        } else {
+          // 使用 WebSocket
+          const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          url = `${wsProtocol}//${window.location.host}/ws/stream/${cameraId}?token=${token}`;
+          console.log('Connecting to WebSocket URL:', url);
+        }
         
         // 创建 JSMpeg 播放器
-        player = new JSMpeg.Player(wsUrl, {
+        const options = {
           canvas: canvasRef.current,
           autoplay: true,
           audio: false,
           loop: true,
-          protocols: ['binary'],  // 使用二进制 WebSocket
           videoBufferSize: 512 * 1024,
           onPlay: () => {
             console.log('Stream started playing');
@@ -211,20 +271,34 @@ function JSMpegPlayer({ cameraId }) {
           },
           onError: (err) => {
             console.error('JSMpeg error:', err);
-            setError(`播放错误: ${err}`);
-            setLoading(false);
+            
+            // 如果 WebSocket 失败，尝试 HTTP 流
+            if (!useHttpFallback) {
+              console.log('Switching to HTTP fallback');
+              setUseHttpFallback(true);
+            } else {
+              setError(`播放错误: ${err}`);
+              setLoading(false);
+            }
           }
-        });
+        };
         
+        // 如果使用 WebSocket，添加协议选项
+        if (!useHttpFallback) {
+          options.protocols = ['binary'];
+        }
+        
+        player = new JSMpeg.Player(url, options);
         playerRef.current = player;
         console.log('JSMpeg player initialized');
         
         // 添加超时检查
         setTimeout(() => {
-          if (loading && !error) {
-            setError('视频流加载超时，请刷新重试');
+          if (loading && !error && !useHttpFallback) {
+            console.log('WebSocket connection timeout, switching to HTTP fallback');
+            setUseHttpFallback(true);
           }
-        }, 10000);
+        }, 5000);
       } catch (err) {
         console.error('Error initializing JSMpeg player:', err);
         setError(`初始化错误: ${err.message}`);
@@ -250,7 +324,7 @@ function JSMpegPlayer({ cameraId }) {
         }
       }
     };
-  }, [cameraId]);
+  }, [cameraId, useHttpFallback]);
   
   return (
     <div className="video-container" style={{ textAlign: 'center' }}>

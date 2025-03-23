@@ -636,12 +636,19 @@ def ws_stream_camera(ws, camera_id):
         # 验证 token (简化版本，实际应该使用 token_required 装饰器的逻辑)
         token = request.args.get('token')
         if not token:
+            app.logger.error("No token provided for WebSocket connection")
             ws.close()
             return
+        
+        # 记录连接信息
+        app.logger.info(f"WebSocket connection established for camera {camera_id}")
         
         # 获取摄像头
         camera = Camera.query.get_or_404(camera_id)
         rtsp_url = camera.url
+        
+        # 记录 RTSP URL
+        app.logger.info(f"Streaming RTSP URL: {rtsp_url}")
         
         cmd = [
             'ffmpeg',
@@ -657,13 +664,32 @@ def ws_stream_camera(ws, camera_id):
             '-'
         ]
         
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        app.logger.info(f"Started FFmpeg process for WebSocket stream of camera {camera_id}")
+        # 启动 FFmpeg 进程
+        app.logger.info(f"Starting FFmpeg process for WebSocket stream of camera {camera_id}")
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # 记录 FFmpeg 错误输出（用于调试）
+        def log_stderr():
+            while True:
+                line = process.stderr.readline()
+                if not line:
+                    break
+                app.logger.debug(f"FFmpeg: {line.decode().strip()}")
+        
+        import threading
+        stderr_thread = threading.Thread(target=log_stderr)
+        stderr_thread.daemon = True
+        stderr_thread.start()
         
         try:
+            # 发送初始数据
+            ws.send(b'\x00' * 8192, binary=True)
+            
+            # 持续发送视频数据
             while True:
                 data = process.stdout.read(4096)
                 if not data:
+                    app.logger.warning(f"No data received from FFmpeg for camera {camera_id}")
                     break
                 ws.send(data, binary=True)
         except Exception as e:

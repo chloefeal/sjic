@@ -1,4 +1,4 @@
-from app import app, db
+from app import app, db, socketio, sock
 from config import Config
 
 def init_db():
@@ -7,4 +7,4 @@ def init_db():
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=Config.BACKEND_PORT, debug=True) 
+    socketio.run(app, host='0.0.0.0', port=38881, debug=True, allow_unsafe_werkzeug=True) 

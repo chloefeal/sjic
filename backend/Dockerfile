@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3.10-dev \
     libgl1-mesa-glx \
-    libglib2.0-0 \
+    libglib2.0-0 ffmpeg\
     && rm -rf /var/lib/apt/lists/*
 
 # 创建软链接
