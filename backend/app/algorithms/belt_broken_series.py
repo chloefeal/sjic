@@ -18,14 +18,13 @@ class BeltBrokenSeries(BaseAlgorithm):
         print(type_name)
         algorithm = Algorithm.query.filter_by(type=type_name).first()
         print(algorithm)
-        if not algorithm:
-            algorithm = cls(
-                name='皮带表面故障检测-高精度检测算法',
-                type=type_name,
-                description='皮带表面故障检测-高精度检测算法'
-            )
-            db.session.add(algorithm)
-            db.session.commit()
+        algorithm = cls(
+            name='皮带表面故障检测-高精度检测算法',
+            type=type_name,
+            description='皮带表面故障检测-高精度检测算法'
+        )
+        db.session.add(algorithm)
+        db.session.commit()
 
     def process(self, camera, parameters):
         """处理图像"""
