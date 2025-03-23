@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 创建 axios 实例
 const instance = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || '',
+  baseURL: getBaseUrl(),
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -41,7 +41,16 @@ instance.interceptors.response.use(
 
 // 导出 getBaseUrl 函数，用于获取基础 URL
 export const getBaseUrl = () => {
-  return process.env.REACT_APP_API_URL || '';
+  // 获取当前访问的域名和协议
+  const { protocol, hostname } = window.location;
+  if (process.env.NODE_ENV === 'dev') {
+    // 开发环境：使用环境变量中的地址
+    return process.env.REACT_APP_API_URL;
+  } else {
+    // 生产环境：使用相同域名，只改变端口
+    return `${protocol}//${hostname}:38881`;
+  }
+
 };
 
 // 导出 getWebSocketUrl 函数，用于获取 WebSocket URL
