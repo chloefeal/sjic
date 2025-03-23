@@ -20,9 +20,9 @@ class BeltBrokenSeries(BaseAlgorithm):
         print(algorithm)
         if not algorithm:
             algorithm = cls(
-                name='皮带表面故障检测-级联检测版本',
+                name='皮带表面故障检测-高精度检测算法',
                 type=type_name,
-                description='先使用YOLO检测皮带表面异常，当置信度低于0.5时使用Faster R-CNN进行二次检测，提高准确率'
+                description='皮带表面故障检测-高精度检测算法'
             )
             db.session.add(algorithm)
             db.session.commit()
