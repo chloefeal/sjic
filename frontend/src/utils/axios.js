@@ -1,5 +1,18 @@
 import axios from 'axios';
 
+// 导出 getBaseUrl 函数，用于获取基础 URL
+export const getBaseUrl = () => {
+  // 获取当前访问的域名和协议
+  const { protocol, hostname } = window.location;
+  if (process.env.NODE_ENV === 'dev') {
+    // 开发环境：使用环境变量中的地址
+    return process.env.REACT_APP_API_URL;
+  } else {
+    // 生产环境：使用相同域名，只改变端口
+    return `${protocol}//${hostname}:38881`;
+  }
+};
+
 // 创建 axios 实例
 const instance = axios.create({
   baseURL: getBaseUrl(),
@@ -38,20 +51,6 @@ instance.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// 导出 getBaseUrl 函数，用于获取基础 URL
-export const getBaseUrl = () => {
-  // 获取当前访问的域名和协议
-  const { protocol, hostname } = window.location;
-  if (process.env.NODE_ENV === 'dev') {
-    // 开发环境：使用环境变量中的地址
-    return process.env.REACT_APP_API_URL;
-  } else {
-    // 生产环境：使用相同域名，只改变端口
-    return `${protocol}//${hostname}:38881`;
-  }
-
-};
 
 // 导出 getWebSocketUrl 函数，用于获取 WebSocket URL
 export const getWebSocketUrl = (path) => {
