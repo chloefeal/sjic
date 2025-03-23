@@ -7,7 +7,7 @@ import {
 import { Add, Visibility, Delete, Close } from '@mui/icons-material';
 import axios from '../utils/axios';
 import VideoPlayer from '../components/VideoPlayer';
-import JSMpeg from 'jsmpeg';
+import JSMpeg from '@cycjimmy/jsmpeg-player';
 
 function VideoStreams() {
   const [streams, setStreams] = useState([]);
