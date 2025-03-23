@@ -5,7 +5,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Paper, IconButton 
 } from '@mui/material';
 import { Add, Visibility, Delete, Close } from '@mui/icons-material';
-import axios from '../utils/axios';
+import axios, { getBaseUrl, getWebSocketUrl } from '../utils/axios';
 import VideoPlayer from '../components/VideoPlayer';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
 
@@ -225,8 +225,7 @@ function VideoPreview({ cameraId }) {
   );
 }
 
-// 使用 JSMpeg 播放视频流
-function JSMpegPlayer({ cameraId }) {
+function JSMpegPlayer({ cameraId, onError }) {
   const canvasRef = useRef(null);
   const playerRef = useRef(null);
   const [error, setError] = useState(null);
@@ -242,19 +241,16 @@ function JSMpegPlayer({ cameraId }) {
       try {
         setLoading(true);
         
-        // 获取 token
-        const token = localStorage.getItem('token');
-        
         let url;
         if (useHttpFallback) {
           // 使用 HTTP 流作为备选方案
-          const baseUrl = process.env.REACT_APP_API_URL || '';
+          const baseUrl = getBaseUrl();
           url = `${baseUrl}/api/stream/${cameraId}`;
           console.log('Using HTTP fallback URL:', url);
         } else {
           // 使用 WebSocket
-          const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          url = `${wsProtocol}//${window.location.host}/ws/stream/${cameraId}?token=${token}`;
+          const token = localStorage.getItem('token');
+          url = getWebSocketUrl(`/ws/stream/${cameraId}?token=${token}`);
           console.log('Connecting to WebSocket URL:', url);
         }
         
@@ -279,6 +275,7 @@ function JSMpegPlayer({ cameraId }) {
             } else {
               setError(`播放错误: ${err}`);
               setLoading(false);
+              if (onError) onError(err);
             }
           }
         };
@@ -303,6 +300,7 @@ function JSMpegPlayer({ cameraId }) {
         console.error('Error initializing JSMpeg player:', err);
         setError(`初始化错误: ${err.message}`);
         setLoading(false);
+        if (onError) onError(err);
       }
     };
     
@@ -324,7 +322,7 @@ function JSMpegPlayer({ cameraId }) {
         }
       }
     };
-  }, [cameraId, useHttpFallback]);
+  }, [cameraId, useHttpFallback, onError]);
   
   return (
     <div className="video-container" style={{ textAlign: 'center' }}>
@@ -362,13 +360,129 @@ function JSMpegPlayer({ cameraId }) {
   );
 }
 
+function HttpStreamPlayer({ cameraId, onError }) {
+  const canvasRef = useRef(null);
+  const playerRef = useRef(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    let player = null;
+    
+    const initPlayer = () => {
+      if (!canvasRef.current) return;
+      
+      try {
+        setLoading(true);
+        // 使用 getBaseUrl 获取基础 URL
+        const baseUrl = getBaseUrl();
+        const url = `${baseUrl}/api/stream/${cameraId}`;
+        console.log('Connecting to HTTP stream URL:', url);
+        
+        // 创建 JSMpeg 播放器
+        player = new JSMpeg.Player(url, {
+          canvas: canvasRef.current,
+          autoplay: true,
+          audio: false,
+          loop: true,
+          pauseWhenHidden: false,
+          videoBufferSize: 512 * 1024,
+          onPlay: () => {
+            console.log('HTTP Stream started playing');
+            setLoading(false);
+          },
+          onError: (err) => {
+            console.error('JSMpeg HTTP error:', err);
+            setError(`播放错误: ${err}`);
+            setLoading(false);
+            if (onError) onError(err);
+          }
+        });
+        
+        playerRef.current = player;
+        console.log('HTTP JSMpeg player initialized');
+        
+        // 添加超时检查
+        setTimeout(() => {
+          if (loading && !error) {
+            console.log('HTTP stream timeout');
+            setError('HTTP 视频流加载超时');
+            if (onError) onError('timeout');
+          }
+        }, 10000);
+      } catch (err) {
+        console.error('Error initializing HTTP JSMpeg player:', err);
+        setError(`初始化错误: ${err.message}`);
+        setLoading(false);
+        if (onError) onError(err);
+      }
+    };
+    
+    // 初始化播放器
+    initPlayer();
+    
+    // 清理函数
+    return () => {
+      console.log('Cleaning up HTTP JSMpeg player');
+      if (playerRef.current) {
+        try {
+          const p = playerRef.current;
+          if (p && typeof p.destroy === 'function') {
+            p.destroy();
+          }
+          playerRef.current = null;
+        } catch (err) {
+          console.error('Error destroying HTTP JSMpeg player:', err);
+        }
+      }
+    };
+  }, [cameraId, onError]);
+  
+  return (
+    <div className="video-container" style={{ textAlign: 'center' }}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+          <Button 
+            color="inherit" 
+            size="small" 
+            onClick={() => window.location.reload()}
+            sx={{ ml: 2 }}
+          >
+            重试
+          </Button>
+        </Alert>
+      )}
+      {loading && !error && (
+        <div style={{ marginBottom: '10px' }}>
+          <Typography variant="body2" color="textSecondary">
+            正在加载 HTTP 视频流...
+          </Typography>
+        </div>
+      )}
+      <canvas 
+        ref={canvasRef} 
+        width="640"
+        height="360"
+        style={{ 
+          width: '100%', 
+          maxWidth: '800px', 
+          backgroundColor: '#000' 
+        }}
+      />
+    </div>
+  );
+}
+
 function HLSPlayer({ cameraId }) {
   const videoRef = useRef(null);
   
   useEffect(() => {
     if (videoRef.current) {
-      const baseUrl = process.env.REACT_APP_API_URL || '';
+      // 使用 getBaseUrl 获取基础 URL
+      const baseUrl = getBaseUrl();
       const hlsUrl = `${baseUrl}/api/hls/${cameraId}/playlist.m3u8`;
+      console.log('Loading HLS stream from:', hlsUrl);
       
       if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
         // 原生 HLS 支持 (Safari)
@@ -378,6 +492,8 @@ function HLSPlayer({ cameraId }) {
         const hls = new window.Hls();
         hls.loadSource(hlsUrl);
         hls.attachMedia(videoRef.current);
+      } else {
+        console.error('浏览器不支持 HLS');
       }
     }
   }, [cameraId]);
