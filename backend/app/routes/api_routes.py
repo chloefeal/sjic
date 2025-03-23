@@ -504,6 +504,17 @@ def stream_camera(camera_id):
         camera = Camera.query.get_or_404(camera_id)
         rtsp_url = camera.url
         
+        # 添加 CORS 头
+        headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'Content-Type': 'video/mp2t'
+        }
+        
         def generate():
             # 优化 FFmpeg 参数以减少延迟
             cmd = [
@@ -512,26 +523,31 @@ def stream_camera(camera_id):
                 '-f', 'mpegts',
                 '-codec:v', 'mpeg1video',
                 '-s', '800x450',  # 16:9 比例，适合大多数摄像头
-                '-b:v', '1000k',  # 提高比特率以提高质量
+                '-b:v', '1000k',  # 比特率
                 '-maxrate', '1000k',
                 '-bufsize', '1000k',
-                '-r', '24',       # 降低帧率以减少带宽
+                '-r', '24',       # 帧率
                 '-bf', '0',       # 禁用 B 帧以减少延迟
-                '-q:v', '3',      # 提高质量
+                '-q:v', '3',      # 质量
                 '-tune', 'zerolatency',  # 优化低延迟
                 '-preset', 'ultrafast',  # 最快的编码速度
-                '-an',            # 禁用音频以减少带宽
+                '-an',            # 禁用音频
                 '-f', 'mpegts',
                 '-'
             ]
             
+            app.logger.info(f"Starting FFmpeg process for camera {camera_id}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            app.logger.info(f"Started FFmpeg process for camera {camera_id}")
             
             try:
+                # 发送初始数据块
+                yield b'\x00' * 8192  # 发送一些初始数据以启动流
+                
+                # 持续发送视频数据
                 while True:
-                    data = process.stdout.read(4096)  # 增加缓冲区大小
+                    data = process.stdout.read(4096)
                     if not data:
+                        app.logger.warning(f"No data received from FFmpeg for camera {camera_id}")
                         break
                     yield data
             except Exception as e:
@@ -542,11 +558,68 @@ def stream_camera(camera_id):
         
         return Response(
             stream_with_context(generate()),
-            mimetype='video/mp2t'
+            headers=headers
         )
     except Exception as e:
         app.logger.error(f"Error setting up stream for camera {camera_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/hls/<int:camera_id>/playlist.m3u8', methods=['GET'])
+@token_required
+def hls_playlist(camera_id):
+    """生成 HLS 播放列表"""
+    camera = Camera.query.get_or_404(camera_id)
+    
+    # 创建 HLS 目录
+    hls_dir = os.path.join(app.config['TEMP_FOLDER'], f'hls_{camera_id}')
+    os.makedirs(hls_dir, exist_ok=True)
+    
+    # 生成播放列表文件
+    playlist_path = os.path.join(hls_dir, 'playlist.m3u8')
+    segment_path = os.path.join(hls_dir, 'segment_%03d.ts')
+    
+    # 使用 FFmpeg 生成 HLS 流
+    cmd = [
+        'ffmpeg',
+        '-i', camera.url,
+        '-c:v', 'h264',
+        '-crf', '21',
+        '-preset', 'veryfast',
+        '-g', '48',
+        '-sc_threshold', '0',
+        '-hls_time', '2',
+        '-hls_list_size', '6',
+        '-hls_flags', 'delete_segments',
+        '-hls_segment_filename', segment_path,
+        playlist_path
+    ]
+    
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    # 等待播放列表文件生成
+    start_time = time.time()
+    while not os.path.exists(playlist_path) and time.time() - start_time < 10:
+        time.sleep(0.5)
+    
+    if not os.path.exists(playlist_path):
+        return jsonify({'error': 'Failed to generate HLS playlist'}), 500
+    
+    with open(playlist_path, 'r') as f:
+        playlist_content = f.read()
+    
+    return Response(playlist_content, mimetype='application/vnd.apple.mpegurl')
+
+@app.route('/api/hls/<int:camera_id>/segment_<segment_id>.ts', methods=['GET'])
+@token_required
+def hls_segment(camera_id, segment_id):
+    """提供 HLS 分段"""
+    hls_dir = os.path.join(app.config['TEMP_FOLDER'], f'hls_{camera_id}')
+    segment_path = os.path.join(hls_dir, f'segment_{segment_id}.ts')
+    
+    if not os.path.exists(segment_path):
+        return jsonify({'error': 'Segment not found'}), 404
+    
+    return send_from_directory(hls_dir, f'segment_{segment_id}.ts', mimetype='video/mp2t')
 
 
 

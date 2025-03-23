@@ -174,37 +174,133 @@ function VideoStreams() {
 function JSMpegPlayer({ cameraId }) {
   const canvasRef = useRef(null);
   const playerRef = useRef(null);
+  const [error, setError] = useState(null);
   
   useEffect(() => {
-    if (canvasRef.current && !playerRef.current) {
-      const url = `${process.env.REACT_APP_API_URL || ''}/api/stream/${cameraId}`;
-      
-      // 创建 JSMpeg 播放器
-      playerRef.current = new JSMpeg.Player(url, {
-        canvas: canvasRef.current,
-        autoplay: true,
-        audio: false,
-        loop: true
-      });
-    }
+    let player = null;
     
-    // 组件卸载时清理
+    const initPlayer = () => {
+      if (!canvasRef.current) return;
+      
+      try {
+        // 构建完整的 URL
+        const baseUrl = process.env.REACT_APP_API_URL || '';
+        const url = `${baseUrl}/api/stream/${cameraId}`;
+        console.log('Connecting to stream URL:', url);
+        
+        // 获取 token
+        const token = localStorage.getItem('token');
+        
+        // 创建 JSMpeg 播放器
+        player = new JSMpeg.Player(url, {
+          canvas: canvasRef.current,
+          autoplay: true,
+          audio: false,
+          loop: true,
+          pauseWhenHidden: false,
+          videoBufferSize: 1024*1024*2, // 2MB 缓冲区
+          onPlay: () => console.log('Stream started playing'),
+          onError: (err) => {
+            console.error('JSMpeg error:', err);
+            setError(`播放错误: ${err}`);
+          }
+        });
+        
+        playerRef.current = player;
+        console.log('JSMpeg player initialized');
+      } catch (err) {
+        console.error('Error initializing JSMpeg player:', err);
+        setError(`初始化错误: ${err.message}`);
+      }
+    };
+    
+    // 初始化播放器
+    initPlayer();
+    
+    // 清理函数
     return () => {
+      console.log('Cleaning up JSMpeg player');
       if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
+        try {
+          // 安全地销毁播放器
+          const p = playerRef.current;
+          
+          // 检查 request 是否存在
+          if (p.source && p.source.request) {
+            p.source.request.abort(); // 中止请求
+          }
+          
+          // 销毁播放器
+          if (typeof p.destroy === 'function') {
+            p.destroy();
+          }
+          
+          playerRef.current = null;
+          console.log('JSMpeg player destroyed');
+        } catch (err) {
+          console.error('Error destroying JSMpeg player:', err);
+        }
       }
     };
   }, [cameraId]);
   
   return (
     <div className="video-container" style={{ textAlign: 'center' }}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+          <Button 
+            color="inherit" 
+            size="small" 
+            onClick={() => window.location.reload()}
+            sx={{ ml: 2 }}
+          >
+            重试
+          </Button>
+        </Alert>
+      )}
       <canvas 
         ref={canvasRef} 
         style={{ 
           width: '100%', 
           maxWidth: '800px', 
           height: 'auto', 
+          backgroundColor: '#000' 
+        }}
+      />
+    </div>
+  );
+}
+
+function HLSPlayer({ cameraId }) {
+  const videoRef = useRef(null);
+  
+  useEffect(() => {
+    if (videoRef.current) {
+      const baseUrl = process.env.REACT_APP_API_URL || '';
+      const hlsUrl = `${baseUrl}/api/hls/${cameraId}/playlist.m3u8`;
+      
+      if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+        // 原生 HLS 支持 (Safari)
+        videoRef.current.src = hlsUrl;
+      } else if (window.Hls) {
+        // 使用 hls.js (Chrome, Firefox 等)
+        const hls = new window.Hls();
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(videoRef.current);
+      }
+    }
+  }, [cameraId]);
+  
+  return (
+    <div className="video-container" style={{ textAlign: 'center' }}>
+      <video 
+        ref={videoRef} 
+        controls 
+        autoPlay 
+        style={{ 
+          width: '100%', 
+          maxWidth: '800px', 
           backgroundColor: '#000' 
         }}
       />
