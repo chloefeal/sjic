@@ -14,17 +14,31 @@ class BeltBrokenSeries(BaseAlgorithm):
 
     @classmethod
     def register(cls):
+        """注册或更新算法"""
         type_name = cls.__mapper_args__['polymorphic_identity']
-        print(type_name)
+        app.logger.info(f"Registering algorithm: {type_name}")
+        
+        # 查找是否已存在同类型的算法
         algorithm = Algorithm.query.filter_by(type=type_name).first()
-        print(algorithm)
-        algorithm = cls(
-            name='皮带表面故障检测-高精度检测算法',
-            type=type_name,
-            description='皮带表面故障检测-高精度检测算法'
-        )
-        db.session.add(algorithm)
+        
+        if algorithm:
+            # 如果算法已存在，则更新它
+            app.logger.info(f"Algorithm {type_name} already exists, updating")
+            algorithm.name = '皮带表面故障检测-高精度检测算法'
+            algorithm.description = '皮带表面故障检测-高精度检测算法'
+        else:
+            # 如果算法不存在，则创建新记录
+            app.logger.info(f"Algorithm {type_name} does not exist, creating new")
+            algorithm = cls(
+                name='皮带表面故障检测-高精度检测算法',
+                type=type_name,
+                description='皮带表面故障检测-高精度检测算法'
+            )
+            db.session.add(algorithm)
+        
+        # 提交更改
         db.session.commit()
+        app.logger.info(f"Algorithm {type_name} registered successfully")
 
     def process(self, camera, parameters):
         """处理图像"""
