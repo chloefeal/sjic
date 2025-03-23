@@ -26,7 +26,7 @@ def get_cameras():
     """获取所有摄像头"""
     try:
         cameras = Camera.query.all()
-        app.logger.info(jsonify([camera.to_dict() for camera in cameras]))
+        app.logger.info([camera.to_dict() for camera in cameras])
         return jsonify([camera.to_dict() for camera in cameras])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
