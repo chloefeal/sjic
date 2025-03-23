@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import base64
 from app import sock
+import numpy as np
 
 
 # 初始化服务
@@ -699,6 +700,101 @@ def ws_stream_camera(ws, camera_id):
             app.logger.info(f"Terminated FFmpeg process for WebSocket stream")
     except Exception as e:
         app.logger.error(f"Error setting up WebSocket stream: {str(e)}")
+
+# 创建错误图像
+def create_error_image():
+    error_img_path = 'app/static/error.jpg'
+    if not os.path.exists('app/static'):
+        os.makedirs('app/static')
+    if not os.path.exists(error_img_path):
+        # 创建一个黑色图像，写入错误文本
+        img = np.zeros((360, 640, 3), dtype=np.uint8)
+        cv2.putText(img, "Error: Cannot connect to camera", (50, 180), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.imwrite(error_img_path, img)
+
+# 在应用启动时调用
+create_error_image()
+
+@app.route('/api/mjpeg/<int:camera_id>', methods=['GET'])
+@token_required
+def mjpeg_stream(camera_id):
+    """使用 OpenCV 提供 MJPEG 流"""
+    try:
+        # 获取摄像头
+        camera = Camera.query.get_or_404(camera_id)
+        rtsp_url = camera.url
+        app.logger.info(f"Starting MJPEG stream for camera {camera_id}: {rtsp_url}")
+        
+        # 设置响应头
+        headers = {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'Content-Type': 'multipart/x-mixed-replace; boundary=frame'
+        }
+        
+        def generate_frames():
+            # 打开视频流
+            cap = cv2.VideoCapture(rtsp_url)
+            if not cap.isOpened():
+                app.logger.error(f"Failed to open video stream: {rtsp_url}")
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + 
+                       open('app/static/error.jpg', 'rb').read() + b'\r\n')
+                return
+            
+            app.logger.info(f"Video stream opened successfully: {rtsp_url}")
+            
+            # 设置帧率限制
+            fps_limit = 15  # 限制最大帧率
+            frame_time = 1.0 / fps_limit
+            last_frame_time = time.time()
+            
+            try:
+                while True:
+                    # 控制帧率
+                    current_time = time.time()
+                    if current_time - last_frame_time < frame_time:
+                        time.sleep(0.001)  # 短暂休眠以减少 CPU 使用率
+                        continue
+                    
+                    # 读取一帧
+                    ret, frame = cap.read()
+                    if not ret:
+                        app.logger.warning(f"Failed to read frame from {rtsp_url}")
+                        # 尝试重新连接
+                        cap.release()
+                        time.sleep(1)
+                        cap = cv2.VideoCapture(rtsp_url)
+                        if not cap.isOpened():
+                            app.logger.error(f"Failed to reconnect to video stream: {rtsp_url}")
+                            break
+                        continue
+                    
+                    # 调整图像大小以减少带宽
+                    frame = cv2.resize(frame, (640, 360))
+                    
+                    # 编码为 JPEG
+                    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    
+                    # 更新上一帧时间
+                    last_frame_time = current_time
+                    
+                    # 生成 multipart 响应
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + 
+                           buffer.tobytes() + b'\r\n')
+            except Exception as e:
+                app.logger.error(f"Error in MJPEG stream: {str(e)}")
+            finally:
+                cap.release()
+                app.logger.info(f"Released video capture for {rtsp_url}")
+        
+        return Response(stream_with_context(generate_frames()), headers=headers)
+    except Exception as e:
+        app.logger.error(f"Error setting up MJPEG stream: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 

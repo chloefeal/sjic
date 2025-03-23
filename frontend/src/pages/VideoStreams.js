@@ -162,7 +162,7 @@ function VideoStreams() {
         </DialogTitle>
         <DialogContent>
           {previewingCamera && (
-            <VideoPreview cameraId={previewingCamera.id} />
+            <MJPEGPlayer cameraId={previewingCamera.id} />
           )}
         </DialogContent>
       </Dialog>
@@ -171,56 +171,9 @@ function VideoStreams() {
 }
 
 function VideoPreview({ cameraId }) {
-  const [streamMethod, setStreamMethod] = useState('websocket'); // 'websocket', 'http', 'hls'
-  
-  // 根据不同的流方法渲染不同的组件
-  const renderPlayer = () => {
-    switch (streamMethod) {
-      case 'websocket':
-        return <JSMpegPlayer 
-          cameraId={cameraId} 
-          onError={() => setStreamMethod('http')} 
-        />;
-      case 'http':
-        return <HttpStreamPlayer 
-          cameraId={cameraId} 
-          onError={() => setStreamMethod('hls')} 
-        />;
-      case 'hls':
-        return <HLSPlayer cameraId={cameraId} />;
-      default:
-        return <div>无法加载视频流</div>;
-    }
-  };
-  
   return (
     <div>
-      {renderPlayer()}
-      <div style={{ marginTop: '10px' }}>
-        <Button 
-          size="small" 
-          onClick={() => setStreamMethod('websocket')}
-          variant={streamMethod === 'websocket' ? 'contained' : 'outlined'}
-          sx={{ mr: 1 }}
-        >
-          WebSocket
-        </Button>
-        <Button 
-          size="small" 
-          onClick={() => setStreamMethod('http')}
-          variant={streamMethod === 'http' ? 'contained' : 'outlined'}
-          sx={{ mr: 1 }}
-        >
-          HTTP
-        </Button>
-        <Button 
-          size="small" 
-          onClick={() => setStreamMethod('hls')}
-          variant={streamMethod === 'hls' ? 'contained' : 'outlined'}
-        >
-          HLS
-        </Button>
-      </div>
+      <MJPEGPlayer cameraId={cameraId} />
     </div>
   );
 }
@@ -508,6 +461,80 @@ function HLSPlayer({ cameraId }) {
           width: '100%', 
           maxWidth: '800px', 
           backgroundColor: '#000' 
+        }}
+      />
+    </div>
+  );
+}
+
+function MJPEGPlayer({ cameraId }) {
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const imgRef = useRef(null);
+  
+  useEffect(() => {
+    // 图像加载完成时的处理
+    const handleImageLoad = () => {
+      setLoading(false);
+    };
+    
+    // 图像加载失败时的处理
+    const handleImageError = () => {
+      setError('视频流加载失败');
+      setLoading(false);
+    };
+    
+    // 添加事件监听器
+    const imgElement = imgRef.current;
+    if (imgElement) {
+      imgElement.addEventListener('load', handleImageLoad);
+      imgElement.addEventListener('error', handleImageError);
+    }
+    
+    // 清理函数
+    return () => {
+      if (imgElement) {
+        imgElement.removeEventListener('load', handleImageLoad);
+        imgElement.removeEventListener('error', handleImageError);
+      }
+    };
+  }, [cameraId]);
+  
+  // 构建 MJPEG 流 URL
+  const baseUrl = getBaseUrl();
+  const streamUrl = `${baseUrl}/api/mjpeg/${cameraId}`;
+  
+  return (
+    <div className="video-container" style={{ textAlign: 'center' }}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+          <Button 
+            color="inherit" 
+            size="small" 
+            onClick={() => window.location.reload()}
+            sx={{ ml: 2 }}
+          >
+            重试
+          </Button>
+        </Alert>
+      )}
+      {loading && !error && (
+        <div style={{ marginBottom: '10px' }}>
+          <Typography variant="body2" color="textSecondary">
+            正在加载视频流...
+          </Typography>
+        </div>
+      )}
+      <img 
+        ref={imgRef}
+        src={streamUrl}
+        alt="Camera Stream"
+        style={{ 
+          width: '100%', 
+          maxWidth: '800px', 
+          backgroundColor: '#000',
+          display: error ? 'none' : 'block'
         }}
       />
     </div>
