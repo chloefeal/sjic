@@ -1,4 +1,4 @@
-from flask import jsonify, request, Response, send_from_directory
+from flask import jsonify, request, Response, send_from_directory, stream_with_context
 from app import app, db, socketio
 from app.models import Alert, Camera, DetectionModel, Algorithm, Setting
 from app.services.detector import DetectorService
@@ -12,7 +12,7 @@ from app.middleware.auth import token_required
 import cv2
 import time
 from app.utils.calibration import get_calibration_image
-from sqlalchemy.orm.attributes import flag_modified
+import subprocess
 
 
 # 初始化服务
@@ -495,6 +495,59 @@ def get_alert_image(filename):
     except Exception as e:
         app.logger.error(f"Error getting alert image: {str(e)}")
         return jsonify({'error': str(e)}), 404
+
+@app.route('/api/stream/<int:camera_id>', methods=['GET'])
+@token_required
+def stream_camera(camera_id):
+    """将 RTSP 流转换为 HTTP 流 (MPEG-TS)"""
+    try:
+        camera = Camera.query.get_or_404(camera_id)
+        rtsp_url = camera.url
+        
+        def generate():
+            # 优化 FFmpeg 参数以减少延迟
+            cmd = [
+                'ffmpeg',
+                '-i', rtsp_url,
+                '-f', 'mpegts',
+                '-codec:v', 'mpeg1video',
+                '-s', '800x450',  # 16:9 比例，适合大多数摄像头
+                '-b:v', '1000k',  # 提高比特率以提高质量
+                '-maxrate', '1000k',
+                '-bufsize', '1000k',
+                '-r', '24',       # 降低帧率以减少带宽
+                '-bf', '0',       # 禁用 B 帧以减少延迟
+                '-q:v', '3',      # 提高质量
+                '-tune', 'zerolatency',  # 优化低延迟
+                '-preset', 'ultrafast',  # 最快的编码速度
+                '-an',            # 禁用音频以减少带宽
+                '-f', 'mpegts',
+                '-'
+            ]
+            
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            app.logger.info(f"Started FFmpeg process for camera {camera_id}")
+            
+            try:
+                while True:
+                    data = process.stdout.read(4096)  # 增加缓冲区大小
+                    if not data:
+                        break
+                    yield data
+            except Exception as e:
+                app.logger.error(f"Error streaming camera {camera_id}: {str(e)}")
+            finally:
+                process.kill()
+                app.logger.info(f"Terminated FFmpeg process for camera {camera_id}")
+        
+        return Response(
+            stream_with_context(generate()),
+            mimetype='video/mp2t'
+        )
+    except Exception as e:
+        app.logger.error(f"Error setting up stream for camera {camera_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 
 
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Grid, Card, CardContent, Typography, Button, Dialog, DialogTitle, 
   DialogContent, DialogActions, TextField, Alert, Table, TableBody, 
@@ -7,6 +7,7 @@ import {
 import { Add, Visibility, Delete, Close } from '@mui/icons-material';
 import axios from '../utils/axios';
 import VideoPlayer from '../components/VideoPlayer';
+import JSMpeg from '@cycjimmy/jsmpeg-player';
 
 function VideoStreams() {
   const [streams, setStreams] = useState([]);
@@ -161,14 +162,53 @@ function VideoStreams() {
         </DialogTitle>
         <DialogContent>
           {previewingCamera && (
-            <VideoPlayer
-              cameraId={previewingCamera.id}
-              onClose={handleClosePreview}
-            />
+            <JSMpegPlayer cameraId={previewingCamera.id} />
           )}
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// 使用 JSMpeg 播放视频流
+function JSMpegPlayer({ cameraId }) {
+  const canvasRef = useRef(null);
+  const playerRef = useRef(null);
+  
+  useEffect(() => {
+    if (canvasRef.current && !playerRef.current) {
+      const url = `${process.env.REACT_APP_API_URL || ''}/api/stream/${cameraId}`;
+      
+      // 创建 JSMpeg 播放器
+      playerRef.current = new JSMpeg.Player(url, {
+        canvas: canvasRef.current,
+        autoplay: true,
+        audio: false,
+        loop: true
+      });
+    }
+    
+    // 组件卸载时清理
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+    };
+  }, [cameraId]);
+  
+  return (
+    <div className="video-container" style={{ textAlign: 'center' }}>
+      <canvas 
+        ref={canvasRef} 
+        style={{ 
+          width: '100%', 
+          maxWidth: '800px', 
+          height: 'auto', 
+          backgroundColor: '#000' 
+        }}
+      />
+    </div>
   );
 }
 
