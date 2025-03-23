@@ -717,7 +717,6 @@ def create_error_image():
 create_error_image()
 
 @app.route('/api/mjpeg/<int:camera_id>', methods=['GET'])
-@token_required
 def mjpeg_stream(camera_id):
     """使用 OpenCV 提供 MJPEG 流"""
     try:
