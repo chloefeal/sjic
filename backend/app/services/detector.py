@@ -123,6 +123,12 @@ class DetectorService:
     def stop_detection(self, task_id):
         """停止检测任务"""
         try:
+            # 更新任务状态
+            task = Task.query.get(task_id)
+            if task:
+                task.status = 'stopped'
+                db.session.commit()
+                
             # 检查任务是否在运行
             if task_id not in self.active_detectors:
                 app.logger.info(f"Task {task_id} is not running")
@@ -135,14 +141,9 @@ class DetectorService:
             
             if self.active_detectors[task_id]['camera'] and self.active_detectors[task_id]['camera'].isOpened():
                 self.active_detectors[task_id]['camera'].release()
-                
+
             del self.active_detectors[task_id]
             
-            # 更新任务状态
-            task = Task.query.get(task_id)
-            if task:
-                task.status = 'stopped'
-                db.session.commit()
 
             # 等待线程结束（可选，设置超时）
             if task_id in self.detection_threads:
