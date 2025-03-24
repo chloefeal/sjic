@@ -33,6 +33,7 @@ class BeltDeviationDetection(BaseAlgorithm):
             confidence = parameters.get('confidence', 0.5)
             algorithm_parameters = parameters.get('algorithm_parameters', {})
             on_alert = parameters.get('on_alert')  # 获取告警处理回调
+            stop_event = parameters.get('stop_event')
             
             # 获取标定数据
             calibration = algorithm_parameters.get('calibration', {})

@@ -10,6 +10,8 @@ from config import Config
 import logging
 import requests
 from datetime import datetime
+import threading
+import time
 
 app.logger = logging.getLogger(__name__)
 
@@ -20,6 +22,8 @@ class DetectorService:
         self.model = None
         self.task = None
         self.active_detectors = {}  # 存储每个任务的检测状态
+        self.detection_threads = {}  # 存储每个任务的线程对象
+        self.stop_events = {}  # 存储每个任务的停止事件
 
     def load_camera(self, camera_id):
         """加载摄像头"""
@@ -61,70 +65,104 @@ class DetectorService:
         
         return alert
 
-    def start(self, camera_id, model_id, task_id):
-        """启动检测"""
+    def start_detection(self, task_id):
+        """启动检测任务"""
         try:
-            app.logger.info(f"Starting detection: camera={camera_id}, model={model_id}, task={task_id}")
-            
-            # 检查是否已经在运行
+            # 检查任务是否已经在运行
             if task_id in self.active_detectors:
-                msg = f"Detection already running for camera {camera_id}"
-                app.logger.warning(msg)
-                raise RuntimeError(msg)
-
-            # 加载摄像头
-            camera = self.load_camera(camera_id)
-            rtsp_url = camera.get_rtsp_url()
-            if not rtsp_url:
-                raise ValueError(f"Invalid RTSP URL for camera {camera_id}")
+                app.logger.info(f"Task {task_id} is already running")
+                return {"success": True, "message": "Task is already running"}
             
-            # 初始化视频捕获
-            cap = cv2.VideoCapture(rtsp_url)
-            if not cap.isOpened():
-                raise RuntimeError(f"Failed to open camera stream: {rtsp_url}")
+            # 获取任务信息
+            task = Task.query.get(task_id)
+            if not task:
+                return {"success": False, "message": f"Task with id {task_id} not found"}
+            
+            # 加载摄像头
+            camera = self.load_camera(task.cameraId)
+            rtsp_url = camera.get_rtsp_url()
             
             # 加载模型
-            model = self.load_model(model_id)
-
-            # 保存检测器状态
+            model = self.load_model(task.modelId)
+                        
+            # 更新任务状态
+            task.status = 'running'
+            db.session.commit()
+            
+            # 创建停止事件
+            stop_event = threading.Event()
+            self.stop_events[task_id] = stop_event
+            
+            # 标记任务为运行状态
             self.active_detectors[task_id] = {
-                'camera': cap,
-                'model': model,
                 'task_id': task_id,
-                'running': True
+                'camera': camera,
+                'model': model,
+                'rtsp_url': rtsp_url
             }
             
-            # 开始检测循环
-            self._start_detection_thread(task_id)
+            # 创建并启动检测线程
+            detection_thread = threading.Thread(
+                target=self._detect_loop,
+                args=(task_id, stop_event),
+                daemon=True
+            )
+            self.detection_threads[task_id] = detection_thread
+            detection_thread.start()
             
-            app.logger.info(f"Detection started successfully for task {task_id}")
+            app.logger.info(f"Started detection for task {task_id}")
+            return {"success": True, "message": "Detection started"}
             
         except Exception as e:
-            app.logger.error(f"Failed to start detection: {str(e)}", exc_info=True)
-            if task_id in self.active_detectors:
-                self.stop(task_id)
-            raise RuntimeError(f"Failed to start detection: {str(e)}")
-        
-    def stop(self, task_id):
-        """停止检测"""
-        if task_id in self.active_detectors:
-            detector = self.active_detectors[task_id]
-            detector['running'] = False
-            if detector['camera']:
-                detector['camera'].release()
+            app.logger.error(f"Error starting detection: {str(e)}")
+            return {"success": False, "message": str(e)}
+
+    def stop_detection(self, task_id):
+        """停止检测任务"""
+        try:
+            # 检查任务是否在运行
+            if task_id not in self.active_detectors:
+                app.logger.info(f"Task {task_id} is not running")
+                return {"success": True, "message": "Task is not running"}
+            
+            # 设置停止事件
+            if task_id in self.stop_events:
+                self.stop_events[task_id].set()
+                app.logger.info(f"Stop event set for task {task_id}")
+            
             del self.active_detectors[task_id]
             
-    def _start_detection_thread(self, task_id):
-        """启动检测线程"""
-        import threading
-        thread = threading.Thread(
-            target=self._detect_loop,
-            args=(task_id,),
-            daemon=True
-        )
-        thread.start()
+            # 更新任务状态
+            task = Task.query.get(task_id)
+            if task:
+                task.status = 'stopped'
+                db.session.commit()
+
+            # 等待线程结束（可选，设置超时）
+            if task_id in self.detection_threads:
+                thread = self.detection_threads[task_id]
+                if thread.is_alive():
+                    # 等待线程结束，最多等待3秒
+                    thread.join(timeout=3)
+                    if thread.is_alive():
+                        app.logger.warning(f"Thread for task {task_id} did not terminate within timeout")
+                
+                # 从字典中移除线程引用
+                del self.detection_threads[task_id]
             
-    def _detect_loop(self, task_id):
+            # 清理停止事件
+            if task_id in self.stop_events:
+                del self.stop_events[task_id]
+            
+            app.logger.info(f"Stopped detection for task {task_id}")
+            return {"success": True, "message": "Detection stopped"}
+            
+        except Exception as e:
+            app.logger.error(f"Error stopping detection: {str(e)}")
+            return {"success": False, "message": str(e)}
+        
+
+    def _detect_loop(self, task_id, stop_event):
         """检测循环"""
         with app.app_context():
             try:
@@ -159,7 +197,8 @@ class DetectorService:
                     'confidence': task.confidence,
                     'alertThreshold': task.alertThreshold,
                     'algorithm_parameters': task.algorithm_parameters,
-                    'on_alert': handle_alert  # 传递告警处理回调
+                    'on_alert': handle_alert,  # 传递告警处理回调
+                    'stop_event': stop_event
                 })
 
             except Exception as e:

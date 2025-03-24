@@ -51,6 +51,7 @@ class BeltBrokenSeries(BaseAlgorithm):
             confidence = parameters.get('confidence', 0.5)
             algorithm_parameters = parameters.get('algorithm_parameters', {})
             on_alert = parameters.get('on_alert')  # 获取告警处理回调
+            stop_event = parameters.get('stop_event')
             
             # 从标定数据计算像素到厘米的转换比例
             calibration = algorithm_parameters.get('calibration', {})
@@ -79,7 +80,7 @@ class BeltBrokenSeries(BaseAlgorithm):
             # 使用计算出的转换比例
             min_area_cm2 = algorithm_parameters.get('min_area_cm2', 100)
             
-            while True:
+            while not stop_event.is_set():
                 ret, frame = camera.read()
                 if not ret:
                     continue

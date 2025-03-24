@@ -164,30 +164,48 @@ def delete_model(model_id):
 
 # 检测相关路由
 @app.route('/api/detection/start', methods=['POST'])
-@token_required 
+@token_required
 def start_detection():
-    """启动检测"""
-    data = request.json
+    """启动检测任务"""
     try:
-        detector_service.start(
-            camera_id=data['camera_id'],
-            model_id=data['model_id'],
-            task_id=data['task_id']
-        )
-        return jsonify({'message': 'Detection started'}), 200
+        data = request.json
+        task_id = data.get('task_id')
+        
+        if not task_id:
+            return jsonify({'error': 'Task ID is required'}), 400
+        
+        result = detector_service.start_detection(task_id)
+        
+        if result['success']:
+            return jsonify({'message': result['message']}), 200
+        else:
+            return jsonify({'error': result['message']}), 400
+            
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        app.logger.error(f"Error starting detection: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/detection/stop', methods=['POST'])
-@token_required 
+@token_required
 def stop_detection():
-    """停止检测"""
-    data = request.json
+    """停止检测任务"""
     try:
-        detector_service.stop(data['camera_id'])
-        return jsonify({'message': 'Detection stopped'}), 200
+        data = request.json
+        task_id = data.get('task_id')
+        
+        if not task_id:
+            return jsonify({'error': 'Task ID is required'}), 400
+        
+        result = detector_service.stop_detection(task_id)
+        
+        if result['success']:
+            return jsonify({'message': result['message']}), 200
+        else:
+            return jsonify({'error': result['message']}), 400
+            
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        app.logger.error(f"Error stopping detection: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # 告警相关路由
 @app.route('/api/alerts', methods=['GET'])
