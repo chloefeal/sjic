@@ -37,7 +37,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             confidence = parameters.get('confidence', 0.5)
             algorithm_parameters = parameters.get('algorithm_parameters', {})
             on_alert = parameters.get('on_alert')  # 获取告警处理回调
-            alertThreshold = parameters.get('alertThreshold', 5)
+            alertThreshold = parameters.get('alertThreshold', 1800)
             last_alert_time = None
             camera_id = parameters.get('camera_id')
             stop_event = parameters.get('stop_event')
@@ -83,7 +83,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 'confidence': 0.5,
                 'image_url': 'test.jpg',
             })
-            
+
             while not stop_event.is_set():
                 ret, frame = camera.read()
                 if not ret:

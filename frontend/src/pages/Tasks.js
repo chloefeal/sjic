@@ -34,7 +34,6 @@ function Tasks() {
       regions: []
     }
   });
-  const [runningTasks, setRunningTasks] = useState(new Set());
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
 
@@ -147,7 +146,7 @@ function Tasks() {
           algorithm_parameters: task.algorithm_parameters
         }
       });
-      setRunningTasks(prev => new Set([...prev, task.id]));
+      task.status = 'running';
     } catch (error) {
       console.error('Error starting detection:', error);
     }
@@ -158,11 +157,7 @@ function Tasks() {
       await axios.post('/api/detection/stop', {
         task_id: task.id
       });
-      setRunningTasks(prev => {
-        const next = new Set(prev);
-        next.delete(task.id);
-        return next;
-      });
+      task.status = 'stopped';
     } catch (error) {
       console.error('Error stopping detection:', error);
     }
@@ -498,7 +493,7 @@ function Tasks() {
                     <IconButton onClick={() => handleDelete(task.id)}>
                       <Delete />
                     </IconButton>
-                    {runningTasks.has(task.id) ? (
+                    {task.status === 'running' ? (
                       <IconButton onClick={() => handleStopDetection(task)}>
                         <Stop />
                       </IconButton>
