@@ -203,7 +203,7 @@ class DetectorService:
 
             except Exception as e:
                 app.logger.error(f"Error in detection loop: {str(e)}")
-                self.stop(task_id)
+                self.stop_detection(task_id)
 
     def _send_alert_to_external_api(self, alert_data):
         """发送告警到外部 API"""
