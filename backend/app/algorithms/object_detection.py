@@ -77,6 +77,12 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             batch_size = 8
             batch = []
 
+            # for test
+            on_alert(None, {
+                'confidence': 0.5,
+                'image_url': 'test.jpg',
+            })
+
             while True:
                 ret, frame = camera.read()
                 if not ret:
@@ -115,13 +121,13 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                     for box in boxes:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         app.logger.debug(f"Detection box: {box.xyxy[0]}")
-                        box_center = ((x1 + x2) // 2, (y1 + y2) // 2)
-                        # foot_center = ((x1 + x2) // 2, y2)
-                        app.logger.debug(f"Box center: {box_center}")
+                        # box_center = ((x1 + x2) // 2, (y1 + y2) // 2)
+                        foot_center = ((x1 + x2) // 2, y2)
+                        app.logger.debug(f"Box foot center: {foot_center}")
 
                         if roi_points:
                             # 检查点是否在检测区域内
-                            if self.is_point_in_roi(box_center, roi_points):
+                            if self.is_point_in_roi(foot_center, roi_points):
                                 is_exception = True
                                 result_confidence = float(box.conf)
                                 app.logger.debug(f"Point in ROI: True.")
@@ -135,7 +141,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                     app.logger.debug(f"need_alert_again: True")
                     last_alert_time = datetime.now()
                     # TODO: 保存检测结果
-                    save_filename = self.save_detection_image(frame, results)
+                    save_filename = self.save_detection_image(frame, results, task_name)
                     ## save_dir = increment_path(Path("ultralytics_rc_output") / "exp", exist_ok=True, sep="", mkdir=True)
                     # save_dir = app.config['ALERT_FOLDER']
                     # timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')

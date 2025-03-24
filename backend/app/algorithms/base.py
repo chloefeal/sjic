@@ -66,7 +66,7 @@ class BaseAlgorithm(Algorithm):
             app.logger.error(f"Error sending alert to external API: {str(e)}")
 
     # return filename, None
-    def save_detection_image(self, frame, results):
+    def save_detection_image(self, frame, results, task_name):
         """保存检测图片"""
         try:
             # 创建保存目录
@@ -75,7 +75,7 @@ class BaseAlgorithm(Algorithm):
             
             # 生成文件名
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-            filename = f'detection_{timestamp}.jpg'
+            filename = f'{task_name}_{timestamp}.jpg'
             filepath = os.path.join(save_dir, filename)
             
             # 保存图像

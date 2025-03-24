@@ -168,6 +168,10 @@ class DetectorService:
 
     def _send_alert_to_external_api(self, alert_data):
         """发送告警到外部 API"""
+        # todo
+        app.logger.info(f"_send_alert_to_external_api: {alert_data}")
+        return
+    
         try:
             # 配置外部 API 的 URL
             api_url = app.config.get('EXTERNAL_ALERT_API_URL')
