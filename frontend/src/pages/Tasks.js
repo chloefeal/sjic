@@ -147,6 +147,7 @@ function Tasks() {
         }
       });
       task.status = 'running';
+      fetchAll();
     } catch (error) {
       console.error('Error starting detection:', error);
     }
@@ -158,6 +159,7 @@ function Tasks() {
         task_id: task.id
       });
       task.status = 'stopped';
+      fetchAll();
     } catch (error) {
       console.error('Error stopping detection:', error);
     }
