@@ -81,6 +81,9 @@ class DetectorService:
             # 加载摄像头
             camera = self.load_camera(task.cameraId)
             rtsp_url = camera.get_rtsp_url()
+            cap = cv2.VideoCapture(rtsp_url)
+            if not cap.isOpened():
+                return {"success": False, "message": f"Failed to open camera with rtsp url: {rtsp_url}"}
             
             # 加载模型
             model = self.load_model(task.modelId)
@@ -96,7 +99,7 @@ class DetectorService:
             # 标记任务为运行状态
             self.active_detectors[task_id] = {
                 'task_id': task_id,
-                'camera': camera,
+                'camera': cap,
                 'model': model,
                 'rtsp_url': rtsp_url
             }
@@ -130,6 +133,9 @@ class DetectorService:
                 self.stop_events[task_id].set()
                 app.logger.info(f"Stop event set for task {task_id}")
             
+            if self.active_detectors[task_id]['camera'] and self.active_detectors[task_id]['camera'].isOpened():
+                self.active_detectors[task_id]['camera'].release()
+                
             del self.active_detectors[task_id]
             
             # 更新任务状态
