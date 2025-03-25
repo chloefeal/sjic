@@ -68,15 +68,17 @@ class DetectorService:
     def start_detection(self, task_id):
         """启动检测任务"""
         try:
-            # 检查任务是否已经在运行
-            if task_id in self.active_detectors:
-                app.logger.info(f"Task {task_id} is already running")
-                return {"success": True, "message": "Task is already running"}
-            
             # 获取任务信息
             task = Task.query.get(task_id)
             if not task:
                 return {"success": False, "message": f"Task with id {task_id} not found"}
+            
+            # 检查任务是否已经在运行
+            if task_id in self.active_detectors:
+                app.logger.info(f"Task {task_id} is already running")
+                task.status = 'running'
+                db.session.commit()
+                return {"success": True, "message": "Task is already running"}
             
             # 加载摄像头
             camera = self.load_camera(task.cameraId)
