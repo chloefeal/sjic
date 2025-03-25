@@ -91,6 +91,9 @@ class BaseAlgorithm(Algorithm):
         """判断是否需要再次告警"""
         if last_alert_time is None:
             return True
+        app.logger.debug(f"last_alert_time: {last_alert_time}")
+        app.logger.debug(f"alertThreshold: {alertThreshold}")
+        app.logger.debug(f"datetime.now() - last_alert_time: {(datetime.now() - last_alert_time).total_seconds()}")
         return (datetime.now() - last_alert_time).total_seconds() >= alertThreshold
 
     def is_point_in_roi(self, point, points):

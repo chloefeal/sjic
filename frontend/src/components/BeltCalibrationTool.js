@@ -348,7 +348,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
               fontSize: '0.85rem'
             }}>
               <li>点击"开始预览"查看视频源画面</li>
-              <li>点击"截取当前帧"或"停止预览"保存当前画面</li>
+              <li>点击"画线框"或"停止预览"保存当前画面</li>
               <li>在图像上标记皮带两边的点（可拖动调整位置）：
                 <ul style={{ 
                   fontSize: '0.8rem',
@@ -379,7 +379,7 @@ function BeltCalibrationTool({ cameraId, onCalibrate }) {
               disabled={!cameraId || !isStreaming}
               style={{ marginRight: 16 }}
             >
-              截取当前帧
+              画线框
             </Button>
             <Button 
               variant="outlined" 

@@ -283,7 +283,7 @@ function RegionSelectionTool({ cameraId, onSelect }) {
             </Typography>
             <ol style={{ margin: 0, paddingLeft: 20 }}>
               <li>点击"开始预览"查看视频源画面</li>
-              <li>点击"截取当前帧"或"停止预览"保存当前画面</li>
+              <li>点击"画线框"或"停止预览"保存当前画面</li>
               <li>在图像上点击选择区域顶点（至少3个点）</li>
               <li>点击"确定"完成区域选择</li>
             </ol>
@@ -305,7 +305,7 @@ function RegionSelectionTool({ cameraId, onSelect }) {
               disabled={!cameraId || !isStreaming}
               sx={{ mr: 2 }}
             >
-              截取当前帧
+              画线框
             </Button>
             <Button 
               variant="outlined" 
