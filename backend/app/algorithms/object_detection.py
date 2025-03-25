@@ -84,10 +84,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 'confidence': 0.5,
                 'image_url': 'test.jpg',
             })
-            person_index = model.names['person']
-            car_index = model.names['car']
-            app.logger.debug(f"class    person_index: {person_index}")
-            app.logger.debug(f"class car_index: {car_index}")
+            app.logger.debug(f"class    person_index: {model.names}")
 
             while True:
                 if stop_event and stop_event.is_set():
