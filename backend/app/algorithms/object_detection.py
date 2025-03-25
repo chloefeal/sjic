@@ -24,7 +24,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             algorithm = cls(
                 name='目标检测',
                 type=type_name,
-                description='目标检测，支持多目标检测和目标跟踪，可指定检测区域'
+                description='目标检测，支持人员闯入检测，可指定检测区域'
             )
             db.session.add(algorithm)
             db.session.commit()
@@ -47,6 +47,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             points = None
             frame_size = None
             roi_points = None
+            
             if detection_region:
                 points = detection_region.get('points', [])
                 frame_size = detection_region.get('frame_size', {})
@@ -83,8 +84,16 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 'confidence': 0.5,
                 'image_url': 'test.jpg',
             })
+            person_index = model.names.index('person')
+            car_index = model.names.index('car')
+            app.logger.debug(f"class    person_index: {person_index}")
+            app.logger.debug(f"class car_index: {car_index}")
 
-            while not stop_event.is_set():
+            while True:
+                if stop_event and stop_event.is_set():
+                    app.logger.info(f"Stop event set for task {task_name}")
+                    break
+
                 ret, frame = camera.read()
                 if not ret:
                     time.sleep(1)
@@ -92,34 +101,21 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 
                 # 预处理（Letterbox）
                 processed = preprocess(frame, new_h, new_w, top, bottom, left, right)
-                if processed is not None:
-                    batch.append(processed)
-                else:
-                    continue
-
-                if len(batch) == batch_size:
-                    # 合并批次并推理
-                    batch_tensor = torch.cat(batch)
-                    print("batch_tensor.shape:=================================", batch_tensor.shape)
-                    batch = []
-                else:
+                if processed is None:
                     continue
 
                 # 推理
-                results = model(batch_tensor, imgsz=640, verbose=False)  # 指定输入尺寸
+                results = model(processed, imgsz=640, verbose=False, conf=confidence, classes=[0])  # 指定输入尺寸
                 print("results.lenght:=================================", len(results))
-
-
-                # 使用模型检测目标
-                results = model(frame, conf=confidence)
                 
-                # 处理检测结果
+                # 检查是否有人员在检测区域内
                 is_exception = False
                 result_confidence = 0
                 
                 for r in results:
                     boxes = r.boxes
                     for box in boxes:
+                        # 只处理类别为0(person)的检测结果
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         app.logger.debug(f"Detection box: {box.xyxy[0]}")
                         # box_center = ((x1 + x2) // 2, (y1 + y2) // 2)
@@ -143,11 +139,6 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                     last_alert_time = datetime.now()
                     # TODO: 保存检测结果
                     save_filename = self.save_detection_image(frame, results, task_name)
-                    ## save_dir = increment_path(Path("ultralytics_rc_output") / "exp", exist_ok=True, sep="", mkdir=True)
-                    # save_dir = app.config['ALERT_FOLDER']
-                    # timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-                    # save_filename = f'{task_name}_{timestamp}.mp4'
-                    # video_writer = cv2.VideoWriter(str(save_dir / save_filename), fourcc, fps, (frame_width, frame_height))
                     app.logger.debug(f"save_filename: {save_filename}")
         
                     # 如果有检测结果，调用告警处理回调
