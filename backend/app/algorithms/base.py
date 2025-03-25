@@ -79,7 +79,7 @@ class BaseAlgorithm(Algorithm):
             filepath = os.path.join(save_dir, filename)
             
             # 保存图像
-            cv2.imwrite(filepath, frame)
+            cv2.imwrite(filepath, results[0].plot())
             
             return filename
             
