@@ -237,12 +237,12 @@ function Tasks() {
           <>
             <Typography variant="subtitle2" gutterBottom>目标检测参数：</Typography>
             <Grid container spacing={2}>
-              {task.algorithm_parameters?.detection_region && (
+              {task.algorithm_parameters?.detection_region && task.algorithm_parameters.calibration &&  (
                 <Grid item xs={12}>
                   <Typography gutterBottom>检测区域：</Typography>
-                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
+                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 800 }}>
                     <img 
-                      src={task.algorithm_parameters.detection_region.image_data} 
+                      src={task.algorithm_parameters.calibration.image_data} 
                       alt="Detection Region"
                       style={{ width: '100%', height: 'auto' }}
                     />
@@ -290,7 +290,7 @@ function Tasks() {
               {task.algorithm_parameters.calibration.image_data && (
                 <Grid item xs={12}>
                   <Typography gutterBottom>标定图像：</Typography>
-                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
+                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 800 }}>
                     <img 
                       src={task.algorithm_parameters.calibration.image_data} 
                       alt="Calibration"
@@ -352,7 +352,7 @@ function Tasks() {
               {task.algorithm_parameters.calibration.image_data && (
                 <Grid item xs={12}>
                   <Typography gutterBottom>标定图像：</Typography>
-                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 600 }}>
+                  <Box sx={{ position: 'relative', width: '100%', maxWidth: 800 }}>
                     <img 
                       src={task.algorithm_parameters.calibration.image_data}
                       alt="Calibration"

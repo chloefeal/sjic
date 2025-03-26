@@ -248,17 +248,34 @@ function RegionSelectionTool({ cameraId, onSelect }) {
     drawCanvas();
   };
 
-  const handleConfirm = () => {
-    if (points.length < 3) {
-      alert('请至少选择3个点形成检测区域');
-      return;
-    }
+  const handleConfirm = async () => {
+    if (points.length < 3 || !imageUrl) return;
 
-    onSelect({
-      points: points,
-      frame_size: frameSize
-    });
-    setOpen(false);
+    try {
+      // 获取当前图像的 blob 数据
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      
+      // 将 blob 转换为 base64
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      
+      reader.onloadend = () => {
+        const base64data = reader.result;
+        
+        // 调用父组件的回调
+        onSelect({
+          calibration: {
+            frame_size: frameSize,
+            frame: base64data  // 使用 base64 编码的图像数据
+          }
+        });
+      };
+
+      setOpen(false);
+    } catch (error) {
+      console.error('Error in calibration:', error);
+    }
   };
 
   useEffect(() => {
