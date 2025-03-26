@@ -221,7 +221,8 @@ function Tasks() {
       ...prev,
       algorithm_parameters: {
         ...prev.algorithm_parameters,
-        detection_region: regionData
+        detection_region: regionData.detection_region,
+        calibration: regionData.calibration
       }
     }));
   };

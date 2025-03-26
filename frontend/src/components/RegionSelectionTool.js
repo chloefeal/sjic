@@ -265,8 +265,11 @@ function RegionSelectionTool({ cameraId, onSelect }) {
         
         // 调用父组件的回调
         onSelect({
+          detection_region: {
+            points: points,
+            frame_size: frameSize
+          },
           calibration: {
-            frame_size: frameSize,
             frame: base64data  // 使用 base64 编码的图像数据
           }
         });
