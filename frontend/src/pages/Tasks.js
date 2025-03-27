@@ -234,6 +234,10 @@ function Tasks() {
 
     switch (algorithm.type) {
       case 'object_detection':
+        console.log('Detection region data:', task.algorithm_parameters?.detection_region);
+        console.log('Points:', task.algorithm_parameters?.detection_region?.points);
+        console.log('Frame size:', task.algorithm_parameters?.detection_region?.frame_size);
+        
         return (
           <>
             <Typography variant="subtitle2" gutterBottom>目标检测参数：</Typography>
@@ -257,6 +261,7 @@ function Tasks() {
                         height: '100%',
                         pointerEvents: 'none'
                       }}
+                      viewBox={`0 0 ${task.algorithm_parameters.detection_region.frame_size.width} ${task.algorithm_parameters.detection_region.frame_size.height}`}
                     >
                       <polygon
                         points={task.algorithm_parameters.detection_region.points
