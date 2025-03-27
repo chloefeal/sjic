@@ -260,7 +260,7 @@ function Tasks() {
                     >
                       <polygon
                         points={task.algorithm_parameters.detection_region.points
-                          .map(p => `${p.x}%,${p.y}%`)
+                          .map(p => `${p.x * 100 / task.algorithm_parameters.detection_region.frame_size.width},${p.y * 100 / task.algorithm_parameters.detection_region.frame_size.height}%`)
                           .join(' ')}
                         fill="rgba(255, 0, 0, 0.2)"
                         stroke="red"
