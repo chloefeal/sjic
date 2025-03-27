@@ -238,7 +238,7 @@ function Tasks() {
           <>
             <Typography variant="subtitle2" gutterBottom>目标检测参数：</Typography>
             <Grid container spacing={2}>
-              {task.algorithm_parameters?.detection_region && task.algorithm_parameters.calibration &&  (
+              {task.algorithm_parameters?.detection_region && task.algorithm_parameters.calibration && (
                 <Grid item xs={12}>
                   <Typography gutterBottom>检测区域：</Typography>
                   <Box sx={{ position: 'relative', width: '100%', maxWidth: 800 }}>
@@ -260,10 +260,10 @@ function Tasks() {
                     >
                       <polygon
                         points={task.algorithm_parameters.detection_region.points
-                          .map(p => `${p.x * 100 / task.algorithm_parameters.detection_region.frame_size.width},${p.y * 100 / task.algorithm_parameters.detection_region.frame_size.height}`)
+                          .map(p => `${p.x}%,${p.y}%`)
                           .join(' ')}
-                        fill="rgba(255, 255, 0, 0.2)"
-                        stroke="yellow"
+                        fill="rgba(255, 0, 0, 0.2)"
+                        stroke="red"
                         strokeWidth="2"
                       />
                     </svg>
