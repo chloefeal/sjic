@@ -89,24 +89,19 @@ function Tasks() {
   };
 
   const handleEdit = (task) => {
-    setEditingTask(task);
     setFormData({
+      id: task.id,
       name: task.name,
-      modelId: task.modelId,
       cameraId: task.cameraId,
+      modelId: task.modelId,
+      algorithm_id: task.algorithm_id,
       confidence: task.confidence,
       alertThreshold: task.alertThreshold,
       notificationEnabled: task.notificationEnabled,
-      algorithm_id: task.algorithm_id,
-      algorithm_parameters: task.algorithm_parameters || {
-        min_area_cm2: 100,
-        calibration: {
-          belt_width: 0,
-          points: []
-        },
-        regions: []
-      }
+      algorithm_parameters: task.algorithm_parameters || {}
     });
+    
+    setEditingTask(task);
     setOpenDialog(true);
   };
 

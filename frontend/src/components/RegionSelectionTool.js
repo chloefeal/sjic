@@ -131,6 +131,8 @@ function RegionSelectionTool({ cameraId, onSelect, existingRegion }) {
 
         const url = URL.createObjectURL(response instanceof Blob ? response : new Blob([response], { type: 'image/jpeg' }));
         setImageUrl(url);
+        setIsStreaming(false);
+        drawCanvas();
       } catch (error) {
         console.error('Error capturing frame:', error);
       }
