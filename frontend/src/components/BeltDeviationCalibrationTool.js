@@ -18,12 +18,25 @@ function BeltDeviationCalibrationTool({ cameraId, algorithm_parameters, onCalibr
   const [currentLine, setCurrentLine] = useState(null); // 当前正在绘制的线
   const [draggingPoint, setDraggingPoint] = useState(null); // 当前拖动的点 {lineIndex, pointIndex}
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [originalAlgorithmParameters] = useState(algorithm_parameters);
+  const [originalAlgorithmParameters, setOriginalAlgorithmParameters] = useState(algorithm_parameters);
 
   // 加载已有的区域数据
   useEffect(() => {
-    handleReset();
-  });
+    if (algorithm_parameters && algorithm_parameters.calibration) {
+      if (algorithm_parameters.calibration.frame_size) {
+        setFrameSize(algorithm_parameters.calibration.frame_size);
+      }
+      if (algorithm_parameters.calibration.boundary_lines) {
+        setLines(algorithm_parameters.calibration.boundary_lines);
+      }
+      if (algorithm_parameters.calibration.boundary_distance) {
+        setBoundaryDistance(algorithm_parameters.calibration.boundary_distance);
+      }
+      if (algorithm_parameters.calibration.deviation_threshold) {
+        setDeviationThreshold(algorithm_parameters.calibration.deviation_threshold);
+      }
+    }
+  }, [algorithm_parameters]);
 
   // 添加缺失的 refs
   const canvasRef = useRef(null);
@@ -289,19 +302,8 @@ function BeltDeviationCalibrationTool({ cameraId, algorithm_parameters, onCalibr
 
   // 重置标定
   const handleReset = () => {
-    if (originalAlgorithmParameters && originalAlgorithmParameters.calibration) {
-      if (originalAlgorithmParameters.calibration.frame_size) {
-        setFrameSize(originalAlgorithmParameters.calibration.frame_size);
-      }
-      if (originalAlgorithmParameters.calibration.boundary_lines) {
-        setLines(originalAlgorithmParameters.calibration.boundary_lines);
-      }
-      if (originalAlgorithmParameters.calibration.boundary_distance) {
-        setBoundaryDistance(originalAlgorithmParameters.calibration.boundary_distance);
-      }
-      if (originalAlgorithmParameters.calibration.deviation_threshold) {
-        setDeviationThreshold(originalAlgorithmParameters.calibration.deviation_threshold);
-      }
+    if (algorithm_parameters.calibration.boundary_lines) {
+      setLines(algorithm_parameters.calibration.boundary_lines);
     }
     setCurrentLine(null);
     if (imageUrl) {
