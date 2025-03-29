@@ -190,6 +190,7 @@ function Tasks() {
         return (
           <BeltDeviationCalibrationTool
             cameraId={formData.cameraId}
+            algorithm_parameters={formData.algorithm_parameters}
             onCalibrate={handleCalibrate}
           />
         );

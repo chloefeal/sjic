@@ -6,7 +6,7 @@ import {
 import axios from '../utils/axios';
 import { io } from 'socket.io-client';
 
-function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
+function BeltDeviationCalibrationTool({ cameraId, algorithm_parameters, onCalibrate}) {
   const [open, setOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
   const [lines, setLines] = useState([]); // 存储2条边界线，每条线由2个点组成
@@ -18,6 +18,24 @@ function BeltDeviationCalibrationTool({ cameraId, onCalibrate }) {
   const [currentLine, setCurrentLine] = useState(null); // 当前正在绘制的线
   const [draggingPoint, setDraggingPoint] = useState(null); // 当前拖动的点 {lineIndex, pointIndex}
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  // 加载已有的区域数据
+  useEffect(() => {
+    if (algorithm_parameters && algorithm_parameters.calibration) {
+      if (algorithm_parameters.calibration.frame_size) {
+        setFrameSize(algorithm_parameters.calibration.frame_size);
+      }
+      if (algorithm_parameters.calibration.boundary_lines) {
+        setLines(algorithm_parameters.calibration.boundary_lines);
+      }
+      if (algorithm_parameters.calibration.boundary_distance) {
+        setBoundaryDistance(algorithm_parameters.calibration.boundary_distance);
+      }
+      if (algorithm_parameters.calibration.deviation_threshold) {
+        setDeviationThreshold(algorithm_parameters.calibration.deviation_threshold);
+      }
+    }
+  }, [algorithm_parameters]);
   
   // 添加缺失的 refs
   const canvasRef = useRef(null);
