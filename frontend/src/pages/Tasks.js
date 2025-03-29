@@ -246,8 +246,54 @@ function Tasks() {
                       alt="Detection Region"
                       style={{ width: '100%', height: 'auto' }}
                     />
-                    {/* 绘制检测区域 */}
-                    <svg
+                    <canvas
+                      ref={(canvas) => {
+                        if (canvas && task.algorithm_parameters?.detection_region?.points) {
+                          const ctx = canvas.getContext('2d');
+                          const img = new Image();
+                          img.onload = () => {
+                            // 设置canvas尺寸与图像一致
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            
+                            // 绘制图像
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            
+                            // 绘制检测区域
+                            const points = task.algorithm_parameters.detection_region.points;
+                            if (points && points.length > 0) {
+                              ctx.beginPath();
+                              ctx.moveTo(points[0].x, points[0].y);
+                              points.forEach((point, index) => {
+                                if (index > 0) {
+                                  ctx.lineTo(point.x, point.y);
+                                }
+                              });
+                              
+                              // 闭合路径
+                              ctx.closePath();
+                              
+                              // 填充和描边
+                              ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+                              ctx.fill();
+                              ctx.strokeStyle = 'red';
+                              ctx.lineWidth = 2;
+                              ctx.stroke();
+                              
+                              // 绘制顶点
+                              points.forEach(point => {
+                                ctx.beginPath();
+                                ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+                                ctx.fillStyle = 'red';
+                                ctx.fill();
+                                ctx.strokeStyle = 'white';
+                                ctx.stroke();
+                              });
+                            }
+                          };
+                          img.src = task.algorithm_parameters.calibration.image_data;
+                        }
+                      }}
                       style={{
                         position: 'absolute',
                         top: 0,
@@ -256,17 +302,7 @@ function Tasks() {
                         height: '100%',
                         pointerEvents: 'none'
                       }}
-                      viewBox={`0 0 ${task.algorithm_parameters.detection_region.frame_size.width} ${task.algorithm_parameters.detection_region.frame_size.height}`}
-                    >
-                      <polygon
-                        points={task.algorithm_parameters.detection_region.points
-                          .map(p => `${p.x * 100 / task.algorithm_parameters.detection_region.frame_size.width}%,${p.y * 100 / task.algorithm_parameters.detection_region.frame_size.height}%`)
-                          .join(' ')}
-                        fill="rgba(255, 0, 0, 0.2)"
-                        stroke="red"
-                        strokeWidth="2"
-                      />
-                    </svg>
+                    />
                   </Box>
                 </Grid>
               )}
