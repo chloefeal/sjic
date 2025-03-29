@@ -253,8 +253,8 @@ function Tasks() {
                           const img = new Image();
                           img.onload = () => {
                             // 设置canvas尺寸与图像一致
-                            canvas.width = img.width;
-                            canvas.height = img.height;
+                            canvas.width = task.algorithm_parameters.detection_region.frame_size.width;
+                            canvas.height = task.algorithm_parameters.detection_region.frame_size.height;
                             
                             // 绘制图像
                             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
