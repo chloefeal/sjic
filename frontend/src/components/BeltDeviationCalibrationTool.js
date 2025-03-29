@@ -305,11 +305,6 @@ function BeltDeviationCalibrationTool({ cameraId, algorithm_parameters, onCalibr
     if (algorithm_parameters.calibration.boundary_lines) {
       setLines(algorithm_parameters.calibration.boundary_lines);
     }
-    setCurrentLine(null);
-    if (imageUrl) {
-      URL.revokeObjectURL(imageUrl);
-      setImageUrl(null);
-    }
   };
 
   // 添加 useEffect 来监听鼠标位置变化
