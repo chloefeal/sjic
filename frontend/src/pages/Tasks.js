@@ -421,9 +421,10 @@ function Tasks() {
         return (
           <Grid container spacing={2}>
             <Grid item xs={12}>
-              <RegionSelectionTool
+              <RegionSelectionTool 
                 cameraId={formData.cameraId}
                 onSelect={handleRegionSelect}
+                existingRegion={formData.algorithm_parameters}
               />
             </Grid>
           </Grid>

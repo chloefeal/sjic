@@ -6,7 +6,7 @@ import {
 import { io } from 'socket.io-client';
 import axios from '../utils/axios';
 
-function RegionSelectionTool({ cameraId, onSelect }) {
+function RegionSelectionTool({ cameraId, onSelect, existingRegion }) {
   const [open, setOpen] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
   const [points, setPoints] = useState([]);
@@ -21,6 +21,28 @@ function RegionSelectionTool({ cameraId, onSelect }) {
   const [draggingPointIndex, setDraggingPointIndex] = useState(null);
   const [isComplete, setIsComplete] = useState(false);
   const [hoveredPointIndex, setHoveredPointIndex] = useState(null);
+
+  // 加载已有的区域数据
+  useEffect(() => {
+    if (open && existingRegion && existingRegion.detection_region) {
+      // 如果有现有的图像数据，使用它
+      if (existingRegion.calibration && existingRegion.calibration.image_data) {
+        setImageUrl(existingRegion.calibration.image_data);
+        setIsStreaming(false);
+      }
+      
+      // 设置点数据
+      if (existingRegion.detection_region.points && existingRegion.detection_region.points.length > 0) {
+        setPoints(existingRegion.detection_region.points);
+        setIsComplete(true);
+      }
+      
+      // 设置帧尺寸
+      if (existingRegion.detection_region.frame_size) {
+        setFrameSize(existingRegion.detection_region.frame_size);
+      }
+    }
+  }, [open, existingRegion]);
 
   // 计算缩放后的尺寸
   const calculateAspectRatio = (originalWidth, originalHeight, maxWidth = 800) => {
