@@ -18,11 +18,16 @@ function BeltDeviationCalibrationTool({ cameraId, algorithm_parameters, onCalibr
   const [currentLine, setCurrentLine] = useState(null); // 当前正在绘制的线
   const [draggingPoint, setDraggingPoint] = useState(null); // 当前拖动的点 {lineIndex, pointIndex}
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [originalAlgorithmParameters, setOriginalAlgorithmParameters] = useState(algorithm_parameters);
+  
+  // 在组件顶部添加一个 ref 来存储原始参数
+  const originalParametersRef = useRef(null);
 
   // 加载已有的区域数据
   useEffect(() => {
     if (algorithm_parameters && algorithm_parameters.calibration) {
+      // 保存原始参数的深拷贝
+      originalParametersRef.current = JSON.parse(JSON.stringify(algorithm_parameters));
+      
       if (algorithm_parameters.calibration.frame_size) {
         setFrameSize(algorithm_parameters.calibration.frame_size);
       }
@@ -302,9 +307,35 @@ function BeltDeviationCalibrationTool({ cameraId, algorithm_parameters, onCalibr
 
   // 重置标定
   const handleReset = () => {
-    if (algorithm_parameters.calibration.boundary_lines) {
-      setLines(algorithm_parameters.calibration.boundary_lines);
+    // 如果有原始参数，使用它们
+    if (originalParametersRef.current && originalParametersRef.current.calibration) {
+      const originalCalibration = originalParametersRef.current.calibration;
+      
+      if (originalCalibration.boundary_lines) {
+        setLines([...originalCalibration.boundary_lines]);
+      } else {
+        setLines([]);
+      }
+      
+      if (originalCalibration.boundary_distance) {
+        setBoundaryDistance(originalCalibration.boundary_distance);
+      } else {
+        setBoundaryDistance(0);
+      }
+      
+      if (originalCalibration.deviation_threshold) {
+        setDeviationThreshold(originalCalibration.deviation_threshold);
+      } else {
+        setDeviationThreshold(0);
+      }
+    } else {
+      // 如果没有原始参数，重置为空
+      setLines([]);
+      setBoundaryDistance(0);
+      setDeviationThreshold(0);
     }
+    
+    setCurrentLine(null);
   };
 
   // 添加 useEffect 来监听鼠标位置变化
