@@ -51,7 +51,7 @@ def preprocess(frame, new_h, new_w, top, bottom, left, right):
         print(f"Error in preprocess: {e}")
         return None
 
-def transform_points_from_frontend_to_backend(points, h_from_frontend, w_from_frontend, h_from_backend, w_from_backend):
+def transform_points_from_frontend_to_backend(points, h_from_frontend, w_from_frontend, h_from_backend, w_from_backend, top, left):
     try:
         scale_x = w_from_backend / w_from_frontend
         scale_y = h_from_backend / h_from_frontend
@@ -59,8 +59,8 @@ def transform_points_from_frontend_to_backend(points, h_from_frontend, w_from_fr
         # 将点从前端坐标系转换为后端坐标系
         transformed_points = []
         for point in points:
-            x = int(point['x'] * scale_x)
-            y = int(point['y'] * scale_y)
+            x = int(point['x'] * scale_x + left)
+            y = int(h_from_frontend - point['y'] * scale_y + top)
             transformed_points.append((x, y))
         return transformed_points
     except Exception as e:

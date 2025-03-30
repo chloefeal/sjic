@@ -61,7 +61,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 return
 
             if points:
-                roi_points = transform_points_from_frontend_to_backend(points, frame_size['height'], frame_size['width'], new_h, new_w)
+                roi_points = transform_points_from_frontend_to_backend(points, frame_size['height'], frame_size['width'], new_h, new_w, top, left)
                 app.logger.debug(f"points: {points}")
                 app.logger.debug(f"roi_points: {roi_points}")
                 if roi_points is None:
