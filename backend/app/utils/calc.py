@@ -52,6 +52,7 @@ def preprocess(frame, new_h, new_w, top, bottom, left, right):
         return None
 
 def transform_points_from_frontend_to_backend(points, h_from_frontend, w_from_frontend, h_from_backend, w_from_backend, top, left):
+    # 前端：也是原点在左上角；后端：原点也在左上角，但是有灰边
     try:
         scale_x = w_from_backend / w_from_frontend
         scale_y = h_from_backend / h_from_frontend
@@ -60,7 +61,7 @@ def transform_points_from_frontend_to_backend(points, h_from_frontend, w_from_fr
         transformed_points = []
         for point in points:
             x = int(point['x'] * scale_x + left)
-            y = int(h_from_frontend - point['y'] * scale_y + top)
+            y = int(point['y'] * scale_y + top)
             transformed_points.append((x, y))
         return transformed_points
     except Exception as e:
