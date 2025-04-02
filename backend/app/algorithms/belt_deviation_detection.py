@@ -3,6 +3,11 @@ from app import db, app
 from app.models import Algorithm
 import cv2
 import numpy as np
+from datetime import datetime
+from shapely.geometry import LineString, Polygon
+import time
+from app.utils.calc import transform_points_from_frontend_to_backend, get_letterbox_params, preprocess
+
 
 class BeltDeviationDetection(BaseAlgorithm):
     """皮带跑偏检测算法"""
@@ -30,56 +35,139 @@ class BeltDeviationDetection(BaseAlgorithm):
         """处理图像"""
         try:
             model = parameters.get('model')
+            task_name = parameters.get('task_name')
             confidence = parameters.get('confidence', 0.5)
             algorithm_parameters = parameters.get('algorithm_parameters', {})
             on_alert = parameters.get('on_alert')  # 获取告警处理回调
+            alertThreshold = parameters.get('alertThreshold', 1800)
+            last_alert_time = None
+            camera_id = parameters.get('camera_id')
             stop_event = parameters.get('stop_event')
             
             # 获取标定数据
             calibration = algorithm_parameters.get('calibration', {})
-            if calibration:
-                boundary_lines = calibration.get('boundary_lines', [])  # 边界线坐标
-                frame_size = calibration.get('frame_size', {})         # 前端显示的帧尺寸
-                boundary_distance = calibration.get('boundary_distance', 0)  # 边界线间实际距离(cm)
-                deviation_threshold = calibration.get('deviation_threshold', 0)  # 跑偏报警阈值(cm)
+            if not calibration:
+                app.logger.error("未找到标定数据，无法进行皮带跑偏检测")
+                return
                 
-                # 获取实际图像尺寸
-                ret, frame = camera.read()
-                if ret:
-                    actual_width = frame.shape[1]  # 实际图像宽度
-                    scale_factor = actual_width / frame_size['width']  # 计算缩放比例
-                    
-                    # 将前端坐标转换为实际图像坐标
-                    actual_lines = []
-                    for line in boundary_lines:
-                        actual_line = []
-                        for point in line:
-                            x = int(point['x'] * scale_factor)
-                            y = int(point['y'] * scale_factor)
-                            actual_line.append((x, y))
-                        actual_lines.append(actual_line)
-                    
-                    # 使用模型检测皮带边缘
-                    results = model(frame, conf=confidence)
-                    
-                    # 计算皮带边缘到标定线的距离
-                    # TODO: 根据实际检测结果计算距离并判断是否超出阈值
-                    
-                    # 返回处理结果
-                    return {
-                        'frame': frame,
-                        'alert': False,  # 根据实际情况设置
-                        'info': {
-                            'deviation': 0,  # 实际偏移距离
-                            'threshold': deviation_threshold
-                        }
-                    }
+            boundary_lines = calibration.get('boundary_lines', [])  # 边界线坐标
+            if len(boundary_lines) != 2:
+                app.logger.error(f"边界线数量错误，期望2条，实际{len(boundary_lines)}条")
+                return
+                
+            frame_size = calibration.get('frame_size', {})         # 前端显示的帧尺寸
+            boundary_distance = calibration.get('boundary_distance', 0)  # 边界线间实际距离(cm)
+            deviation_threshold = calibration.get('deviation_threshold', 0)  # 跑偏报警阈值(cm)
             
-            return {
-                'frame': frame,
-                'alert': False
-            }
+            app.logger.info(f"皮带跑偏检测参数: 边界线距离={boundary_distance}cm, 跑偏阈值={deviation_threshold}cm")
+            
+            h, w = camera.get(cv2.CAP_PROP_FRAME_HEIGHT), camera.get(cv2.CAP_PROP_FRAME_WIDTH)
+            new_h, new_w, top, bottom, left, right = get_letterbox_params(h, w, target_size=640)
+            
+            # 将前端坐标转换为实际图像坐标
+            actual_lines = []
+            points = []
+            line_points = []
+            for line in boundary_lines:
+                for point in line:
+                    points.append(point)
+            if points:
+                line_points = transform_points_from_frontend_to_backend(points, frame_size['height'], frame_size['width'], new_h, new_w, top, left)
+                app.logger.debug(f"points: {points}")
+                app.logger.debug(f"roi_points: {line_points}")
+                if line_points is None:
+                    app.logger.error(f"error: line_points is None")
+                    return
+            
+            actual_line = []
+            for p in line_points:
+                actual_line.append(p)
+                if len(actual_line) == 2:
+                    actual_lines.append(actual_line)
+                    actual_line = []
+            if len(actual_lines) != 2:
+                app.logger.error("actual_lines: need to have 2 lines!")
+
+            while not stop_event.is_set():
+                # 读取一帧
+                ret, frame = camera.read()
+                if not ret:
+                    app.logger.warning("无法读取视频帧")
+                    time.sleep(1)
+                    continue
+
+                # 预处理（Letterbox）
+                processed = preprocess(frame, new_h, new_w, top, bottom, left, right)               
+                                
+                # 使用模型检测皮带
+                # TODO
+                results = model(processed, imgsz=640, verbose=False, conf=confidence, classes=[0])
+                
+                # 创建一个副本用于可视化
+                vis_frame = frame.copy()
+                
+                # 绘制边界线
+                for line in actual_lines:
+                    cv2.line(vis_frame, line[0], line[1], (0, 0, 255), 2)
+                
+                # 检查是否有分割结果
+                if len(results) > 0 and hasattr(results[0], 'masks') and results[0].masks is not None:
+                    # 获取皮带的分割掩码
+                    masks = results[0].masks
+                    if len(masks) > 0:
+                        # 获取第一个掩码（假设只有一个皮带）
+                        belt_mask = masks[0].data.cpu().numpy()[0]  # 形状为 (H, W)
+                        
+                        # 将掩码转换为二值图像
+                        belt_mask = (belt_mask > 0.5).astype(np.uint8) * 255
+                        
+                        # 找到皮带的轮廓
+                        contours, _ = cv2.findContours(belt_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        
+                        if contours:
+                            # 获取最大的轮廓（假设是皮带）
+                            belt_contour = max(contours, key=cv2.contourArea)
+                            
+                            # 创建皮带的多边形
+                            belt_polygon = Polygon(belt_contour.reshape(-1, 2))
+                            
+                            # 检查皮带是否与边界线相交
+                            is_deviation = False
+                            for line in actual_lines:
+                                boundary_line = LineString(line)
+                                if belt_polygon.intersects(boundary_line):
+                                    is_deviation = True
+                                    break
+                            
+                            # 在可视化图像上绘制皮带轮廓
+                            cv2.drawContours(vis_frame, [belt_contour], -1, (0, 255, 0), 2)
+                            
+                            # 如果检测到跑偏并且需要告警
+                            if is_deviation and self.need_alert_again(last_alert_time, alertThreshold):
+                                app.logger.warning("检测到皮带跑偏！")
+                                last_alert_time = datetime.now()
+                                
+                                # 保存检测图像
+                                save_filename = self.save_detection_image(vis_frame, results, task_name)
+                                
+                                # 调用告警回调
+                                if on_alert:
+                                    on_alert(vis_frame, {
+                                        'confidence': 1.0,  # 置信度设为1.0
+                                        'image_url': save_filename,
+                                        'alert_type': 'belt_deviation_detecion',
+                                        'message': '皮带跑偏告警'
+                                    })
+                
+                # 检查是否需要停止
+                if stop_event.is_set():
+                    break
+                
+                # 控制处理速度
+                time.sleep(0.01)
                 
         except Exception as e:
-            app.logger.error(f"Error in belt deviation detection: {str(e)}")
+            app.logger.error(f"皮带跑偏检测错误: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
             raise
