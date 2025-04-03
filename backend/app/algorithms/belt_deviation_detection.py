@@ -101,8 +101,9 @@ class BeltDeviationDetection(BaseAlgorithm):
                                 
                 # 使用模型检测皮带
                 # TODO
-                results = model(processed, imgsz=640, verbose=False, conf=confidence, classes=[0])
-                
+                results = model(processed, imgsz=640, verbose=False, conf=confidence)
+                #results = model(processed, imgsz=640, verbose=False, conf=confidence, classes=[0])
+
                 # 创建一个副本用于可视化
                 vis_frame = frame.copy()
                 
@@ -139,6 +140,8 @@ class BeltDeviationDetection(BaseAlgorithm):
                                     is_deviation = True
                                     break
                             
+                            # for test
+                            is_deviation = True
                             # 在可视化图像上绘制皮带轮廓
                             cv2.drawContours(vis_frame, [belt_contour], -1, (0, 255, 0), 2)
                             
