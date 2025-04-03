@@ -134,10 +134,6 @@ class BeltDeviationDetection(BaseAlgorithm):
                                     is_deviation = True
                                     break
                             
-                            # for test
-                            is_deviation = True
-
-                            
                             # 如果检测到跑偏并且需要告警
                             if is_deviation and self.need_alert_again(last_alert_time, alertThreshold):
                                 app.logger.warning("检测到皮带跑偏！")
@@ -156,20 +152,19 @@ class BeltDeviationDetection(BaseAlgorithm):
                                 cv2.drawContours(vis_frame, [belt_contour], -1, (0, 255, 0), 2)
                                                                 
                                 # 获取YOLO的可视化结果
-                                if results is not None and len(results) > 0:
-                                    plotted_img = results[0].plot()
-                                    if isinstance(plotted_img, torch.Tensor):
-                                        plotted_img = plotted_img.cpu().numpy()
-                                    
-                                    # 在YOLO结果上绘制边界线和轮廓
-                                    for line in actual_lines:
-                                        cv2.line(plotted_img, line[0], line[1], (0, 0, 255), 2)
-                                    
-                                    cv2.drawContours(plotted_img, [belt_contour], -1, (0, 255, 0), 2)
-                                    
-                                    # 保存带有额外信息的图像
-                                    save_filename = self.save_detection_image(plotted_img, None, task_name, use_frame=True)
+                                plotted_img = results[0].plot()
+                                if isinstance(plotted_img, torch.Tensor):
+                                    plotted_img = plotted_img.cpu().numpy()
                                 
+                                # 在YOLO结果上绘制边界线和轮廓
+                                for line in actual_lines:
+                                    cv2.line(plotted_img, line[0], line[1], (0, 0, 255), 2)
+                                
+                                cv2.drawContours(plotted_img, [belt_contour], -1, (0, 255, 0), 2)
+                                
+                                # 保存带有额外信息的图像
+                                save_filename = self.save_detection_image(plotted_img, None, task_name, use_frame=True)
+                            
                                 # 调用告警回调
                                 if on_alert:
                                     on_alert(vis_frame, {
