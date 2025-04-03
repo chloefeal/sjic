@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 import cv2
 from shapely.geometry import Point, Polygon
+import torch
 
 class BaseAlgorithm(Algorithm):
     """算法基类"""
@@ -65,12 +66,21 @@ class BaseAlgorithm(Algorithm):
         except Exception as e:
             app.logger.error(f"Error sending alert to external API: {str(e)}")
 
-    # return filename, None
-    def save_detection_image(self, frame, results, task_name):
-        """保存检测图片"""
+    def save_detection_image(self, frame, results=None, task_name=None, use_frame=False):
+        """保存检测图像
+        
+        Args:
+            frame: 原始图像或已经绘制好的图像
+            results: 检测结果
+            task_name: 任务名称
+            use_frame: 是否直接使用传入的frame而不是results.plot()
+        
+        Returns:
+            保存的图像文件名
+        """
         try:
             # 创建保存目录
-            save_dir = app.config['ALERT_FOLDER']
+            save_dir = save_dir = app.config['ALERT_FOLDER']
             os.makedirs(save_dir, exist_ok=True)
             
             # 生成文件名
@@ -79,14 +89,24 @@ class BaseAlgorithm(Algorithm):
             filepath = os.path.join(save_dir, filename)
             
             # 保存图像
-            cv2.imwrite(filepath, results[0].plot())
+            if use_frame:
+                # 直接使用传入的frame
+                cv2.imwrite(filepath, frame)
+            else:
+                # 使用results.plot()
+                if results is not None and len(results) > 0:
+                    plotted_img = results[0].plot()
+                    if isinstance(plotted_img, torch.Tensor):
+                        plotted_img = plotted_img.cpu().numpy()
+                    cv2.imwrite(filepath, plotted_img)
+                else:
+                    cv2.imwrite(filepath, frame)
             
             return filename
-            
         except Exception as e:
             app.logger.error(f"Error saving detection image: {str(e)}")
-            return None 
-        
+            return None
+
     def need_alert_again(self, last_alert_time, alertThreshold):
         """判断是否需要再次告警"""
         if last_alert_time is None:

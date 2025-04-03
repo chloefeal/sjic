@@ -6,7 +6,8 @@ import numpy as np
 from datetime import datetime
 from shapely.geometry import LineString, Polygon
 import time
-from app.utils.calc import transform_points_from_frontend_to_backend, get_letterbox_params, preprocess
+from app.utils.calc import transform_points_from_frontend_to_backend, get_letterbox_params, preprocess, preprocess_return_numpy
+import torch
 
 
 class BeltDeviationDetection(BaseAlgorithm):
@@ -103,14 +104,6 @@ class BeltDeviationDetection(BaseAlgorithm):
                 # TODO
                 results = model(processed, imgsz=640, verbose=False, conf=confidence)
                 #results = model(processed, imgsz=640, verbose=False, conf=confidence, classes=[0])
-
-                # 创建一个副本用于可视化
-                vis_frame = processed.copy()
-                
-                # 绘制边界线
-                for line in actual_lines:
-                    cv2.line(vis_frame, line[0], line[1], (0, 0, 255), 2)
-                    app.logger.debug(f"line: {line}")
                 
                 # 检查是否有分割结果
                 if len(results) > 0 and hasattr(results[0], 'masks') and results[0].masks is not None:
@@ -143,16 +136,39 @@ class BeltDeviationDetection(BaseAlgorithm):
                             
                             # for test
                             is_deviation = True
-                            # 在可视化图像上绘制皮带轮廓
-                            cv2.drawContours(vis_frame, [belt_contour], -1, (0, 255, 0), 2)
+
                             
                             # 如果检测到跑偏并且需要告警
                             if is_deviation and self.need_alert_again(last_alert_time, alertThreshold):
                                 app.logger.warning("检测到皮带跑偏！")
                                 last_alert_time = datetime.now()
+
+                                # 创建一个副本用于可视化
+                                processed_numpy = preprocess_return_numpy(frame, new_h, new_w, top, bottom, left, right)               
+                                vis_frame = processed_numpy.copy()
                                 
-                                # 保存检测图像
-                                save_filename = self.save_detection_image(vis_frame, results, task_name)
+                                # 绘制边界线
+                                for line in actual_lines:
+                                    cv2.line(vis_frame, line[0], line[1], (0, 0, 255), 2)
+                                    app.logger.debug(f"line: {line}")
+                                
+                                # 在可视化图像上绘制皮带轮廓
+                                cv2.drawContours(vis_frame, [belt_contour], -1, (0, 255, 0), 2)
+                                                                
+                                # 获取YOLO的可视化结果
+                                if results is not None and len(results) > 0:
+                                    plotted_img = results[0].plot()
+                                    if isinstance(plotted_img, torch.Tensor):
+                                        plotted_img = plotted_img.cpu().numpy()
+                                    
+                                    # 在YOLO结果上绘制边界线和轮廓
+                                    for line in actual_lines:
+                                        cv2.line(plotted_img, line[0], line[1], (0, 0, 255), 2)
+                                    
+                                    cv2.drawContours(plotted_img, [belt_contour], -1, (0, 255, 0), 2)
+                                    
+                                    # 保存带有额外信息的图像
+                                    save_filename = self.save_detection_image(plotted_img, None, task_name, use_frame=True)
                                 
                                 # 调用告警回调
                                 if on_alert:

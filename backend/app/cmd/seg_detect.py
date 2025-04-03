@@ -100,6 +100,27 @@ def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scale
     
     return img, ratio, (dw, dh)
 
+def map_mask_to_original(mask, original_shape, ratio, pad):
+    """将模型输出的掩码映射回原始图像尺寸"""
+    # 首先调整掩码到 letterbox 尺寸
+    mask_resized = cv2.resize(
+        mask, 
+        (int(original_shape[1] * ratio[0]), int(original_shape[0] * ratio[1])),
+        interpolation=cv2.INTER_NEAREST
+    )
+    
+    # 创建与原始图像相同大小的空掩码
+    full_mask = np.zeros(original_shape[:2], dtype=np.uint8)
+    
+    # 计算填充
+    top, left = int(pad[1]), int(pad[0])
+    h, w = mask_resized.shape[:2]
+    
+    # 将调整大小后的掩码放入正确位置
+    full_mask[0:h, 0:w] = mask_resized
+    
+    return full_mask
+
 def main():
     args = parse_args()
     
@@ -156,9 +177,6 @@ def main():
             if frame_count == 0:
                 print(f"帧尺寸: {frame.shape}, 类型: {frame.dtype}")
             
-            # 创建可视化图像
-            vis_frame = frame.copy()
-            
             # 调整图像大小，保持长宽比
             img_resized, ratio, pad = letterbox(frame, new_shape=(640, 640))
             
@@ -169,6 +187,9 @@ def main():
             
             # 使用调整大小后的图像进行推理
             results = model(img_resized, conf=args.conf)
+            
+            # 创建可视化图像 - 使用原始帧
+            vis_frame = frame.copy()
             
             # 绘制边界线
             for line in boundary_lines:

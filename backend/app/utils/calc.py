@@ -23,6 +23,13 @@ def get_letterbox_params(h, w, target_size=640):
     except Exception as e:
         print(f"Error in get_letterbox_params: {e}")
         return None, None, None, None, None, None
+    
+def preprocess_return_numpy(frame, new_h, new_w, top, bottom, left, right):
+    """预处理图像，进行 letterbox 变换"""
+    # 确保返回的是 NumPy 数组，而不是 PyTorch 张量
+    processed = cv2.resize(frame, (new_w, new_h))
+    processed = cv2.copyMakeBorder(processed, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114))
+    return processed  # 返回 NumPy 数组
 
 def preprocess(frame, new_h, new_w, top, bottom, left, right):
     try:
