@@ -105,11 +105,12 @@ class BeltDeviationDetection(BaseAlgorithm):
                 #results = model(processed, imgsz=640, verbose=False, conf=confidence, classes=[0])
 
                 # 创建一个副本用于可视化
-                vis_frame = frame.copy()
+                vis_frame = processed.copy()
                 
                 # 绘制边界线
                 for line in actual_lines:
                     cv2.line(vis_frame, line[0], line[1], (0, 0, 255), 2)
+                    app.logger.debug(f"line: {line}")
                 
                 # 检查是否有分割结果
                 if len(results) > 0 and hasattr(results[0], 'masks') and results[0].masks is not None:
