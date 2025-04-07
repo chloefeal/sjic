@@ -23,14 +23,18 @@ class BeltDeviationDetection(BaseAlgorithm):
         print(type_name)
         algorithm = Algorithm.query.filter_by(type=type_name).first()
         print(algorithm)
-        if not algorithm:
+        if algorithm:
+            algorithm.name = '皮带跑偏检测/堆煤检测'
+            algorithm.description = '皮带跑偏检测算法/堆煤检测算法，当超过设置的边界线时推送告警。'
+
+        else:
             algorithm = cls(
-                name='皮带跑偏检测',
+                name='皮带跑偏检测/堆煤检测',
                 type=type_name,
                 description='皮带跑偏检测算法/堆煤检测算法，当超过设置的边界线时推送告警。'
             )
             db.session.add(algorithm)
-            db.session.commit()
+        db.session.commit()
     
     def process(self, camera, parameters):
         """处理图像"""
