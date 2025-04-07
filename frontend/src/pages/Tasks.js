@@ -375,7 +375,7 @@ function Tasks() {
       case 'belt_deviation_detecion':
         return (
           <>
-            <Typography variant="subtitle2" gutterBottom>皮带跑偏检测参数：</Typography>
+            <Typography variant="subtitle2" gutterBottom>检测参数：</Typography>
             <Grid container spacing={2}>
               <Grid item xs={12}>
                 <Typography>

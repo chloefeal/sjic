@@ -362,11 +362,11 @@ function BeltDeviationCalibrationTool({ cameraId, algorithm_parameters, onCalibr
   return (
     <>
       <Button variant="outlined" onClick={() => setOpen(true)}>
-        跑偏检测标定
+        边界标定
       </Button>
 
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>跑偏检测标定</DialogTitle>
+        <DialogTitle>边界标定</DialogTitle>
         <DialogContent>
           {/* 操作说明 */}
           <Paper style={{ 

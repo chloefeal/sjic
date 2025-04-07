@@ -27,7 +27,7 @@ class BeltDeviationDetection(BaseAlgorithm):
             algorithm = cls(
                 name='皮带跑偏检测',
                 type=type_name,
-                description='皮带跑偏检测算法，当跑偏超过设置阈值时推送告警'
+                description='皮带跑偏检测算法/堆煤检测算法，当超过设置的边界线时推送告警。'
             )
             db.session.add(algorithm)
             db.session.commit()
