@@ -29,67 +29,36 @@ def main(url):
     print(f"原始帧率: {fps} FPS")
 
     # 目标帧率和批处理大小
-    target_fps = 20
-    frame_delay = 1.0 / target_fps
-    batch_size = 8
-    batch = []
-    
-    # FPS 计算相关变量
-    frame_count = 0
-    batch_count = 0
-    start_time = time.time()
-    fps_update_interval = 2.0  # 每2秒更新一次FPS
+    next_time = time.time()
 
-    while cap.isOpened():
-        batch_start_time = time.time()
-        
-        # 收集一个批次的帧
-        while len(batch) < batch_size:
+    try:
+        while cap.isOpened():
+            # 持续跳过帧，直到到达下一秒
+            while_times = 0
+            while time.time() < next_time:
+                if not cap.grab():  # 跳过帧（不解码）
+                    print("无法获取帧或流已断开")
+                    time.sleep(0.1)
+                    continue
+                while_times += 1
+            print(f"while_times: {while_times}")
+            next_time += 1
             ret, frame = cap.read()
             if not ret:
                 break
                 
             # 预处理
             processed = preprocess(frame, new_h, new_w, top, bottom, left, right)
-            if processed is not None:
-                batch.append(processed)
-                frame_count += 1
+
+            results = model(processed, imgsz=640, verbose=False)
             
-            # 控制采集帧率
-            elapsed = time.time() - batch_start_time
-            if elapsed < frame_delay * len(batch):
-                time.sleep(frame_delay * len(batch) - elapsed)
-
-        if not batch:
-            break
-
-        # 批量推理
-        batch_tensor = torch.cat(batch)
-        results = model(batch_tensor, imgsz=640, verbose=False)
-        batch_count += 1
-        
-        # 显示结果
-        for result in results:
-            annotated_frame = result.plot()
-            cv2.imshow("YOLO RTSP", annotated_frame)
+            # 显示结果
+            for result in results:
+                annotated_frame = result.plot()
+                cv2.imshow("YOLO RTSP", annotated_frame)
             
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-
-        # 计算和显示FPS
-        current_time = time.time()
-        elapsed_total = current_time - start_time
-        if elapsed_total >= fps_update_interval:
-            processing_fps = frame_count / elapsed_total
-            print(f"处理帧率: {processing_fps:.2f} FPS (frames: {frame_count}, batches: {batch_count})")
-            # 重置计数器
-            start_time = current_time
-            frame_count = 0
-            batch_count = 0
-
-        # 清空批次
-        batch = []
-
+    except Exception as e:
+        print(f"error: {e}")
     cap.release()
     cv2.destroyAllWindows()
 
