@@ -4,6 +4,8 @@ import torch
 
 def get_letterbox_params(h, w, target_size=640):
     try:
+        if h is None or w is None or h == 0 or w == 0:
+            return None, None, None, None, None, None
         # 计算缩放比例
         scale = min(target_size / h, target_size / w)
         new_h, new_w = int(h * scale), int(w * scale)
