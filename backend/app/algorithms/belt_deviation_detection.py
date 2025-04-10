@@ -48,6 +48,10 @@ class BeltDeviationDetection(BaseAlgorithm):
             last_alert_time = None
             camera_id = parameters.get('camera_id')
             stop_event = parameters.get('stop_event')
+
+            if camera is None:
+                app.logger.error(f"error: camera is None")
+                return
             
             # 获取标定数据
             calibration = algorithm_parameters.get('calibration', {})
