@@ -47,6 +47,10 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             points = None
             frame_size = None
             roi_points = None
+
+            if camera is None:
+                app.logger.error(f"error: camera is None")
+                return
             
             if detection_region:
                 points = detection_region.get('points', [])
