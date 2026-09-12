@@ -4,15 +4,17 @@ import {
     TableRow, Button, IconButton, Typography, Box, Dialog, DialogTitle,
     DialogContent, DialogActions, TextField, Chip, Select, MenuItem, OutlinedInput
 } from '@mui/material';
-import { Edit, Delete, Computer, Circle } from '@mui/icons-material';
+import { Edit, Delete, Computer, Circle, RestartAlt } from '@mui/icons-material';
 import axios from '../utils/axios';
 
 function Nodes() {
+    const isCustomerAdmin = localStorage.getItem('user_role') === 'customer';
     const [nodes, setNodes] = useState([]);
     const [cameras, setCameras] = useState([]);
     const [openDialog, setOpenDialog] = useState(false);
     const [editingNode, setEditingNode] = useState(null);
     const [formData, setFormData] = useState({ name: '', bound_camera_ids: [] });
+    const [restartingId, setRestartingId] = useState(null);
 
     useEffect(() => {
         fetchNodes();
@@ -67,6 +69,22 @@ function Nodes() {
             } catch (error) {
                 console.error('Error deleting node:', error);
             }
+        }
+    };
+
+    const handleRestartAgent = async (node) => {
+        if (!window.confirm(`确定远程重启边缘 Agent「${node.name}」？\n需盒子侧 Docker Compose（restart: unless-stopped）运行，否则进程退出后不会自动拉起。`)) {
+            return;
+        }
+        setRestartingId(node.id);
+        try {
+            const result = await axios.post(`/api/nodes/${node.id}/restart`);
+            window.alert(result.message || '重启指令已下发');
+        } catch (error) {
+            console.error('Error restarting node:', error);
+            window.alert('重启失败: ' + (error.response?.data?.error || error.message));
+        } finally {
+            setRestartingId(null);
         }
     };
 
@@ -151,10 +169,20 @@ function Nodes() {
                                         </TableCell>
                                         <TableCell>{node.last_heartbeat || "-"}</TableCell>
                                         <TableCell>
-                                            <IconButton onClick={() => handleEdit(node)} color="primary">
+                                            <IconButton onClick={() => handleEdit(node)} color="primary" title="编辑">
                                                 <Edit />
                                             </IconButton>
-                                            <IconButton onClick={() => handleDelete(node.id)} color="error">
+                                            {isCustomerAdmin && (
+                                                <IconButton
+                                                    onClick={() => handleRestartAgent(node)}
+                                                    color="warning"
+                                                    title="重启 Agent"
+                                                    disabled={restartingId === node.id}
+                                                >
+                                                    <RestartAlt />
+                                                </IconButton>
+                                            )}
+                                            <IconButton onClick={() => handleDelete(node.id)} color="error" title="移除">
                                                 <Delete />
                                             </IconButton>
                                         </TableCell>

@@ -116,6 +116,32 @@ class TaskManager:
         else:
             logger.warning(f"Task {task_id} not found or not running.")
 
+    def stop_all_tasks_for_restart(self, join_timeout=8):
+        """
+        进程重启前停止全部任务，但保留 tasks.json，便于重启后 reload_tasks 自恢复。
+        """
+        task_ids = list(self.stop_events.keys())
+        if not task_ids:
+            logger.info("No active tasks to stop before restart")
+            return
+
+        logger.warning(f"Stopping {len(task_ids)} tasks for agent restart (keeping persistence)")
+        for task_id in task_ids:
+            try:
+                self.stop_events[task_id].set()
+            except Exception as e:
+                logger.warning(f"Failed to signal stop for task {task_id}: {e}")
+
+        deadline = time.time() + join_timeout
+        for task_id, thread in list(self.active_tasks.items()):
+            remaining = max(0.0, deadline - time.time())
+            if remaining <= 0:
+                break
+            try:
+                thread.join(timeout=remaining)
+            except Exception:
+                pass
+
     def _ensure_model_exists(self, model_info):
         """如果本地没有 `.engine` 或 `.onnx`，从云端下载"""
         filename = model_info.get('filename')

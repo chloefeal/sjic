@@ -3,7 +3,7 @@ import {
   Grid, TextField, Button, Typography, Snackbar, Alert,
   Card, CardContent, Box, Avatar, Stack
 } from '@mui/material';
-import { Save, CloudUpload, Delete } from '@mui/icons-material';
+import { Save, CloudUpload, Delete, RestartAlt } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
 
 const DEFAULT_SETTINGS = {
@@ -29,10 +29,12 @@ const DEFAULT_SETTINGS = {
 
 function Settings() {
   const isVendor = localStorage.getItem('user_role') === 'vendor';
+  const isCustomerAdmin = localStorage.getItem('user_role') === 'customer';
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [message, setMessage] = useState({ type: '', content: '' });
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [restartingBackend, setRestartingBackend] = useState(false);
 
   const showMsg = (type, content) => {
     setMessage({ type, content });
@@ -147,6 +149,20 @@ function Settings() {
       window.dispatchEvent(new Event('branding-updated'));
     } catch (error) {
       showMsg('error', '清除失败: ' + error.message);
+    }
+  };
+
+  const handleRestartBackend = async () => {
+    if (!window.confirm('确定远程重启管理平台后端？服务将短暂中断，Docker 部署下会自动拉起。')) {
+      return;
+    }
+    setRestartingBackend(true);
+    try {
+      const result = await axios.post('/api/admin/restart-backend');
+      showMsg('success', result.message || '后端正在重启…');
+    } catch (error) {
+      showMsg('error', '重启失败: ' + (error.response?.data?.error || error.message));
+      setRestartingBackend(false);
     }
   };
 
@@ -294,6 +310,29 @@ function Settings() {
           </CardContent>
         </Card>
       </Grid>
+
+      {isCustomerAdmin && (
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>服务运维</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                程序异常时可远程重启后端。平台与边缘均需 Docker Compose（restart: unless-stopped）部署才会自动拉起；
+                边缘 Agent 请在「节点」页按台重启。
+              </Typography>
+              <Button
+                variant="outlined"
+                color="warning"
+                startIcon={<RestartAlt />}
+                onClick={handleRestartBackend}
+                disabled={restartingBackend}
+              >
+                {restartingBackend ? '正在重启…' : '重启管理平台后端'}
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
 
       <Grid item xs={12}>
         <Button

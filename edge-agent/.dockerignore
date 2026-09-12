@@ -1,0 +1,13 @@
+models/
+alerts/
+logs/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.git/
+.gitignore
+readme.md
+image.png
+check_jetson.sh
+export_tensorrt.sh

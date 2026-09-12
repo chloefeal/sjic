@@ -107,3 +107,27 @@ python: Python 3.10.12
 git clone //gitee.com/MooreThreads-AI-SOC/m1000_npu_model_zoo.git
 cd Object_Detection/001yolov8m
 python export.py
+
+## Docker 部署与远程重启（推荐）
+
+平台可通过 MQTT 下发 `agent/restart`，Agent 优雅停任务后退出进程；
+需用 Docker Compose `restart: unless-stopped` 自动拉起容器。
+
+### Jetson（默认）
+
+基础镜像：`ultralytics/ultralytics:latest-jetson-jetpack6`（`--runtime=nvidia` + `--ipc=host`）。
+
+```bash
+# 1. 编辑 config.yaml：architecture: jetson，并填写平台 MQTT / API 地址
+# 2. 构建并启动
+docker compose up -d --build
+```
+
+### x86 / CPU 调试
+
+```bash
+# 先将 config.yaml 中 architecture 改为 x86
+docker compose --profile x86 up -d --build
+```
+
+详见同目录 `Dockerfile`、`docker-compose.yml`。

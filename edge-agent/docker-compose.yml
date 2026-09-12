@@ -1,0 +1,61 @@
+# SJIC Edge Agent — 盒子侧 Docker Compose
+#
+# Jetson（默认）:
+#   1. 编辑 config.yaml：architecture=jetson，填入平台 MQTT/API 地址
+#   2. docker compose up -d --build
+#
+# 远程重启：平台下发 agent/restart → 容器进程退出 → restart: unless-stopped 自动拉起
+#
+# x86/CPU 调试:
+#   docker compose --profile x86 up -d --build
+
+services:
+  edge-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${EDGE_BASE_IMAGE:-ultralytics/ultralytics:latest-jetson-jetpack6}
+        # Jetson 基础镜像已含 ultralytics/torch，只装通用依赖即可
+        REQUIREMENTS_FILE: ${EDGE_REQUIREMENTS:-requirements.txt}
+    image: ${EDGE_IMAGE:-sjic-edge:jetson}
+    container_name: sjic-edge
+    restart: unless-stopped
+    # host 网络：真实 MAC / 局域网 IP、MQTT、RTSP 更稳定
+    network_mode: host
+    ipc: host
+    runtime: ${EDGE_RUNTIME:-nvidia}
+    environment:
+      - TZ=Asia/Shanghai
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./models:/app/models
+      - ./alerts:/app/alerts
+      - ./logs:/app/logs
+    # 仅当主机存在 USB 摄像头时再打开；没有 /dev/video0 时 compose 会启动失败
+    # devices:
+    #   - /dev/video0:/dev/video0
+
+  # PC / 无 NVIDIA runtime 时的调试镜像（CPU）
+  edge-agent-x86:
+    profiles: ["x86"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${EDGE_BASE_IMAGE_X86:-python:3.10-slim}
+        REQUIREMENTS_FILE: requirements-cpu.txt
+    image: sjic-edge:x86
+    container_name: sjic-edge
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./models:/app/models
+      - ./alerts:/app/alerts
+      - ./logs:/app/logs
