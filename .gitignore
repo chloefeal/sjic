@@ -101,6 +101,10 @@ coverage/
 # Alert images (runtime generated)
 backend/alerts/
 
+# Branding logos (runtime uploaded)
+backend/branding/
+/branding/
+
 # Calibration images (runtime generated)
 backend/images/calibration_images/
 

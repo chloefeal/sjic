@@ -1,95 +1,96 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Grid, Paper, TextField, Button, Typography, Snackbar, Alert,
-  Card, CardContent, CardActions, Divider
+  Grid, TextField, Button, Typography, Snackbar, Alert,
+  Card, CardContent, Box, Avatar, Stack
 } from '@mui/material';
-import { Save } from '@mui/icons-material';
-import axios from '../utils/axios';
+import { Save, CloudUpload, Delete } from '@mui/icons-material';
+import axios, { getBaseUrl } from '../utils/axios';
+
+const DEFAULT_SETTINGS = {
+  external_alert_api: {
+    url: '',
+    token: '',
+    secret: ''
+  },
+  alert: {
+    retention_days: 30,
+    image_quality: 95
+  },
+  system: {
+    log_level: 'INFO'
+  },
+  branding: {
+    company_name: '',
+    product_name: '智算检测平台',
+    logo_filename: '',
+    logo_url: ''
+  }
+};
 
 function Settings() {
-  const [settings, setSettings] = useState({
-    external_alert_api: {
-      url: '',
-      token: '',
-      secret: ''
-    },
-    alert: {
-      retention_days: 30,
-      image_quality: 95
-    },
-    system: {
-      log_level: 'INFO'
-    }
-  });
+  const isVendor = localStorage.getItem('user_role') === 'vendor';
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [message, setMessage] = useState({ type: '', content: '' });
   const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
+  const showMsg = (type, content) => {
+    setMessage({ type, content });
+    setOpenSnackbar(true);
+  };
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const response = await axios.get('/api/settings');
-      console.log(response);
-      // 确保返回的数据包含所有必要的字段
-      const defaultSettings = {
-        external_alert_api: {
-          url: '',
-          token: '',
-          secret: ''
-        },
-        alert: {
-          retention_days: 30,
-          image_quality: 95
-        },
-        system: {
-          log_level: 'INFO'
-        }
-      };
-
-      // 深度合并默认值和返回的数据
       const mergedSettings = {
-        ...defaultSettings,
+        ...DEFAULT_SETTINGS,
         ...response,
         external_alert_api: {
-          ...defaultSettings.external_alert_api,
+          ...DEFAULT_SETTINGS.external_alert_api,
           ...(response.external_alert_api || {})
         },
         alert: {
-          ...defaultSettings.alert,
+          ...DEFAULT_SETTINGS.alert,
           ...(response.alert || {})
         },
         system: {
-          ...defaultSettings.system,
+          ...DEFAULT_SETTINGS.system,
           ...(response.system || {})
+        },
+        branding: {
+          ...DEFAULT_SETTINGS.branding,
+          ...(response.branding || {})
         }
       };
-
       setSettings(mergedSettings);
     } catch (error) {
-      setMessage({
-        type: 'error',
-        content: '获取配置失败: ' + error.message
-      });
-      setOpenSnackbar(true);
+      showMsg('error', '获取配置失败: ' + error.message);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const handleSave = async () => {
     try {
-      await axios.post('/api/settings', settings);
-      setMessage({
-        type: 'success',
-        content: '保存成功'
-      });
-      setOpenSnackbar(true);
+      const payload = {
+        external_alert_api: settings.external_alert_api,
+        alert: settings.alert,
+        system: settings.system,
+      };
+      if (isVendor) {
+        payload.branding = {
+          company_name: settings.branding.company_name,
+          product_name: settings.branding.product_name,
+          logo_filename: settings.branding.logo_filename || '',
+        };
+      }
+      await axios.post('/api/settings', payload);
+      showMsg('success', '保存成功');
+      window.dispatchEvent(new Event('branding-updated'));
     } catch (error) {
-      setMessage({
-        type: 'error',
-        content: '保存失败: ' + error.message
-      });
-      setOpenSnackbar(true);
+      showMsg('error', '保存失败: ' + error.message);
     }
   };
 
@@ -103,13 +104,119 @@ function Settings() {
     }));
   };
 
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      const result = await axios.post('/api/settings/logo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setSettings(prev => ({
+        ...prev,
+        branding: {
+          ...prev.branding,
+          ...(result.branding || {}),
+        }
+      }));
+      showMsg('success', 'Logo 上传成功');
+      window.dispatchEvent(new Event('branding-updated'));
+    } catch (error) {
+      showMsg('error', 'Logo 上传失败: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    try {
+      const result = await axios.delete('/api/settings/logo');
+      setSettings(prev => ({
+        ...prev,
+        branding: {
+          ...prev.branding,
+          ...(result.branding || {}),
+          logo_filename: '',
+          logo_url: '',
+        }
+      }));
+      showMsg('success', 'Logo 已清除');
+      window.dispatchEvent(new Event('branding-updated'));
+    } catch (error) {
+      showMsg('error', '清除失败: ' + error.message);
+    }
+  };
+
+  const logoSrc = settings.branding.logo_url
+    ? `${getBaseUrl()}${settings.branding.logo_url}`
+    : '';
+
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
         <Typography variant="h5" gutterBottom>系统设置</Typography>
       </Grid>
 
-      {/* 外部告警API设置 */}
+      {isVendor && (
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>品牌定制</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                用于集成商 / 运营商白标：登录页与顶栏将显示公司名称与 Logo。
+              </Typography>
+              <TextField
+                fullWidth
+                label="公司名称"
+                value={settings.branding.company_name}
+                onChange={handleChange('branding', 'company_name')}
+                margin="normal"
+              />
+              <TextField
+                fullWidth
+                label="产品名称"
+                value={settings.branding.product_name}
+                onChange={handleChange('branding', 'product_name')}
+                margin="normal"
+              />
+              <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 2 }}>
+                <Avatar
+                  variant="rounded"
+                  src={logoSrc || undefined}
+                  sx={{ width: 64, height: 64, bgcolor: 'grey.800' }}
+                >
+                  {!logoSrc && 'Logo'}
+                </Avatar>
+                <Box>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<CloudUpload />}
+                    disabled={uploading}
+                    sx={{ mr: 1 }}
+                  >
+                    {uploading ? '上传中…' : '上传 Logo'}
+                    <input type="file" hidden accept="image/*" onChange={handleLogoUpload} />
+                  </Button>
+                  {logoSrc && (
+                    <Button
+                      color="inherit"
+                      startIcon={<Delete />}
+                      onClick={handleLogoRemove}
+                    >
+                      清除
+                    </Button>
+                  )}
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
@@ -140,7 +247,6 @@ function Settings() {
         </Card>
       </Grid>
 
-      {/* 告警设置 */}
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
@@ -165,7 +271,6 @@ function Settings() {
         </Card>
       </Grid>
 
-      {/* 系统设置 */}
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
@@ -214,4 +319,4 @@ function Settings() {
   );
 }
 
-export default Settings; 
+export default Settings;

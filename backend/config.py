@@ -102,6 +102,9 @@ class Config:
     else:
         ALERT_FOLDER = os.environ.get('ALERT_STORAGE_PATH') or os.path.join(base_dir, 'alerts')
 
+    # 品牌 Logo 等静态资源
+    BRANDING_FOLDER = os.environ.get('BRANDING_STORAGE_PATH') or os.path.join(base_dir, 'branding')
+
     # 日志配置
     LOG_FOLDER = 'logs'
     LOG_FILENAME = f'app_{datetime.now().strftime("%Y%m%d")}.log'

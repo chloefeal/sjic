@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
 import VideoStreams from './pages/VideoStreams';
 import Models from './pages/Models';
 import Tasks from './pages/Tasks';
@@ -38,7 +39,14 @@ function App() {
           <Route path="/" element={
             <PrivateRoute>
               <Layout>
-                <Navigate to="/streams" />
+                <Navigate to="/dashboard" replace />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/dashboard" element={
+            <PrivateRoute>
+              <Layout>
+                <Dashboard />
               </Layout>
             </PrivateRoute>
           } />

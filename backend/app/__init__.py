@@ -72,7 +72,7 @@ def create_app(config_class=Config):
 
     # 确保应用核心工作目录与实例目录存在
     os.makedirs(app.instance_path, exist_ok=True)
-    for folder_key in ['MODEL_FOLDER', 'VIDEO_FOLDER', 'IMAGE_FOLDER', 'ALERT_FOLDER', 'LOG_FOLDER']:
+    for folder_key in ['MODEL_FOLDER', 'VIDEO_FOLDER', 'IMAGE_FOLDER', 'ALERT_FOLDER', 'LOG_FOLDER', 'BRANDING_FOLDER']:
         folder_path = app.config.get(folder_key)
         if folder_path:
             os.makedirs(folder_path, exist_ok=True)

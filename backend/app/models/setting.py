@@ -1,17 +1,17 @@
 from flask import current_app
 from app.extensions import db
 from datetime import datetime
-import json
 from sqlalchemy.orm.attributes import flag_modified
+import copy
+
 
 class Setting(db.Model):
     __tablename__ = 'settings'
-    
+
     id = db.Column(db.Integer, primary_key=True)
-    config = db.Column(db.JSON, nullable=False, default=dict)  # 存储所有配置项
+    config = db.Column(db.JSON, nullable=False, default=dict)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
-    # 默认配置
     DEFAULT_CONFIG = {
         'external_alert_api': {
             'url': '',
@@ -24,46 +24,61 @@ class Setting(db.Model):
         },
         'system': {
             'log_level': 'INFO'
+        },
+        'branding': {
+            'company_name': '',
+            'product_name': '智算检测平台',
+            'logo_filename': ''
         }
     }
+
+    @classmethod
+    def deep_merge(cls, base, override):
+        """递归合并：override 覆盖 base，缺失键保留默认。"""
+        result = copy.deepcopy(base) if base is not None else {}
+        if not isinstance(override, dict):
+            return result
+        for key, value in override.items():
+            if (
+                key in result
+                and isinstance(result[key], dict)
+                and isinstance(value, dict)
+            ):
+                result[key] = cls.deep_merge(result[key], value)
+            else:
+                result[key] = copy.deepcopy(value)
+        return result
+
+    @classmethod
+    def merged_config(cls, stored=None):
+        return cls.deep_merge(cls.DEFAULT_CONFIG, stored or {})
 
     def __init__(self):
         super().__init__()
         current_app.logger.info("Creating new Setting instance")
-        self.config = self.DEFAULT_CONFIG.copy()
+        self.config = copy.deepcopy(self.DEFAULT_CONFIG)
         current_app.logger.info(f"Initial config: {self.config}")
 
     def to_dict(self):
-        current_app.logger.info(f"Converting to dict, current config: {self.config}")
-        return self.config
+        merged = self.merged_config(self.config)
+        current_app.logger.info(f"Converting to dict, current config: {merged}")
+        return merged
 
     def update(self, data):
-        """更新设置"""
+        """更新设置（与默认值合并后写入）"""
         current_app.logger.info(f"Updating config with data: {data}")
         current_app.logger.info(f"Current config before update: {self.config}")
 
-        # 确保 config 不是 None
         if self.config is None:
             current_app.logger.warning("Config was None, resetting to default")
-            self.config = self.DEFAULT_CONFIG.copy()
-
-        # 递归更新配置
-        def update_dict(current, new):
-            for key, value in new.items():
-                if key in current:
-                    if isinstance(value, dict) and isinstance(current[key], dict):
-                        update_dict(current[key], value)
-                    else:
-                        current_app.logger.info(f"Updating {key}: {current[key]} -> {value}")
-                        current[key] = value
+            self.config = copy.deepcopy(self.DEFAULT_CONFIG)
 
         try:
-            update_dict(self.config, data)
+            # 先与默认合并，再应用提交数据，确保新增配置节可写入
+            base = self.merged_config(self.config)
+            self.config = self.deep_merge(base, data or {})
             current_app.logger.info(f"Config after update: {self.config}")
-            
-            # 显式标记 config 字段已被修改
             flag_modified(self, 'config')
-            
         except Exception as e:
             current_app.logger.error(f"Error updating config: {str(e)}")
             raise

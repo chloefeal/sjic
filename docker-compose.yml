@@ -20,12 +20,14 @@ services:
       - ./models:/app/models
       - ./videos:/app/videos
       - ./logs:/app/logs
+      - ./branding:/app/branding
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Shanghai
       - DATABASE_URL=sqlite:///instance/app.db
       - ALERT_STORAGE_PATH=/app/alerts
+      - BRANDING_STORAGE_PATH=/app/branding
       - MQTT_BROKER_URL=127.0.0.1
       - MQTT_BROKER_PORT=38883
       - STORAGE_TYPE=${STORAGE_TYPE:-NGINX}

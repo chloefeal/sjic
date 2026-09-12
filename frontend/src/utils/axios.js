@@ -33,10 +33,15 @@ const instance = axios.create({
 // 请求拦截器
 instance.interceptors.request.use(
   config => {
-    // 从 localStorage 获取 token
     const token = localStorage.getItem('token');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    // FormData 需由浏览器自动带 multipart boundary
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (config.headers && config.headers['Content-Type']) {
+        delete config.headers['Content-Type'];
+      }
     }
     return config;
   },
