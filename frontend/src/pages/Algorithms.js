@@ -23,6 +23,8 @@ import {
   Box,
   Tooltip,
   Alert,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Edit, Delete, Publish, ContentCopy } from '@mui/icons-material';
 import axios from '../utils/axios';
@@ -47,6 +49,7 @@ function Algorithms() {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formError, setFormError] = useState('');
+  const [tab, setTab] = useState(0); // 0=上架算法 1=系统模板
 
   const [formData, setFormData] = useState({
     name: '',
@@ -187,8 +190,69 @@ function Algorithms() {
     return true;
   })();
 
-  const renderTable = (rows, { isTemplateSection }) => (
-    <TableContainer component={Paper} sx={{ mb: 3 }}>
+  const renderTemplateTable = (rows) => (
+    <TableContainer component={Paper}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>名称</TableCell>
+            <TableCell>标识 type</TableCell>
+            <TableCell>引擎</TableCell>
+            <TableCell>分类</TableCell>
+            <TableCell>派生</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5}>
+                <Typography variant="body2" color="text.secondary">
+                  暂无系统模板（重启后端同步目录后出现）
+                </Typography>
+              </TableCell>
+            </TableRow>
+          )}
+          {rows.map((algorithm) => {
+            const presetCount = Array.isArray(algorithm.parameter_schema?.scene_presets)
+              ? algorithm.parameter_schema.scene_presets.length
+              : 0;
+            return (
+              <TableRow key={algorithm.id}>
+                <TableCell>
+                  {algorithm.name}
+                  {presetCount > 0 && (
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      {presetCount} 个场景预设
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell><Chip label={algorithm.type} size="small" variant="outlined" /></TableCell>
+                <TableCell>
+                  <Chip label={algorithm.engine || algorithm.type} size="small" color="primary" variant="outlined" />
+                </TableCell>
+                <TableCell>{algorithm.category || '-'}</TableCell>
+                <TableCell>
+                  <Tooltip title="派生上架实例（拷贝场景预设，再绑模型发布）">
+                    <IconButton onClick={() => handleDerive(algorithm)} color="primary">
+                      <ContentCopy />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="查看/改描述">
+                    <IconButton onClick={() => handleEdit(algorithm)}>
+                      <Edit />
+                    </IconButton>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
+  const renderInstanceTable = (rows) => (
+    <TableContainer component={Paper}>
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -197,7 +261,7 @@ function Algorithms() {
             <TableCell>引擎</TableCell>
             <TableCell>分类</TableCell>
             {isSuperAdmin && <TableCell>绑定模型</TableCell>}
-            {isSuperAdmin && <TableCell>状态</TableCell>}
+            {isSuperAdmin && <TableCell>发布状态</TableCell>}
             {isSuperAdmin && <TableCell>操作</TableCell>}
           </TableRow>
         </TableHead>
@@ -206,9 +270,7 @@ function Algorithms() {
             <TableRow>
               <TableCell colSpan={isSuperAdmin ? 7 : 4}>
                 <Typography variant="body2" color="text.secondary">
-                  {isTemplateSection
-                    ? '暂无系统模板（重启后端同步目录后出现）'
-                    : (isSuperAdmin ? '暂无上架算法，请从上方模板「派生上架」' : '暂无可用算法')}
+                  {isSuperAdmin ? '暂无上架算法，请到「系统模板」页签派生' : '暂无可用算法'}
                 </Typography>
               </TableCell>
             </TableRow>
@@ -235,16 +297,12 @@ function Algorithms() {
                 <TableCell>{algorithm.category || '-'}</TableCell>
                 {isSuperAdmin && (
                   <TableCell>
-                    {isTemplateSection
-                      ? '—'
-                      : (amodel ? amodel.name : (algorithm.needs_model === false ? '无需模型' : '未绑定'))}
+                    {amodel ? amodel.name : (algorithm.needs_model === false ? '无需模型' : '未绑定')}
                   </TableCell>
                 )}
                 {isSuperAdmin && (
                   <TableCell>
-                    {isTemplateSection ? (
-                      <Chip size="small" label="系统模板" />
-                    ) : algorithm.published ? (
+                    {algorithm.published ? (
                       <Chip size="small" color="success" label="已发布" />
                     ) : (
                       <Chip size="small" color="warning" label="未发布" />
@@ -253,38 +311,27 @@ function Algorithms() {
                 )}
                 {isSuperAdmin && (
                   <TableCell>
-                    {isTemplateSection && (
-                      <Tooltip title="派生上架实例（拷贝场景预设，再绑模型发布）">
-                        <IconButton onClick={() => handleDerive(algorithm)} color="primary">
-                          <ContentCopy />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    <Tooltip title={isTemplateSection ? '查看/改描述' : '编辑（绑模型）'}>
+                    <Tooltip title="编辑（绑模型）">
                       <IconButton onClick={() => handleEdit(algorithm)}>
                         <Edit />
                       </IconButton>
                     </Tooltip>
-                    {!isTemplateSection && (
-                      <Tooltip title={algorithm.published ? '已发布' : '发布后对客户与任务可见'}>
-                        <span>
-                          <IconButton
-                            onClick={() => handlePublish(algorithm)}
-                            color="primary"
-                            disabled={algorithm.published}
-                          >
-                            <Publish />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    )}
-                    {!isTemplateSection && (
-                      <Tooltip title="删除">
-                        <IconButton onClick={() => handleDelete(algorithm.id)} color="error">
-                          <Delete />
+                    <Tooltip title={algorithm.published ? '已发布' : '发布后对客户与任务可见'}>
+                      <span>
+                        <IconButton
+                          onClick={() => handlePublish(algorithm)}
+                          color="primary"
+                          disabled={algorithm.published}
+                        >
+                          <Publish />
                         </IconButton>
-                      </Tooltip>
-                    )}
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="删除">
+                      <IconButton onClick={() => handleDelete(algorithm.id)} color="error">
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 )}
               </TableRow>
@@ -311,27 +358,41 @@ function Algorithms() {
         </Box>
       </Grid>
 
-      {isSuperAdmin && (
+      {isSuperAdmin ? (
         <Grid item xs={12}>
-          <Typography variant="h6" gutterBottom>系统模板</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            由产品目录同步，含完整场景预设；点击「派生」生成可上架算法。
-          </Typography>
-          {renderTable(templates, { isTemplateSection: true })}
+          <Tabs
+            value={tab}
+            onChange={(_, v) => setTab(v)}
+            sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+          >
+            <Tab label={`上架算法（${instances.length}）`} />
+            <Tab label={`系统模板（${templates.length}）`} />
+          </Tabs>
+
+          {tab === 0 && (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                推荐流程：系统模板 → 派生 → 编辑绑定模型 → 发布。客户建任务时只能选已发布项。
+              </Alert>
+              {renderInstanceTable(instances)}
+            </Box>
+          )}
+
+          {tab === 1 && (
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                由产品目录同步，含场景预设；不可绑模型、不可发布。点击「派生」生成可上架算法。
+              </Typography>
+              {renderTemplateTable(templates)}
+            </Box>
+          )}
+        </Grid>
+      ) : (
+        <Grid item xs={12}>
+          <Typography variant="h6" gutterBottom>可用算法</Typography>
+          {renderInstanceTable(instances)}
         </Grid>
       )}
-
-      <Grid item xs={12}>
-        <Typography variant="h6" gutterBottom>
-          {isSuperAdmin ? '上架算法（可发布）' : '可用算法'}
-        </Typography>
-        {isSuperAdmin && (
-          <Alert severity="info" sx={{ mb: 1 }}>
-            推荐流程：模板 → 派生 → 编辑绑定模型 → 发布。客户建任务时只能选已发布项，并看到该实例上的场景预设。
-          </Alert>
-        )}
-        {renderTable(instances, { isTemplateSection: false })}
-      </Grid>
 
       {isSuperAdmin && (
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
