@@ -124,6 +124,10 @@ def create_app(config_class=Config):
         # 注册错误处理器
         _register_error_handlers(app)
 
+        # 未授权时拦截业务 API（登录与授权导入除外）
+        from app.middleware.license_guard import register_request_guards
+        register_request_guards(app)
+
     # 初始化 MQTT
     from app.services.mqtt_service import mqtt_service
     mqtt_service.init_app(app)

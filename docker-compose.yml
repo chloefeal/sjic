@@ -21,6 +21,8 @@ services:
       - ./videos:/app/videos
       - ./logs:/app/logs
       - ./branding:/app/branding
+      # Linux 虚机生产环境建议挂载宿主机 machine-id，使授权随虚机变化（防镜像克隆）：
+      # - /etc/machine-id:/etc/machine-id:ro
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
@@ -32,6 +34,7 @@ services:
       - MQTT_BROKER_PORT=38883
       - STORAGE_TYPE=${STORAGE_TYPE:-NGINX}
       - DOWNLOAD_SECURE_KEY=${DOWNLOAD_SECURE_KEY:-my-super-secret-key-for-nginx}
+      - LICENSE_SIGNING_KEY=${LICENSE_SIGNING_KEY:-change-me-sjic-license-signing-key}
     networks:
       - sjic-network
 

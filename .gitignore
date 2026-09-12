@@ -48,6 +48,9 @@ yarn-error.log*
 Thumbs.db
 
 # Project specific
+backend/instance/
+**/license.json
+!backend/license.example.json
 /data/*
 !/data/.gitkeep
 /uploads/*

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Box, Drawer, AppBar, Toolbar, List, Typography, ListItem, ListItemIcon, ListItemText, IconButton, Avatar, Stack
+  Box, Drawer, AppBar, Toolbar, List, Typography, ListItem, ListItemIcon, ListItemText, IconButton, Avatar, Stack, Alert
 } from '@mui/material';
 import {
   Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Code, Logout, Computer, Dashboard as DashboardIcon
@@ -19,7 +19,7 @@ const menuItems = [
   { text: '任务', icon: <Task />, path: '/tasks' },
   { text: '模型训练', icon: <Build />, path: '/training', role: 'vendor' },
   { text: '告警记录', icon: <NotificationsActive />, path: '/alerts' },
-  { text: '系统设置', icon: <Settings />, path: '/settings' },
+  { text: '系统设置', icon: <Settings />, path: '/settings', always: true },
 ];
 
 const DEFAULT_BRANDING = {
@@ -32,6 +32,8 @@ function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [branding, setBranding] = useState(DEFAULT_BRANDING);
+  const [licenseValid, setLicenseValid] = useState(null);
+  const [licenseMessage, setLicenseMessage] = useState('');
 
   const loadBranding = useCallback(async () => {
     try {
@@ -51,12 +53,37 @@ function Layout({ children }) {
     }
   }, []);
 
+  const loadLicense = useCallback(async () => {
+    try {
+      const status = await axios.get('/api/license/status');
+      const valid = Boolean(status?.valid);
+      setLicenseValid(valid);
+      setLicenseMessage(status?.message || (valid ? '' : '请先导入授权'));
+      if (!valid && location.pathname !== '/settings') {
+        navigate('/settings', { replace: true });
+      }
+    } catch (e) {
+      setLicenseValid(false);
+      setLicenseMessage('无法获取授权状态，请检查后端服务');
+      if (location.pathname !== '/settings') {
+        navigate('/settings', { replace: true });
+      }
+    }
+  }, [location.pathname, navigate]);
+
   useEffect(() => {
     loadBranding();
     const onUpdate = () => loadBranding();
     window.addEventListener('branding-updated', onUpdate);
     return () => window.removeEventListener('branding-updated', onUpdate);
   }, [loadBranding]);
+
+  useEffect(() => {
+    loadLicense();
+    const onLicense = () => loadLicense();
+    window.addEventListener('license-updated', onLicense);
+    return () => window.removeEventListener('license-updated', onLicense);
+  }, [loadLicense]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -115,22 +142,33 @@ function Layout({ children }) {
         <Toolbar />
         <Box sx={{ overflow: 'auto' }}>
           <List>
-            {filteredMenuItems.map((item) => (
-              <ListItem
-                button
-                key={item.text}
-                selected={location.pathname === item.path}
-                onClick={() => navigate(item.path)}
-              >
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
-            ))}
+            {filteredMenuItems.map((item) => {
+              const disabled = licenseValid !== true && !item.always;
+              return (
+                <ListItem
+                  button
+                  key={item.text}
+                  selected={location.pathname === item.path}
+                  disabled={disabled}
+                  onClick={() => {
+                    if (!disabled) navigate(item.path);
+                  }}
+                >
+                  <ListItemIcon>{item.icon}</ListItemIcon>
+                  <ListItemText primary={item.text} />
+                </ListItem>
+              );
+            })}
           </List>
         </Box>
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
+        {licenseValid === false && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {licenseMessage || '尚未导入有效授权'}。请在「系统设置 → 授权管理」导入试用版或正式版授权文件后继续使用。
+          </Alert>
+        )}
         {children}
       </Box>
     </Box>

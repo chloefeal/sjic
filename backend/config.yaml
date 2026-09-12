@@ -40,5 +40,7 @@ security:
   cors_origins: "*"
 
 license:
-  # 无 license.json 时启用试用版，默认从首次运行起 30 天
+  # 试用版默认视频路数（签发参考；实际以导入的 license 文件为准）
   trial_max_cameras: 4
+  # 授权 HMAC 签名密钥（务必修改；也可用环境变量 LICENSE_SIGNING_KEY）
+  signing_key: "change-me-sjic-license-signing-key"
