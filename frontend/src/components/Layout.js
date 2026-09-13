@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, Drawer, AppBar, Toolbar, List, Typography, ListItem, ListItemIcon, ListItemText, IconButton, Avatar, Stack, Alert
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Code, Logout, Computer, Dashboard as DashboardIcon, VpnKey
 } from '@mui/icons-material';
@@ -102,7 +103,7 @@ function Layout({ children }) {
   const logoSrc = branding.logo_url ? `${getBaseUrl()}${branding.logo_url}` : '';
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Stack direction="row" spacing={1.5} alignItems="center">
@@ -110,21 +111,35 @@ function Layout({ children }) {
               <Avatar
                 src={logoSrc}
                 variant="rounded"
-                sx={{ width: 36, height: 36, bgcolor: 'transparent' }}
+                sx={{
+                  width: 36,
+                  height: 36,
+                  bgcolor: 'transparent',
+                  border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.35)}`,
+                }}
               />
             )}
             <Box>
-              <Typography variant="h6" noWrap component="div" sx={{ lineHeight: 1.2 }}>
+              <Typography variant="h6" noWrap component="div" sx={{ lineHeight: 1.2, fontSize: '1rem' }}>
                 {branding.product_name}
               </Typography>
               {branding.company_name && (
-                <Typography variant="caption" sx={{ opacity: 0.75 }}>
+                <Typography variant="caption" sx={{ opacity: 0.7, color: 'secondary.main' }}>
                   {branding.company_name}
                 </Typography>
               )}
             </Box>
           </Stack>
-          <IconButton color="inherit" onClick={handleLogout}>
+          <IconButton
+            color="inherit"
+            onClick={handleLogout}
+            sx={{
+              border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.25)}`,
+              '&:hover': {
+                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+              },
+            }}
+          >
             <Logout />
           </IconButton>
         </Toolbar>
@@ -141,7 +156,7 @@ function Layout({ children }) {
         }}
       >
         <Toolbar />
-        <Box sx={{ overflow: 'auto' }}>
+        <Box sx={{ overflow: 'auto', py: 1 }}>
           <List>
             {filteredMenuItems.map((item) => {
               const disabled = licenseValid !== true && !item.always;
@@ -156,14 +171,28 @@ function Layout({ children }) {
                   }}
                 >
                   <ListItemIcon>{item.icon}</ListItemIcon>
-                  <ListItemText primary={item.text} />
+                  <ListItemText
+                    primary={item.text}
+                    primaryTypographyProps={{
+                      fontSize: '0.9rem',
+                      fontWeight: location.pathname === item.path ? 600 : 400,
+                    }}
+                  />
                 </ListItem>
               );
             })}
           </List>
         </Box>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          minWidth: 0,
+          position: 'relative',
+        }}
+      >
         <Toolbar />
         {licenseValid === false && (
           <Alert severity="warning" sx={{ mb: 2 }}>

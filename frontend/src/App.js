@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import theme from './theme';
 import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
@@ -15,18 +16,6 @@ import Algorithms from './pages/Algorithms';
 import Settings from './pages/Settings';
 import License from './pages/License';
 import Nodes from './pages/Nodes';
-
-const theme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-});
 
 function App() {
   const isSuperAdmin = localStorage.getItem('user_role') === 'vendor';
@@ -120,4 +109,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;
