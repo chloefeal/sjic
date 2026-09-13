@@ -46,6 +46,30 @@ class Algorithm(db.Model):
         publish_meta = (self.parameter_schema or {}).get('publish_meta') or {}
         return bool(publish_meta.get('published', False))
 
+    def resolved_infer_fps(self, default=5.0):
+        """上架算法的推理帧率（服务商配置）；未设置时用 default。"""
+        raw = (self.parameter_schema or {}).get('infer_fps')
+        try:
+            fps = float(raw)
+            return fps if fps > 0 else float(default)
+        except (TypeError, ValueError):
+            return float(default)
+
+    def set_infer_fps(self, value, default=5.0):
+        """写入 parameter_schema.infer_fps（避免客户任务侧覆盖）。"""
+        from sqlalchemy.orm.attributes import flag_modified
+        schema = dict(self.parameter_schema or {})
+        try:
+            fps = float(value)
+        except (TypeError, ValueError):
+            fps = float(default)
+        if fps <= 0:
+            fps = float(default)
+        schema['infer_fps'] = fps
+        self.parameter_schema = schema
+        flag_modified(self, 'parameter_schema')
+        return fps
+
     def ensure_catalog_schema(self, persist=False):
         """补齐缺失的 scene_presets 等（修复手工新建漏拷贝 schema 的实例）。"""
         from sqlalchemy.orm.attributes import flag_modified

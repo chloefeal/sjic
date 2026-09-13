@@ -47,6 +47,9 @@ def _serialize_algorithm(algorithm, include_internal=False):
 
     if not include_internal:
         data.pop('model_id', None)
+    else:
+        # 仅服务商可见：部署吞吐旋钮，与 model_id 同级
+        data['infer_fps'] = algorithm.resolved_infer_fps()
 
     return data
 
@@ -187,10 +190,12 @@ def update_algorithm(alg_id):
                 setattr(algorithm, key, data[key])
     else:
         for key, value in data.items():
-            if key in ('id', 'created_at', 'parameter_schema'):
+            if key in ('id', 'created_at', 'parameter_schema', 'infer_fps'):
                 continue
             if hasattr(algorithm, key):
                 setattr(algorithm, key, value)
+        if 'infer_fps' in data:
+            algorithm.set_infer_fps(data.get('infer_fps'))
         algorithm.ensure_catalog_schema(persist=False)
 
     db.session.commit()

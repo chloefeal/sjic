@@ -40,7 +40,7 @@ def main():
     parser.add_argument('--machine-code', required=True, help='Target machine_code from /api/license/status')
     parser.add_argument('--edition', choices=['trial', 'official'], required=True)
     parser.add_argument('--max-cameras', type=int, required=True, help='Max video streams; <=0 means unlimited')
-    parser.add_argument('--expires-at', default=None, help='Required for official (YYYY-MM-DD)')
+    parser.add_argument('--expires-at', default=None, help='Required for official (YYYY-MM-DD or YYYYMMDD)')
     parser.add_argument('--customer-id', default='')
     parser.add_argument('--algorithms', default='', help='Comma-separated algorithm types; empty = all')
     parser.add_argument('--out', default='license.json')

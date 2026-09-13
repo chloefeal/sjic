@@ -39,39 +39,78 @@ def is_valid_frame(frame):
 
 
 class FramePump:
-    """独立线程读流，主循环只取最新帧。"""
+    """独立线程读流，主循环只取最新帧。
 
-    def __init__(self, cap, stop_event, url, logger, open_fn=None):
+    为何要 copy：
+    OpenCV retrieve() 常复用内部缓冲，下一次 retrieve 会覆盖同一块内存。
+    在 _store 里立刻 copy 成自有缓冲；解码已限流，比「消费时再 copy」更不容易花屏。
+    """
+
+    def __init__(self, cap, stop_event, url, logger, open_fn=None, max_decode_fps=12.0):
         self.cap = cap
         self.stop_event = stop_event
         self.url = url
         self.logger = logger
         self.open_fn = open_fn or _open_for_reconnect
+        # 解码上限：推理通常远慢于摄像头帧率，全速 decode 只会空烧 CPU
+        self.max_decode_fps = float(max_decode_fps) if max_decode_fps else 0.0
         self._lock = threading.Lock()
         self._cap_lock = threading.Lock()
         self._frame = None
         self._seq = 0
         self._fail = 0
         self._released = False
+        self._last_decode_t = 0.0
+        self._decode_n = 0
+        self._consume_n = 0
+        self._stats_t = time.time()
         self._thread = threading.Thread(target=self._loop, name='rtsp-pump', daemon=True)
 
     def start(self):
         self._thread.start()
 
     def _store(self, frame):
+        # retrieve 返回后、下次 grab/retrieve 前 copy，避免与 OpenCV 内部缓冲共享
+        owned = frame.copy()
         with self._lock:
-            self._frame = frame
+            self._frame = owned
             self._seq += 1
             self._fail = 0
+            self._decode_n += 1
+
+    def _maybe_log_stats(self):
+        now = time.time()
+        dt = now - self._stats_t
+        if dt < 5.0:
+            return
+        decode_fps = self._decode_n / dt
+        consume_fps = self._consume_n / dt
+        self.logger.info(
+            f"RTSP pump: decode={decode_fps:.1f}fps consume={consume_fps:.1f}fps "
+            f"(drop≈{max(0.0, decode_fps - consume_fps):.1f}fps)"
+        )
+        self._decode_n = 0
+        self._consume_n = 0
+        self._stats_t = now
 
     def _read_one(self):
-        """grab+retrieve 必须在同一把锁里，禁止 stop 线程在两步之间 release。"""
+        """单次 grab+retrieve。不要连 grab 多次：每次 grab 都会阻塞等下一帧，
+        连抓 N 次会把解码上限压到 摄像头fps/N（日志里 ~2fps 就是这个原因）。
+        积压排空靠限流窗口里的 _grab_only。
+        """
         with self._cap_lock:
             if self.stop_event.is_set() or self.cap is None:
                 return False, None
             if not self.cap.grab():
                 return False, None
             return self.cap.retrieve()
+
+    def _grab_only(self):
+        """只 grab 不 decode，用来在限流间隔内排空网络缓冲。"""
+        with self._cap_lock:
+            if self.stop_event.is_set() or self.cap is None:
+                return False
+            return bool(self.cap.grab())
 
     def _take_cap(self):
         with self._cap_lock:
@@ -119,8 +158,23 @@ class FramePump:
         self.logger.info("RTSP pump reconnected")
 
     def _loop(self):
+        min_interval = (1.0 / self.max_decode_fps) if self.max_decode_fps > 0 else 0.0
         while not self.stop_event.is_set():
             try:
+                now = time.time()
+                if min_interval and (now - self._last_decode_t) < min_interval:
+                    # 限流窗口内只 grab 排空，避免缓冲堆积导致延时/重连
+                    if not self._grab_only():
+                        self._fail += 1
+                        if self._fail >= 30:
+                            self._reconnect()
+                        else:
+                            time.sleep(0.01)
+                    else:
+                        self._fail = 0
+                    self._maybe_log_stats()
+                    continue
+
                 ret, frame = self._read_one()
                 if self.stop_event.is_set():
                     break
@@ -131,10 +185,12 @@ class FramePump:
                     else:
                         time.sleep(0.03)
                     continue
+                self._last_decode_t = time.time()
                 if is_valid_frame(frame):
                     self._store(frame)
                 else:
                     self._fail += 1
+                self._maybe_log_stats()
             except Exception as e:
                 if self.stop_event.is_set():
                     break
@@ -143,14 +199,15 @@ class FramePump:
                 time.sleep(0.05)
 
     def get_latest(self, last_seq=0, wait_sec=1.0):
-        """返回 (frame_copy, seq)。无新帧时 frame 为 None。"""
+        """返回 (frame, seq)。frame 已在 _store 时 copy，可安全给推理用。无新帧时 frame 为 None。"""
         deadline = time.time() + wait_sec
         while not self.stop_event.is_set():
             with self._lock:
-                seq = self._seq
-                frame = self._frame
-            if seq > last_seq and frame is not None:
-                return frame.copy(), seq
+                if self._seq > last_seq and self._frame is not None:
+                    out = self._frame
+                    seq = self._seq
+                    self._consume_n += 1
+                    return out, seq
             if time.time() >= deadline:
                 return None, last_seq
             time.sleep(0.01)

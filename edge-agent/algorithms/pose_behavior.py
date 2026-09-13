@@ -6,6 +6,7 @@
 """
 from .base import BaseAlgorithm
 import math
+import time
 from datetime import datetime
 from utils.calc import get_letterbox_params, preprocess
 from utils.rtsp import FramePump, is_valid_frame
@@ -188,10 +189,20 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 return
 
             rtsp_url = config_dict.get('camera', {}).get('rtsp_url')
-            pump = FramePump(camera_stream, stop_event, rtsp_url, logger)
+            infer_fps = float(
+                parameters.get('inferFps')
+                or algo_params.get('infer_fps')
+                or 5
+            )
+            infer_interval = (1.0 / infer_fps) if infer_fps > 0 else 0.0
+            decode_fps = infer_fps if infer_fps > 0 else 12.0
+            pump = FramePump(camera_stream, stop_event, rtsp_url, logger, max_decode_fps=decode_fps)
             pump.start()
             try:
                 runtime.load(model_path)
+                logger.info(
+                    f"Throughput caps: inferFps={infer_fps:.1f} decodeFps≈{decode_fps:.1f}"
+                )
                 first_frame, last_seq = pump.get_latest(last_seq=0, wait_sec=8.0)
                 if first_frame is None:
                     import cv2
@@ -205,21 +216,46 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
 
                 state_since = {b.get('id') or b.get('type'): None for b in behaviors}
                 last_alert = {b.get('id') or b.get('type'): None for b in behaviors}
+                next_infer_t = 0.0
+                frame_idx = 0
+                last_log = time.time()
+                fps_window_t = time.time()
+                fps_window_n = 0
 
                 while not stop_event.is_set():
+                    now_t = time.time()
+                    if infer_interval and now_t < next_infer_t:
+                        if stop_event.wait(timeout=min(0.05, next_infer_t - now_t)):
+                            break
+                        continue
+
                     frame, last_seq = pump.get_latest(last_seq=last_seq, wait_sec=2.0)
                     if stop_event.is_set():
                         break
                     if frame is None or not is_valid_frame(frame):
                         continue
+                    next_infer_t = time.time() + infer_interval
                     processed = preprocess(frame, new_h, new_w, top, bottom, left, right)
                     if processed is None:
                         continue
+                    t0 = time.time()
                     try:
                         result = runtime.infer(processed, conf=confidence, classes=None, imgsz=640)
                     except Exception as e:
                         logger.warning(f"pose infer skipped: {e}")
                         continue
+                    infer_ms = (time.time() - t0) * 1000
+                    frame_idx += 1
+                    fps_window_n += 1
+                    if frame_idx == 1 or time.time() - last_log >= 5:
+                        dt = max(time.time() - fps_window_t, 1e-6)
+                        logger.info(
+                            f"Frame #{frame_idx} process={fps_window_n / dt:.1f}fps "
+                            f"infer={infer_ms:.0f}ms behaviors={len(behaviors)}"
+                        )
+                        last_log = time.time()
+                        fps_window_t = last_log
+                        fps_window_n = 0
 
                     persons = self._extract_persons(result, logger)
                     now = datetime.now()

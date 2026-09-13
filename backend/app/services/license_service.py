@@ -128,7 +128,10 @@ class LicenseService:
 
     @staticmethod
     def _format_date(value):
-        """Normalize to YYYY-MM-DD for license file fields."""
+        """Normalize to YYYY-MM-DD for license file fields.
+
+        Accepts: YYYY-MM-DD, YYYYMMDD, or legacy ISO datetime.
+        """
         if value is None:
             return None
         if isinstance(value, datetime):
@@ -136,16 +139,30 @@ class LicenseService:
         text = str(value).strip()
         if not text:
             return None
-        # Already date-only
-        if len(text) == 10 and text[4] == '-' and text[7] == '-':
-            return text[:10]
+
+        # YYYY-MM-DD
+        if len(text) >= 10 and text[4] == '-' and text[7] == '-':
+            candidate = text[:10]
+            try:
+                datetime.strptime(candidate, '%Y-%m-%d')
+                return candidate
+            except ValueError:
+                return None
+
+        # YYYYMMDD
+        if len(text) == 8 and text.isdigit():
+            try:
+                dt = datetime.strptime(text, '%Y%m%d')
+                return dt.date().isoformat()
+            except ValueError:
+                return None
+
         if text.endswith('Z'):
             text = text[:-1] + '+00:00'
         try:
             dt = datetime.fromisoformat(text)
         except ValueError:
-            # Fallback: take leading YYYY-MM-DD
-            return text[:10] if len(text) >= 10 else None
+            return None
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc).date().isoformat()

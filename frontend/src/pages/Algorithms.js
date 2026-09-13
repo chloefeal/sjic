@@ -59,6 +59,7 @@ function Algorithms() {
     description: '',
     model_id: '',
     labels: [],
+    infer_fps: 5,
     is_system_template: false,
   });
 
@@ -104,6 +105,7 @@ function Algorithms() {
       description: '',
       model_id: '',
       labels: [],
+      infer_fps: 5,
       is_system_template: false,
     });
   };
@@ -119,6 +121,7 @@ function Algorithms() {
       description: alg.description || '',
       model_id: alg.model_id || '',
       labels: alg.labels || [],
+      infer_fps: alg.infer_fps != null ? alg.infer_fps : 5,
       is_system_template: !!alg.is_system_template,
     });
     setOpenDialog(true);
@@ -151,6 +154,7 @@ function Algorithms() {
             category: formData.category || null,
             model_id: formData.model_id || null,
             labels: formData.labels || [],
+            infer_fps: Number(formData.infer_fps) > 0 ? Number(formData.infer_fps) : 5,
           };
 
       await axios.put(`/api/algorithms/${editingId}`, payload);
@@ -261,6 +265,7 @@ function Algorithms() {
             <TableCell>引擎</TableCell>
             <TableCell>分类</TableCell>
             {isSuperAdmin && <TableCell>绑定模型</TableCell>}
+            {isSuperAdmin && <TableCell>推理FPS</TableCell>}
             {isSuperAdmin && <TableCell>发布状态</TableCell>}
             {isSuperAdmin && <TableCell>操作</TableCell>}
           </TableRow>
@@ -268,7 +273,7 @@ function Algorithms() {
         <TableBody>
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={isSuperAdmin ? 7 : 4}>
+              <TableCell colSpan={isSuperAdmin ? 8 : 4}>
                 <Typography variant="body2" color="text.secondary">
                   {isSuperAdmin ? '暂无上架算法，请到「系统模板」页签派生' : '暂无可用算法'}
                 </Typography>
@@ -302,6 +307,11 @@ function Algorithms() {
                 )}
                 {isSuperAdmin && (
                   <TableCell>
+                    {algorithm.infer_fps != null ? algorithm.infer_fps : 5}
+                  </TableCell>
+                )}
+                {isSuperAdmin && (
+                  <TableCell>
                     {algorithm.published ? (
                       <Chip size="small" color="success" label="已发布" />
                     ) : (
@@ -311,7 +321,7 @@ function Algorithms() {
                 )}
                 {isSuperAdmin && (
                   <TableCell>
-                    <Tooltip title="编辑（绑模型）">
+                    <Tooltip title="编辑（绑模型 / 推理FPS）">
                       <IconButton onClick={() => handleEdit(algorithm)}>
                         <Edit />
                       </IconButton>
@@ -465,6 +475,20 @@ function Algorithms() {
                   <MenuItem value="">未绑定</MenuItem>
                   {models.map((m) => <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>)}
                 </Select>
+              </Grid>
+            )}
+
+            {!formData.is_system_template && (
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="推理帧率 inferFps"
+                  value={formData.infer_fps}
+                  onChange={(e) => setFormData({ ...formData, infer_fps: e.target.value })}
+                  inputProps={{ min: 0.5, max: 30, step: 0.5 }}
+                  helperText="边缘每秒推理次数；目标检测常用 2～5，跌倒类姿态建议 ≥5"
+                />
               </Grid>
             )}
 

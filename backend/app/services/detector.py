@@ -127,6 +127,8 @@ class DetectorService:
                     "confidence": task.confidence,
                     "alertThreshold": task.alertThreshold,
                     "algorithm_parameters": task.algorithm_parameters,
+                    # 服务商在算法实例上配置的推理帧率（客户任务不可改）
+                    "inferFps": algorithm.resolved_infer_fps(),
                 }
             }
 
