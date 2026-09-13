@@ -4,7 +4,7 @@ import {
   Box, Drawer, AppBar, Toolbar, List, Typography, ListItem, ListItemIcon, ListItemText, IconButton, Avatar, Stack, Alert
 } from '@mui/material';
 import {
-  Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Code, Logout, Computer, Dashboard as DashboardIcon
+  Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Code, Logout, Computer, Dashboard as DashboardIcon, VpnKey
 } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
 
@@ -19,7 +19,8 @@ const menuItems = [
   { text: '任务', icon: <Task />, path: '/tasks' },
   { text: '模型训练', icon: <Build />, path: '/training', role: 'vendor' },
   { text: '告警记录', icon: <NotificationsActive />, path: '/alerts' },
-  { text: '系统设置', icon: <Settings />, path: '/settings', always: true },
+  { text: '授权管理', icon: <VpnKey />, path: '/license', always: true },
+  { text: '系统设置', icon: <Settings />, path: '/settings' },
 ];
 
 const DEFAULT_BRANDING = {
@@ -59,14 +60,14 @@ function Layout({ children }) {
       const valid = Boolean(status?.valid);
       setLicenseValid(valid);
       setLicenseMessage(status?.message || (valid ? '' : '请先导入授权'));
-      if (!valid && location.pathname !== '/settings') {
-        navigate('/settings', { replace: true });
+      if (!valid && location.pathname !== '/license') {
+        navigate('/license', { replace: true });
       }
     } catch (e) {
       setLicenseValid(false);
       setLicenseMessage('无法获取授权状态，请检查后端服务');
-      if (location.pathname !== '/settings') {
-        navigate('/settings', { replace: true });
+      if (location.pathname !== '/license') {
+        navigate('/license', { replace: true });
       }
     }
   }, [location.pathname, navigate]);
@@ -166,7 +167,7 @@ function Layout({ children }) {
         <Toolbar />
         {licenseValid === false && (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            {licenseMessage || '尚未导入有效授权'}。请在「系统设置 → 授权管理」导入试用版或正式版授权文件后继续使用。
+            {licenseMessage || '尚未导入有效授权'}。请在「授权管理」导入试用版或正式版授权文件后继续使用。
           </Alert>
         )}
         {children}

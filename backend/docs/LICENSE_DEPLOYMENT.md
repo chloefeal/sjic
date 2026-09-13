@@ -73,7 +73,7 @@ python scripts/generate_license.py \
 
 `issued_at` / `expires_at` 使用 **YYYY-MM-DD**（到期日当天仍有效）。
 
-客户从「系统设置 → 授权管理」复制机器码并发给发行方；拿到文件后在同一页面导入。
+客户从「授权管理」页复制机器码并发给发行方；拿到文件后在同一页面导入。
 
 也可调用 API：
 
