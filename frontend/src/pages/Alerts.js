@@ -2,10 +2,26 @@ import React, { useState, useEffect } from 'react';
 import {
   Grid, Card, CardContent, Typography, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Dialog, DialogTitle, DialogContent,
-  TablePagination, IconButton, TextField, Button, Box, Stack
+  DialogActions, TablePagination, IconButton, TextField, Button, Box, Stack,
+  Chip, MenuItem, Alert as MuiAlert
 } from '@mui/material';
-import { ZoomIn, Search, FileDownload, Clear } from '@mui/icons-material';
+import {
+  ZoomIn, Search, FileDownload, Clear, CheckCircle, Cancel, Undo
+} from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
+
+const REVIEW_OPTIONS = [
+  { value: '', label: '全部状态' },
+  { value: 'pending', label: '待确认' },
+  { value: 'confirmed', label: '已确认' },
+  { value: 'false_positive', label: '误报' },
+];
+
+const STATUS_META = {
+  pending: { label: '待确认', color: 'warning' },
+  confirmed: { label: '已确认', color: 'success' },
+  false_positive: { label: '误报', color: 'default' },
+};
 
 function Alerts() {
   const [alerts, setAlerts] = useState([]);
@@ -16,8 +32,15 @@ function Alerts() {
   const [keyword, setKeyword] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-  const [appliedFilters, setAppliedFilters] = useState({ keyword: '', start: '', end: '' });
+  const [reviewStatus, setReviewStatus] = useState('pending');
+  const [appliedFilters, setAppliedFilters] = useState({
+    keyword: '', start: '', end: '', review_status: 'pending',
+  });
   const [exporting, setExporting] = useState(false);
+  const [reviewDialog, setReviewDialog] = useState(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewing, setReviewing] = useState(false);
+  const [actionError, setActionError] = useState(null);
 
   useEffect(() => {
     fetchAlerts();
@@ -28,6 +51,7 @@ function Alerts() {
     if (filters.keyword) params.keyword = filters.keyword;
     if (filters.start) params.start = filters.start;
     if (filters.end) params.end = filters.end;
+    if (filters.review_status) params.review_status = filters.review_status;
     return params;
   };
 
@@ -44,6 +68,7 @@ function Alerts() {
       setTotal(response.total || 0);
     } catch (error) {
       console.error('Error fetching alerts:', error);
+      setActionError(error.response?.data?.error || '加载告警失败');
     }
   };
 
@@ -53,6 +78,7 @@ function Alerts() {
       keyword: keyword.trim(),
       start: startTime,
       end: endTime,
+      review_status: reviewStatus,
     });
   };
 
@@ -60,8 +86,9 @@ function Alerts() {
     setKeyword('');
     setStartTime('');
     setEndTime('');
+    setReviewStatus('');
     setPage(0);
-    setAppliedFilters({ keyword: '', start: '', end: '' });
+    setAppliedFilters({ keyword: '', start: '', end: '', review_status: '' });
   };
 
   const handleExport = async () => {
@@ -72,6 +99,7 @@ function Alerts() {
           keyword: keyword.trim() || appliedFilters.keyword,
           start: startTime || appliedFilters.start,
           end: endTime || appliedFilters.end,
+          review_status: reviewStatus || appliedFilters.review_status,
         }),
         responseType: 'blob',
         timeout: 120000,
@@ -89,6 +117,32 @@ function Alerts() {
       window.alert('导出失败，请稍后重试');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const openReview = (alert, nextStatus) => {
+    setActionError(null);
+    setReviewNote(alert.review_note || '');
+    setReviewDialog({ alert, nextStatus });
+  };
+
+  const submitReview = async () => {
+    if (!reviewDialog) return;
+    setReviewing(true);
+    setActionError(null);
+    try {
+      await axios.patch(`/api/alerts/${reviewDialog.alert.id}/review`, {
+        review_status: reviewDialog.nextStatus,
+        review_note: reviewNote.trim() || null,
+      });
+      setReviewDialog(null);
+      setReviewNote('');
+      fetchAlerts();
+    } catch (error) {
+      console.error('Error reviewing alert:', error);
+      setActionError(error.response?.data?.error || '处理失败，请稍后重试');
+    } finally {
+      setReviewing(false);
     }
   };
 
@@ -114,10 +168,24 @@ function Alerts() {
     setPreview({
       url: getImageUrl(alert.image_url),
       camera_name: alert.camera_name || '未知摄像头',
-      alert_type: alert.alert_type || '',
+      alert_type: alert.alert_type_label || alert.alert_type || '',
       message: alert.message || '',
       timestamp: alert.timestamp,
+      review_status: alert.review_status,
+      reviewed_by: alert.reviewed_by,
+      review_note: alert.review_note,
     });
+  };
+
+  const statusChip = (status) => {
+    const meta = STATUS_META[status] || STATUS_META.pending;
+    return <Chip size="small" label={meta.label} color={meta.color} />;
+  };
+
+  const reviewActionLabel = (status) => {
+    if (status === 'confirmed') return '确认为属实';
+    if (status === 'false_positive') return '标记为误报';
+    return '重置为待确认';
   };
 
   return (
@@ -128,6 +196,15 @@ function Alerts() {
             <Typography variant="h6" gutterBottom>
               告警记录
             </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              管理员可确认告警是否属实，或标记误报，便于日常处置与后续调参。
+            </Typography>
+
+            {actionError && (
+              <MuiAlert severity="error" sx={{ mb: 2 }} onClose={() => setActionError(null)}>
+                {actionError}
+              </MuiAlert>
+            )}
 
             <Stack
               direction={{ xs: 'column', md: 'row' }}
@@ -144,6 +221,18 @@ function Alerts() {
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
                 sx={{ minWidth: 220 }}
               />
+              <TextField
+                size="small"
+                select
+                label="处理状态"
+                value={reviewStatus}
+                onChange={(e) => setReviewStatus(e.target.value)}
+                sx={{ minWidth: 140 }}
+              >
+                {REVIEW_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value || 'all'} value={opt.value}>{opt.label}</MenuItem>
+                ))}
+              </TextField>
               <TextField
                 size="small"
                 label="开始时间"
@@ -184,9 +273,10 @@ function Alerts() {
                   <TableRow>
                     <TableCell>时间</TableCell>
                     <TableCell>视频源</TableCell>
-                    <TableCell>类型</TableCell>
+                    <TableCell>场景</TableCell>
                     <TableCell>说明</TableCell>
                     <TableCell>置信度</TableCell>
+                    <TableCell>状态</TableCell>
                     <TableCell>图片</TableCell>
                     <TableCell>操作</TableCell>
                   </TableRow>
@@ -196,12 +286,25 @@ function Alerts() {
                     <TableRow key={alert.id}>
                       <TableCell>{new Date(alert.timestamp).toLocaleString()}</TableCell>
                       <TableCell>{alert.camera_name}</TableCell>
-                      <TableCell>{alert.alert_type}</TableCell>
-                      <TableCell sx={{ maxWidth: 280, whiteSpace: 'normal' }}>
+                      <TableCell>{alert.alert_type_label || alert.alert_type}</TableCell>
+                      <TableCell sx={{ maxWidth: 240, whiteSpace: 'normal' }}>
                         {alert.message || '-'}
+                        {alert.review_note ? (
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            备注：{alert.review_note}
+                          </Typography>
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {alert.confidence != null ? `${(alert.confidence * 100).toFixed(2)}%` : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {statusChip(alert.review_status || 'pending')}
+                        {alert.reviewed_by ? (
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            {alert.reviewed_by}
+                          </Typography>
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {alert.image_url ? (
@@ -214,16 +317,53 @@ function Alerts() {
                         ) : '-'}
                       </TableCell>
                       <TableCell>
-                        <IconButton
-                          onClick={() => handlePreviewImage(alert)}
-                          title="预览"
-                          disabled={!alert.image_url}
-                        >
-                          <ZoomIn />
-                        </IconButton>
+                        <Stack direction="row" spacing={0.5}>
+                          <IconButton
+                            onClick={() => handlePreviewImage(alert)}
+                            title="预览"
+                            disabled={!alert.image_url}
+                          >
+                            <ZoomIn />
+                          </IconButton>
+                          {(alert.review_status || 'pending') !== 'confirmed' && (
+                            <IconButton
+                              color="success"
+                              title="确认属实"
+                              onClick={() => openReview(alert, 'confirmed')}
+                            >
+                              <CheckCircle />
+                            </IconButton>
+                          )}
+                          {(alert.review_status || 'pending') !== 'false_positive' && (
+                            <IconButton
+                              color="warning"
+                              title="标记误报"
+                              onClick={() => openReview(alert, 'false_positive')}
+                            >
+                              <Cancel />
+                            </IconButton>
+                          )}
+                          {(alert.review_status || 'pending') !== 'pending' && (
+                            <IconButton
+                              title="改回待确认"
+                              onClick={() => openReview(alert, 'pending')}
+                            >
+                              <Undo />
+                            </IconButton>
+                          )}
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
+                  {alerts.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} align="center">
+                        <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
+                          暂无告警记录
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
               <TablePagination
@@ -266,6 +406,43 @@ function Alerts() {
             />
           )}
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(reviewDialog)}
+        onClose={() => !reviewing && setReviewDialog(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {reviewDialog ? reviewActionLabel(reviewDialog.nextStatus) : '处理告警'}
+        </DialogTitle>
+        <DialogContent>
+          {reviewDialog && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {reviewDialog.alert.camera_name || '未知摄像头'}
+              {' · '}
+              {reviewDialog.alert.alert_type_label || reviewDialog.alert.alert_type}
+              {reviewDialog.alert.message ? ` — ${reviewDialog.alert.message}` : ''}
+            </Typography>
+          )}
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={2}
+            label="处理备注（可选）"
+            placeholder="例如：现场核实属实 / 光线干扰导致误检"
+            value={reviewNote}
+            onChange={(e) => setReviewNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReviewDialog(null)} disabled={reviewing}>取消</Button>
+          <Button variant="contained" onClick={submitReview} disabled={reviewing}>
+            {reviewing ? '提交中…' : '确定'}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Grid>
   );

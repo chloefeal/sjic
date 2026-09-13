@@ -82,12 +82,16 @@ def receive_alert():
             confidence=float(confidence),
             image_url=image_url,
             message=message,
+            review_status='pending',
         )
         db.session.add(alert)
         db.session.commit()
 
         # 推送给前端 WebSocket 进行实时展示
-        socketio.emit('new_alert', alert.to_dict())
+        from app.utils.algorithm_catalog import label_for_alert_type
+        payload = alert.to_dict()
+        payload['alert_type_label'] = label_for_alert_type(alert.alert_type)
+        socketio.emit('new_alert', payload)
 
         return jsonify({"success": True, "message": "Alert received successfully"}), 200
 

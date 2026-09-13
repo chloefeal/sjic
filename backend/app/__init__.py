@@ -5,6 +5,7 @@ Flask 应用工厂模块。
 import os
 import tempfile
 import shutil
+from datetime import datetime
 from flask import Flask
 from config import Config
 from app.extensions import db, migrate, socketio, cors, sock
@@ -23,6 +24,7 @@ def create_app(config_class=Config):
     """
     app = Flask(__name__)
     app.config.from_object(config_class)
+    app.config['APP_STARTED_AT'] = datetime.now()
 
     # 设置最大内容长度
     app.config['MAX_CONTENT_LENGTH'] = config_class.MAX_CONTENT_LENGTH
@@ -35,7 +37,7 @@ def create_app(config_class=Config):
     cors.init_app(app, resources={
         r"/*": {
             "origins": "*",
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
             "expose_headers": ["Content-Type", "Authorization"],
             "supports_credentials": True,

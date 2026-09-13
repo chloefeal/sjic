@@ -451,4 +451,31 @@ def catalog_for_api():
         ],
         'od_scene_presets': OD_SCENE_PRESETS,
         'pose_scene_presets': POSE_SCENE_PRESETS,
+        'alert_type_labels': alert_type_labels(),
     }
+
+
+def alert_type_labels():
+    """alert_type → 客户可读场景名（概览/告警列表用）。"""
+    labels = {}
+    for preset in OD_SCENE_PRESETS + POSE_SCENE_PRESETS:
+        at = (preset.get('defaults') or {}).get('alert_type')
+        if at and preset.get('name'):
+            labels[at] = preset['name']
+    for product in PRODUCT_ALGORITHMS:
+        defaults = (product.get('parameter_schema') or {}).get('default_task_params') or {}
+        at = defaults.get('alert_type')
+        if at and product.get('name'):
+            labels.setdefault(at, product['name'])
+        engine = product.get('engine') or product.get('type')
+        if engine and product.get('name'):
+            labels.setdefault(engine, product['name'])
+    for engine, meta in ENGINES.items():
+        labels.setdefault(engine, meta.get('label') or engine)
+    return labels
+
+
+def label_for_alert_type(alert_type: str) -> str:
+    if not alert_type:
+        return '未知场景'
+    return alert_type_labels().get(alert_type, alert_type)

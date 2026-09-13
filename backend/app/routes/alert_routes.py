@@ -11,7 +11,9 @@ from flask import Blueprint, jsonify, request, send_from_directory, send_file, c
 from sqlalchemy import or_
 from app.extensions import db, socketio
 from app.models import Alert, Camera
-from app.middleware.auth import token_required
+from app.models.alert import ALERT_REVIEW_STATUSES
+from app.middleware.auth import token_required, get_token_payload
+from app.utils.algorithm_catalog import label_for_alert_type
 
 alert_bp = Blueprint('alert', __name__)
 
@@ -36,11 +38,18 @@ def _parse_dt(value):
     return None
 
 
+def _alert_to_client(alert):
+    data = alert.to_dict()
+    data['alert_type_label'] = label_for_alert_type(alert.alert_type)
+    return data
+
+
 def _alert_query_from_args():
-    """按关键字（模糊）与时间段过滤告警。"""
+    """按关键字、时间段、处理状态过滤告警。"""
     keyword = (request.args.get('keyword') or request.args.get('q') or '').strip()
     start = _parse_dt(request.args.get('start') or request.args.get('start_time'))
     end = _parse_dt(request.args.get('end') or request.args.get('end_time'))
+    review_status = (request.args.get('review_status') or request.args.get('status') or '').strip()
 
     query = Alert.query.outerjoin(Camera)
 
@@ -50,11 +59,20 @@ def _alert_query_from_args():
             Alert.alert_type.ilike(like),
             Alert.message.ilike(like),
             Camera.name.ilike(like),
+            Alert.review_note.ilike(like),
         ))
     if start is not None:
         query = query.filter(Alert.timestamp >= start)
     if end is not None:
         query = query.filter(Alert.timestamp <= end)
+    if review_status:
+        if review_status == 'pending':
+            query = query.filter(or_(
+                Alert.review_status == 'pending',
+                Alert.review_status.is_(None),
+            ))
+        else:
+            query = query.filter(Alert.review_status == review_status)
 
     return query.order_by(Alert.timestamp.desc())
 
@@ -79,7 +97,7 @@ def get_alerts():
     ---
     tags:
       - 告警管理 (Alerts)
-    summary: 分页获取告警列表（支持关键字与时间段）
+    summary: 分页获取告警列表（支持关键字、时间段、处理状态）
     security:
       - APIKeyHeader: []
     parameters:
@@ -103,6 +121,10 @@ def get_alerts():
         in: query
         type: string
         description: 结束时间
+      - name: review_status
+        in: query
+        type: string
+        description: pending / confirmed / false_positive
     responses:
       200:
         description: 告警列表和分页信息
@@ -118,7 +140,7 @@ def get_alerts():
         )
 
         return jsonify({
-            'items': [alert.to_dict() for alert in pagination.items],
+            'items': [_alert_to_client(alert) for alert in pagination.items],
             'total': pagination.total,
             'pages': pagination.pages,
             'current_page': page
@@ -126,6 +148,46 @@ def get_alerts():
 
     except Exception as e:
         current_app.logger.error(f"Error getting alerts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@alert_bp.route('/api/alerts/<int:alert_id>/review', methods=['PATCH', 'POST'])
+@token_required
+def review_alert(alert_id):
+    """
+    告警确认：属实 / 误报 / 重置为待确认
+    """
+    try:
+        alert = Alert.query.get_or_404(alert_id)
+        data = request.json or {}
+        status = (data.get('review_status') or data.get('status') or '').strip()
+        if status not in ALERT_REVIEW_STATUSES:
+            return jsonify({
+                'error': '无效的处理状态，请使用 pending / confirmed / false_positive'
+            }), 400
+
+        note = data.get('review_note')
+        if note is not None:
+            note = str(note).strip() or None
+
+        payload = get_token_payload() or {}
+        reviewer = payload.get('user') or 'admin'
+
+        alert.review_status = status
+        alert.review_note = note
+        if status == 'pending':
+            alert.reviewed_by = None
+            alert.reviewed_at = None
+            alert.review_note = note
+        else:
+            alert.reviewed_by = reviewer
+            alert.reviewed_at = datetime.now()
+
+        db.session.commit()
+        return jsonify(_alert_to_client(alert))
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error reviewing alert: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -145,7 +207,9 @@ def export_alerts():
             writer = csv.writer(csv_buf)
             writer.writerow([
                 'id', 'timestamp', 'camera_id', 'camera_name',
-                'alert_type', 'message', 'confidence', 'image_file'
+                'alert_type', 'alert_type_label', 'message', 'confidence',
+                'review_status', 'reviewed_by', 'reviewed_at', 'review_note',
+                'image_file'
             ])
 
             for alert in alerts:
@@ -154,7 +218,6 @@ def export_alerts():
                 if filename:
                     src = os.path.join(alert_folder, filename)
                     if os.path.isfile(src):
-                        # 避免重名覆盖：用 id 前缀
                         archived_name = f'{alert.id}_{os.path.basename(filename)}'
                         zf.write(src, arcname=f'images/{archived_name}')
 
@@ -165,12 +228,16 @@ def export_alerts():
                     alert.camera_id,
                     camera_name,
                     alert.alert_type or '',
+                    label_for_alert_type(alert.alert_type),
                     alert.message or '',
                     alert.confidence if alert.confidence is not None else '',
+                    alert.review_status or 'pending',
+                    alert.reviewed_by or '',
+                    alert.reviewed_at.isoformat() if alert.reviewed_at else '',
+                    alert.review_note or '',
                     archived_name,
                 ])
 
-            # utf-8-sig 方便 Excel 打开中文
             zf.writestr('alerts.csv', csv_buf.getvalue().encode('utf-8-sig'))
 
         buf.seek(0)
@@ -230,15 +297,15 @@ def create_alert():
         confidence=data.get('confidence'),
         image_url=data.get('image_url'),
         message=data.get('message'),
+        review_status='pending',
     )
 
     db.session.add(alert)
     db.session.commit()
 
-    # 通过WebSocket发送实时告警
-    socketio.emit('new_alert', alert.to_dict())
+    socketio.emit('new_alert', _alert_to_client(alert))
 
-    return jsonify(alert.to_dict()), 201
+    return jsonify(_alert_to_client(alert)), 201
 
 
 @alert_bp.route('/api/alerts/<int:alert_id>', methods=['DELETE'])

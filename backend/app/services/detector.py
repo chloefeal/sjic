@@ -41,15 +41,18 @@ class DetectorService:
             camera_id=camera_id,
             alert_type=alert_type,
             confidence=confidence,
-            image_url=image_url
+            image_url=image_url,
+            review_status='pending',
         )
-        
+
         db.session.add(alert)
         db.session.commit()
-        
-        # 发送实时告警
-        socketio.emit('new_alert', alert.to_dict())
-        
+
+        from app.utils.algorithm_catalog import label_for_alert_type
+        payload = alert.to_dict()
+        payload['alert_type_label'] = label_for_alert_type(alert.alert_type)
+        socketio.emit('new_alert', payload)
+
         return alert
 
     def start_detection(self, task_id):
