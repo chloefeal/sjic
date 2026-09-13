@@ -77,6 +77,22 @@ class LicenseService:
         except Exception:
             return ''
 
+    @staticmethod
+    def _running_in_container():
+        """True inside Docker/Podman/etc. where NIC MAC is ephemeral across recreate."""
+        if os.environ.get('SJIC_IN_CONTAINER', '').strip().lower() in ('1', 'true', 'yes'):
+            return True
+        if os.path.exists('/.dockerenv'):
+            return True
+        try:
+            with open('/proc/1/cgroup', 'r', encoding='utf-8', errors='ignore') as f:
+                text = f.read()
+            if 'docker' in text or 'containerd' in text or 'kubepods' in text or '/libpod/' in text:
+                return True
+        except Exception:
+            pass
+        return False
+
     def _windows_machine_uuid(self):
         if platform.system().lower() != 'windows':
             return ''
@@ -95,19 +111,41 @@ class LicenseService:
                 return line
         return ''
 
-    def collect_machine_factors(self):
-        """Collect host identifiers that typically differ across cloned VMs."""
+    def _resolve_machine_id(self):
+        """Prefer host-provided machine-id so container rebuild does not change it."""
+        for candidate in (
+            os.environ.get('HOST_MACHINE_ID'),
+            self._read_text('/host/etc/machine-id'),
+            self._read_text('/etc/machine-id'),
+            self._read_text('/var/lib/dbus/machine-id'),
+        ):
+            text = str(candidate or '').strip()
+            if text:
+                return text
+        return ''
+
+    def collect_machine_factors(self, *, include_mac=None):
+        """Collect host identifiers that typically differ across cloned VMs.
+
+        Docker/container NIC MAC changes on every recreate/`docker compose --build`,
+        so mac_node is omitted in containers by default (include_mac=False).
+        """
+        if include_mac is None:
+            include_mac = not self._running_in_container()
+
         factors = {
             'system': platform.system() or '',
             'release': platform.release() or '',
             'machine': platform.machine() or '',
-            'mac_node': str(uuid.getnode()),
-            'machine_id': self._read_text('/etc/machine-id') or self._read_text('/var/lib/dbus/machine-id'),
+            'machine_id': self._resolve_machine_id(),
             'product_uuid': self._read_text('/sys/class/dmi/id/product_uuid'),
             'board_serial': self._read_text('/sys/class/dmi/id/board_serial'),
             'product_serial': self._read_text('/sys/class/dmi/id/product_serial'),
             'windows_uuid': self._windows_machine_uuid(),
         }
+        if include_mac:
+            factors['mac_node'] = str(uuid.getnode())
+
         # Drop empty / placeholder DMI values
         cleaned = {}
         for key, value in factors.items():
@@ -119,12 +157,29 @@ class LicenseService:
             cleaned[key] = text
         return cleaned
 
-    def get_machine_code(self):
-        """Stable fingerprint hash from host/VM identifiers (not container hostname)."""
-        factors = self.collect_machine_factors()
-        # Deterministic order
+    @staticmethod
+    def _hash_factors(factors):
         raw = '|'.join(f'{k}={factors[k]}' for k in sorted(factors.keys()))
         return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+    def get_machine_code(self):
+        """Stable fingerprint for license issuance (ignores ephemeral container MAC)."""
+        return self._hash_factors(self.collect_machine_factors())
+
+    def iter_machine_codes(self):
+        """Accept stable and legacy fingerprints so upgrades do not break current hosts."""
+        seen = set()
+        for include_mac in (False, True):
+            code = self._hash_factors(self.collect_machine_factors(include_mac=include_mac))
+            if code not in seen:
+                seen.add(code)
+                yield code
+
+    def _machine_code_matches(self, licensed_machine_code):
+        licensed = str(licensed_machine_code or '').strip()
+        if not licensed:
+            return False
+        return licensed in set(self.iter_machine_codes())
 
     @staticmethod
     def _format_date(value):
@@ -303,9 +358,8 @@ class LicenseService:
         if edition not in ('trial', 'official'):
             return False, 'invalid_edition', self.get_status()
 
-        machine_code = self.get_machine_code()
         licensed_machine = str(data.get('machine_code', '')).strip()
-        if not licensed_machine or licensed_machine != machine_code:
+        if not self._machine_code_matches(licensed_machine):
             return False, 'machine_mismatch', self.get_status()
 
         expires_at = self._parse_license_date(data.get('expires_at'), end_of_day=True)
@@ -377,7 +431,7 @@ class LicenseService:
         if not self.verify_signature(license_data):
             return {**base, 'valid': False, 'reason': 'invalid_signature'}
 
-        if licensed_machine_code and licensed_machine_code != machine_code:
+        if licensed_machine_code and not self._machine_code_matches(licensed_machine_code):
             return {**base, 'valid': False, 'reason': 'machine_mismatch'}
 
         if expires_at and now > expires_at:
