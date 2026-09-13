@@ -129,6 +129,9 @@ class DetectorService:
                     "algorithm_parameters": task.algorithm_parameters,
                     # 服务商在算法实例上配置的推理帧率（客户任务不可改）
                     "inferFps": algorithm.resolved_infer_fps(),
+                    # 任务级每日运行时段；场景级 schedule_* 优先
+                    "schedule_start": task.schedule_start,
+                    "schedule_end": task.schedule_end,
                 }
             }
 
@@ -137,6 +140,9 @@ class DetectorService:
 
             task.status = 'syncing'
             task.run_status = 'starting'
+            # 手动/自动启动后，允许调度器继续按时段管理
+            if task.has_schedule():
+                task.schedule_paused = False
             
             current_app.logger.info(f"Published task {task_id} to edge node {edge_node.mac_address}")
             db.session.commit()
@@ -148,7 +154,7 @@ class DetectorService:
             current_app.logger.error(f"Error starting detection: {str(e)}\n{traceback.format_exc()}")
             return {"success": False, "message": str(e)}
 
-    def stop_detection(self, task_id):
+    def stop_detection(self, task_id, *, pause_schedule=None):
         """停止检测任务（下发给边缘计算节点）"""
         try:
             task = Task.query.get(task_id)
@@ -156,6 +162,11 @@ class DetectorService:
                 return {"success": False, "message": "Task not found"}
 
             task.status = 'stopped'
+            # pause_schedule=True：用户手动停止，不再自动拉起
+            # pause_schedule=False：调度器按时段停止，次日仍可自动启动
+            # None：若为定时任务则视为手动暂停
+            if pause_schedule is True or (pause_schedule is None and task.has_schedule()):
+                task.schedule_paused = True
             db.session.commit()
 
             if task.edge_node_id:

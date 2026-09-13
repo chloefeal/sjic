@@ -43,6 +43,8 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       ...(preset.defaults || {}),
       enabled: true,
       detection_region: null,
+      schedule_start: '',
+      schedule_end: '',
     };
     updateRules([...rules, next]);
     setAddPreset('');
@@ -61,7 +63,7 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>检测场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          从预设添加场景（如人员缺席、识别手机）。同一任务只推理一次，多场景共用检测结果。
+          从预设添加场景（如人员缺席、识别手机）。同一任务只推理一次；场景可单独设置运行时段（优先于任务时段）。
         </Typography>
       </Grid>
 
@@ -161,6 +163,31 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
                     label="告警类型"
                     value={rule.alert_type || ''}
                     onChange={(e) => patchRule(index, { alert_type: e.target.value })}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="time"
+                    label="场景开始"
+                    value={rule.schedule_start || ''}
+                    onChange={(e) => patchRule(index, { schedule_start: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ step: 60 }}
+                    helperText="可选，优先于任务时段"
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="time"
+                    label="场景结束"
+                    value={rule.schedule_end || ''}
+                    onChange={(e) => patchRule(index, { schedule_end: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                    inputProps={{ step: 60 }}
                   />
                 </Grid>
                 <Grid item xs={12}>

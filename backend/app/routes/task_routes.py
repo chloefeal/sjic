@@ -91,6 +91,16 @@ def create_tasks():
     data.pop('created_at', None)
     data.pop('status', None)
     data.pop('run_status', None)
+    data.pop('is_scheduled', None)
+
+    # 规范化时段：空串视为未设置
+    for key in ('schedule_start', 'schedule_end'):
+        if key in data and not str(data.get(key) or '').strip():
+            data[key] = None
+        elif key in data and data[key] is not None:
+            data[key] = str(data[key]).strip()
+    if data.get('schedule_start') and data.get('schedule_end'):
+        data.setdefault('schedule_paused', False)
 
     algorithm_id = data.get('algorithm_id')
     if not algorithm_id:
@@ -188,6 +198,17 @@ def update_tasks(task_id):
       data = request.json or {}
       # 任务更新忽略 modelId，模型由算法绑定决定
       data.pop('modelId', None)
+      data.pop('is_scheduled', None)
+      data.pop('algorithm_type', None)
+      data.pop('algorithm_engine', None)
+      data.pop('created_at', None)
+      data.pop('id', None)
+
+      for key in ('schedule_start', 'schedule_end'):
+        if key in data and not str(data.get(key) or '').strip():
+          data[key] = None
+        elif key in data and data[key] is not None:
+          data[key] = str(data[key]).strip()
 
       task = Task.query.get_or_404(task_id)
 

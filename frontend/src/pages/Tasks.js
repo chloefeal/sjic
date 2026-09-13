@@ -43,6 +43,8 @@ function Tasks() {
     confidence: 0.5,
     notificationEnabled: true,
     algorithm_id: '',
+    schedule_start: '',
+    schedule_end: '',
     algorithm_parameters: {
       labels: [],
       min_area_cm2: 100,
@@ -175,6 +177,8 @@ function Tasks() {
       confidence: task.confidence,
       alertThreshold: task.alertThreshold,
       notificationEnabled: task.notificationEnabled,
+      schedule_start: task.schedule_start || '',
+      schedule_end: task.schedule_end || '',
       algorithm_parameters: task.algorithm_parameters || {}
     });
 
@@ -193,6 +197,8 @@ function Tasks() {
       alertThreshold: 3,
       notificationEnabled: true,
       algorithm_id: '',
+      schedule_start: '',
+      schedule_end: '',
       algorithm_parameters: {
         labels: [],
         min_area_cm2: 100,
@@ -324,6 +330,7 @@ function Tasks() {
                     {rule.type === 'crowd_count' ? ` · ≥${rule.min_count ?? 5}人 / ${rule.seconds ?? 10}秒` : ''}
                     {` · 告警 ${rule.alert_type || '-'}`}
                     {rule.detection_region?.points?.length ? ` · ROI ${rule.detection_region.points.length} 点` : ' · 整帧'}
+                    {rule.schedule_start && rule.schedule_end ? ` · 时段 ${rule.schedule_start}–${rule.schedule_end}` : ''}
                   </Typography>
                 </Box>
               ))}
@@ -341,6 +348,9 @@ function Tasks() {
               {behaviors.map((b, idx) => (
                 <Typography key={b.id || idx}>
                   {b.name || b.type} · {b.seconds ?? '-'} 秒
+                  {b.type === 'smart_glasses' ? ` · ≥${b.min_touches ?? 3}次触碰` : ''}
+                  {b.type === 'invigilator_absent' ? ` · 站立≥${b.min_standing ?? 2}` : ''}
+                  {b.schedule_start && b.schedule_end ? ` · 时段 ${b.schedule_start}–${b.schedule_end}` : ''}
                   {b.enabled === false ? '（已关闭）' : ''}
                 </Typography>
               ))}
@@ -722,7 +732,19 @@ function Tasks() {
             <TableBody>
               {filteredTasks.map((task) => (
                 <TableRow key={task.id}>
-                  <TableCell>{task.name}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <span>{task.name}</span>
+                      {task.schedule_start && task.schedule_end && (
+                        <Chip
+                          size="small"
+                          label={`定时 ${task.schedule_start}–${task.schedule_end}${task.schedule_paused ? ' · 已暂停' : ''}`}
+                          color={task.schedule_paused ? 'default' : 'info'}
+                          variant="outlined"
+                        />
+                      )}
+                    </Box>
+                  </TableCell>
                   <TableCell>{cameras.find(c => c.id === task.cameraId)?.name}</TableCell>
                   <TableCell>{nodes.find(n => n.id === task.edge_node_id)?.name || "无"}</TableCell>
                   <TableCell>{algorithms.find(a => a.id === task.algorithm_id)?.name}</TableCell>
@@ -912,6 +934,35 @@ function Tasks() {
                 value={formData.alertThreshold}
                 onChange={(e) => setFormData({ ...formData, alertThreshold: parseInt(e.target.value) })}
                 inputProps={{ min: 1 }}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                type="time"
+                label="任务运行开始"
+                value={formData.schedule_start || ''}
+                onChange={(e) => setFormData({ ...formData, schedule_start: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ step: 60 }}
+                helperText="设置起止后为定时任务，每天自动运行"
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                type="time"
+                label="任务运行结束"
+                value={formData.schedule_end || ''}
+                onChange={(e) => setFormData({ ...formData, schedule_end: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ step: 60 }}
+                helperText={
+                  formData.schedule_start && formData.schedule_end
+                    ? '已设为定时任务（场景时段优先）'
+                    : '留空则需手动启停'
+                }
               />
             </Grid>
 

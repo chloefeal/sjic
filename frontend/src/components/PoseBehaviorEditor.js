@@ -43,6 +43,8 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
       scene_preset_id: preset.id,
       ...(preset.defaults || {}),
       enabled: true,
+      schedule_start: '',
+      schedule_end: '',
     };
     onChange({
       ...algorithmParameters,
@@ -51,24 +53,30 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
     setAddPreset('');
   };
 
+  const durationLabel = (b) => {
+    if (b.type === 'smart_glasses') return '统计窗口(秒)';
+    if (b.type === 'invigilator_absent') return '判定间隔(秒)';
+    return '持续时长(秒)';
+  };
+
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>姿态行为 / 场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          同一任务只跑一次姿态推理；可叠加多个行为（不看屏幕、张望、手托下巴、手指屏幕等）。
+          同一任务只跑一次姿态推理；可叠加多个行为。场景可单独设置运行时段（优先于任务时段）。
         </Typography>
       </Grid>
 
-          {behaviors.length === 0 && (
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">
-                {scenePresets.length === 0
-                  ? '该算法没有场景预设（请确认使用的是从模板派生并已补齐 schema 的上架算法）。'
-                  : '尚未添加行为，请从下方场景预设添加。'}
-              </Typography>
-            </Grid>
-          )}
+      {behaviors.length === 0 && (
+        <Grid item xs={12}>
+          <Typography variant="body2" color="text.secondary">
+            {scenePresets.length === 0
+              ? '该算法没有场景预设（请确认使用的是从模板派生并已补齐 schema 的上架算法）。'
+              : '尚未添加行为，请从下方场景预设添加。'}
+          </Typography>
+        </Grid>
+      )}
 
       {behaviors.map((b, index) => (
         <Grid item xs={12} key={b.id || index}>
@@ -102,10 +110,10 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                   fullWidth
                   size="small"
                   type="number"
-                  label="持续时长(秒)"
-                  value={b.seconds ?? 3}
+                  label={durationLabel(b)}
+                  value={b.seconds ?? (b.type === 'invigilator_absent' ? 120 : 3)}
                   onChange={(e) => patchBehavior(index, { seconds: parseFloat(e.target.value) })}
-                  inputProps={{ min: 0.5, step: 0.5 }}
+                  inputProps={{ min: 0.5, step: b.type === 'invigilator_absent' ? 10 : 0.5 }}
                 />
               </Grid>
               {(b.type === 'look_aside' || b.type === 'gaze_away') && (
@@ -134,6 +142,32 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                   />
                 </Grid>
               )}
+              {b.type === 'smart_glasses' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="最少触碰次数"
+                    value={b.min_touches ?? 3}
+                    onChange={(e) => patchBehavior(index, { min_touches: parseInt(e.target.value, 10) })}
+                    inputProps={{ min: 2, step: 1 }}
+                  />
+                </Grid>
+              )}
+              {b.type === 'invigilator_absent' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="最少站立人数"
+                    value={b.min_standing ?? 2}
+                    onChange={(e) => patchBehavior(index, { min_standing: parseInt(e.target.value, 10) })}
+                    inputProps={{ min: 1, step: 1 }}
+                  />
+                </Grid>
+              )}
               <Grid item xs={12} md={3}>
                 <TextField
                   fullWidth
@@ -141,6 +175,31 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                   label="告警类型"
                   value={b.alert_type || ''}
                   onChange={(e) => patchBehavior(index, { alert_type: e.target.value })}
+                />
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="time"
+                  label="场景开始"
+                  value={b.schedule_start || ''}
+                  onChange={(e) => patchBehavior(index, { schedule_start: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 60 }}
+                  helperText="可选，优先于任务时段"
+                />
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="time"
+                  label="场景结束"
+                  value={b.schedule_end || ''}
+                  onChange={(e) => patchBehavior(index, { schedule_end: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ step: 60 }}
                 />
               </Grid>
             </Grid>

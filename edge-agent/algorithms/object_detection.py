@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from utils.calc import transform_points_from_frontend_to_backend, get_letterbox_params, preprocess
 from utils.rtsp import FramePump, is_valid_frame
+from utils.schedule import is_item_active_now
 
 
 class ObjectDetectionAlgorithm(BaseAlgorithm):
@@ -70,6 +71,8 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
             confidence = float(parameters.get('confidence', 0.5))
             algorithm_parameters = parameters.get('algorithm_parameters') or {}
             alert_threshold = int(parameters.get('alertThreshold', 10))
+            task_sched_start = parameters.get('schedule_start') or algorithm_parameters.get('schedule_start')
+            task_sched_end = parameters.get('schedule_end') or algorithm_parameters.get('schedule_end')
             # 解码/推理都不必跟摄像头满帧率；告警场景默认 5fps
             infer_fps = float(
                 parameters.get('inferFps')
@@ -191,6 +194,9 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                         fps_window_n = 0
 
                     for rule in rules:
+                        if not is_item_active_now(now, rule.spec, task_sched_start, task_sched_end):
+                            rule._state_since = None
+                            continue
                         hit = rule.evaluate(boxes, now, logger)
                         if not hit or not on_alert:
                             continue

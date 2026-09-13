@@ -212,6 +212,41 @@ POSE_SCENE_PRESETS = [
             'enabled': True,
         },
     },
+    {
+        'id': 'cover_mouth',
+        'type': 'cover_mouth',
+        'name': '捂嘴报题',
+        'description': '考生捂嘴说话，可能在向场外念题',
+        'defaults': {
+            'seconds': 3,
+            'alert_type': 'cover_mouth',
+            'enabled': True,
+        },
+    },
+    {
+        'id': 'smart_glasses',
+        'type': 'smart_glasses',
+        'name': 'AI智能眼镜拍摄题目',
+        'description': '手指多次触摸智能眼镜镜脚（耳朵附近）',
+        'defaults': {
+            'seconds': 30,
+            'min_touches': 3,
+            'alert_type': 'smart_glasses',
+            'enabled': True,
+        },
+    },
+    {
+        'id': 'invigilator_absent',
+        'type': 'invigilator_absent',
+        'name': '考试员不巡场',
+        'description': '考场需 2 名考官站立巡场；站立人数持续少于阈值则告警（默认每 2 分钟判定）',
+        'defaults': {
+            'seconds': 120,
+            'min_standing': 2,
+            'alert_type': 'invigilator_absent',
+            'enabled': True,
+        },
+    },
 ]
 
 
@@ -245,7 +280,7 @@ PRODUCT_ALGORITHMS = [
         'type': 'pose_behavior',
         'engine': 'pose_behavior',
         'name': '姿态行为检测',
-        'description': '一次推理挂多个行为：不看屏幕、张望、低头、手托下巴、手指屏幕、倒地等',
+        'description': '一次推理挂多个行为：不看屏幕、张望、捂嘴报题、智能眼镜、巡场等',
         'category': 'exam',
         'parameter_schema': _pose_schema(),
     },
@@ -349,12 +384,46 @@ def schema_for_engine(engine: str) -> dict:
     return dict(product.get('parameter_schema') or {})
 
 
+def _merge_scene_presets(existing, catalog):
+    """按 id 合并：保留已有项，追加目录中新增预设。"""
+    existing = list(existing or [])
+    catalog = list(catalog or [])
+    if not catalog:
+        return existing
+    by_id = {p.get('id'): dict(p) for p in existing if p.get('id')}
+    ordered = []
+    seen = set()
+    for p in catalog:
+        pid = p.get('id')
+        if not pid:
+            continue
+        if pid in by_id:
+            # 保留实例侧已改字段，但补齐缺失的 defaults/description
+            cur = by_id[pid]
+            merged = dict(p)
+            merged.update(cur)
+            if isinstance(p.get('defaults'), dict):
+                merged['defaults'] = {**(p.get('defaults') or {}), **(cur.get('defaults') or {})}
+            ordered.append(merged)
+        else:
+            ordered.append(dict(p))
+        seen.add(pid)
+    for p in existing:
+        pid = p.get('id')
+        if pid and pid not in seen:
+            ordered.append(dict(p))
+            seen.add(pid)
+    return ordered
+
+
 def merge_catalog_schema(existing_schema, engine: str, *, origin=None) -> dict:
-    """用目录补齐缺失的 scene_presets / ui / default_task_params，保留 publish_meta 等。"""
+    """用目录补齐/合并 scene_presets / ui / default_task_params，保留 publish_meta 等。"""
     base = schema_for_engine(engine)
     schema = dict(existing_schema or {})
-    if not schema.get('scene_presets') and base.get('scene_presets'):
-        schema['scene_presets'] = base['scene_presets']
+    if base.get('scene_presets'):
+        schema['scene_presets'] = _merge_scene_presets(
+            schema.get('scene_presets'), base['scene_presets']
+        )
     if not schema.get('ui') and base.get('ui'):
         schema['ui'] = base['ui']
     if 'default_task_params' not in schema and 'default_task_params' in base:

@@ -132,6 +132,13 @@ def create_app(config_class=Config):
     from app.services.mqtt_service import mqtt_service
     mqtt_service.init_app(app)
 
+    # 定时任务每日时段自动启停
+    try:
+        from app.services.task_scheduler import start_task_scheduler
+        start_task_scheduler(app)
+    except Exception as e:
+        app.logger.warning(f"Task scheduler not started: {e}")
+
     # 注册 Swagger
     from flasgger import Swagger
     swagger = Swagger(app)

@@ -19,7 +19,15 @@ class Task(db.Model):
     # 边缘架构新增字段
     edge_node_id = db.Column(db.Integer, db.ForeignKey('edge_nodes.id'), nullable=True) # 指派给哪个边缘节点执行
     run_status = db.Column(db.String(20), default='stopped') # 边缘端实际的运行状态: syncing, running, stopped, error
+    # 每日运行时段（HH:MM）；两者都设置则为定时任务，由调度器按窗口启停
+    schedule_start = db.Column(db.String(8), nullable=True)
+    schedule_end = db.Column(db.String(8), nullable=True)
+    # 用户手动停止后不再自动拉起，直到再次手动启动
+    schedule_paused = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def has_schedule(self):
+        return bool((self.schedule_start or '').strip() and (self.schedule_end or '').strip())
 
     def to_dict(self):
         algo = None
@@ -40,6 +48,10 @@ class Task(db.Model):
             'run_status': self.run_status,
             'algorithm_parameters': self.algorithm_parameters,
             'status': self.status,
+            'schedule_start': self.schedule_start,
+            'schedule_end': self.schedule_end,
+            'schedule_paused': bool(self.schedule_paused),
+            'is_scheduled': self.has_schedule(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
         } 
 
