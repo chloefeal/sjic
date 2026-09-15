@@ -261,8 +261,8 @@ function Algorithms() {
         <TableHead>
           <TableRow>
             <TableCell>名称</TableCell>
-            <TableCell>标识 type</TableCell>
-            <TableCell>引擎</TableCell>
+            {isSuperAdmin && <TableCell>标识 type</TableCell>}
+            {isSuperAdmin && <TableCell>引擎</TableCell>}
             <TableCell>分类</TableCell>
             {isSuperAdmin && <TableCell>绑定模型</TableCell>}
             {isSuperAdmin && <TableCell>推理FPS</TableCell>}
@@ -273,7 +273,7 @@ function Algorithms() {
         <TableBody>
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={isSuperAdmin ? 8 : 4}>
+              <TableCell colSpan={isSuperAdmin ? 8 : 2}>
                 <Typography variant="body2" color="text.secondary">
                   {isSuperAdmin ? '暂无上架算法，请到「系统模板」页签派生' : '暂无可用算法'}
                 </Typography>
@@ -295,10 +295,14 @@ function Algorithms() {
                     </Typography>
                   )}
                 </TableCell>
-                <TableCell><Chip label={algorithm.type} size="small" variant="outlined" /></TableCell>
-                <TableCell>
-                  <Chip label={algorithm.engine || algorithm.type} size="small" color="primary" variant="outlined" />
-                </TableCell>
+                {isSuperAdmin && (
+                  <TableCell><Chip label={algorithm.type} size="small" variant="outlined" /></TableCell>
+                )}
+                {isSuperAdmin && (
+                  <TableCell>
+                    <Chip label={algorithm.engine || algorithm.type} size="small" color="primary" variant="outlined" />
+                  </TableCell>
+                )}
                 <TableCell>{algorithm.category || '-'}</TableCell>
                 {isSuperAdmin && (
                   <TableCell>
@@ -382,7 +386,7 @@ function Algorithms() {
           {tab === 0 && (
             <Box>
               <Alert severity="info" sx={{ mb: 2 }}>
-                推荐流程：系统模板 → 派生 → 编辑绑定模型 → 发布。客户建任务时只能选已发布项。
+                上架算法流程：系统模板 → 派生 → 编辑绑定模型 → 发布。客户建任务时只能选已发布项。
               </Alert>
               {renderInstanceTable(instances)}
             </Box>

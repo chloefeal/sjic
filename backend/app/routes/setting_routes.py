@@ -12,6 +12,7 @@ from app.middleware.auth import token_required, role_required
 setting_bp = Blueprint('setting', __name__)
 
 ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
+ALLOWED_UI_THEMES = {'night-tech', 'exam-dawn', 'highway-navy', 'proctor-light'}
 
 
 def _branding_folder():
@@ -24,11 +25,16 @@ def _branding_payload(config):
     branding = (config or {}).get('branding') or {}
     logo_filename = branding.get('logo_filename') or ''
     logo_url = f'/api/branding/logo/{logo_filename}' if logo_filename else ''
+    system = (config or {}).get('system') or {}
+    ui_theme = system.get('ui_theme') or 'night-tech'
+    if ui_theme not in ALLOWED_UI_THEMES:
+        ui_theme = 'night-tech'
     return {
         'company_name': branding.get('company_name') or '',
         'product_name': branding.get('product_name') or '智算检测平台',
         'logo_filename': logo_filename,
         'logo_url': logo_url,
+        'ui_theme': ui_theme,
     }
 
 
@@ -68,6 +74,11 @@ def update_settings():
         # 非 vendor 不可改 branding；避免被静默改掉
         if 'branding' in data and role != 'vendor':
             data = {k: v for k, v in data.items() if k != 'branding'}
+
+        system = data.get('system')
+        if isinstance(system, dict) and 'ui_theme' in system:
+            if system.get('ui_theme') not in ALLOWED_UI_THEMES:
+                system['ui_theme'] = 'night-tech'
 
         settings = _get_or_create_settings()
         settings.update(data)

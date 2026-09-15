@@ -57,9 +57,13 @@ instance.interceptors.response.use(
   },
   error => {
     if (error.response && error.response.status === 401) {
-      // 未授权，清除 token 并重定向到登录页
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      const reqUrl = error.config?.url || '';
+      const onLoginPage = typeof window !== 'undefined' && window.location.pathname === '/login';
+      // 登录接口失败只把错误交给页面提示，不要整页重载（否则提示一闪而过、输入被清空）
+      if (!reqUrl.includes('/api/login') && !onLoginPage) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

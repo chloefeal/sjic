@@ -1,5 +1,5 @@
 """
-运维管理：远程重启后端 / 边缘 Agent（客户管理员 admin）
+运维管理：远程重启后端 / 边缘 Agent / 主机电源（客户管理员、服务商）
 """
 import os
 import threading
@@ -62,7 +62,7 @@ def restart_backend():
 
 @admin_bp.route('/api/nodes/<int:node_id>/restart', methods=['POST'])
 @token_required
-@role_required('customer')
+@role_required('customer', 'vendor')
 def restart_edge_node(node_id):
     """通过 MQTT 通知边缘 Agent 优雅退出；Docker Compose restart: unless-stopped 自动拉起。"""
     node = EdgeNode.query.get(node_id)
@@ -90,4 +90,61 @@ def restart_edge_node(node_id):
         'node_id': node.id,
         'mac_address': node.mac_address,
         'hint': '边缘端需用 Docker Compose（restart: unless-stopped）运行，进程退出后会自动拉起。',
+    })
+
+
+@admin_bp.route('/api/nodes/<int:node_id>/power', methods=['POST'])
+@token_required
+@role_required('customer', 'vendor')
+def power_edge_node(node_id):
+    """边缘主机电源：reboot / shutdown 经 MQTT 下发；wake 由平台发送 WoL 魔术包。"""
+    node = EdgeNode.query.get(node_id)
+    if not node:
+        return jsonify({'error': 'Node not found'}), 404
+
+    body = request.get_json(silent=True) or {}
+    action = (body.get('action') or '').strip().lower()
+    reason = body.get('reason') or 'admin'
+    payload = get_token_payload() or {}
+
+    if action not in ('reboot', 'shutdown', 'wake'):
+        return jsonify({'error': 'action 须为 reboot / shutdown / wake'}), 400
+
+    current_app.logger.warning(
+        "Edge power action=%s node_id=%s mac=%s by user=%s reason=%s",
+        action,
+        node.id,
+        node.mac_address,
+        payload.get('user'),
+        reason,
+    )
+
+    if action == 'wake':
+        from app.utils.wol import send_wol
+        try:
+            result = send_wol(node.mac_address, node.ip_address)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            current_app.logger.error(f"WoL failed: {e}")
+            return jsonify({'error': f'发送唤醒包失败: {e}'}), 500
+        return jsonify({
+            'message': f'已向 {node.name} 发送网络唤醒',
+            'node_id': node.id,
+            'mac_address': result.get('mac') or node.mac_address,
+            'hint': '请确认网卡已开启 WOL，且平台与盒子在同一二层网络；约 1～2 分钟后看节点是否上线。',
+        })
+
+    try:
+        mqtt_service.publish_agent_power(node.mac_address, action, reason=reason)
+    except Exception as e:
+        current_app.logger.error(f"Failed to publish agent power: {e}")
+        return jsonify({'error': f'下发电源指令失败: {e}'}), 500
+
+    labels = {'reboot': '重启', 'shutdown': '关机'}
+    return jsonify({
+        'message': f'{labels[action]}指令已下发到 {node.name}',
+        'node_id': node.id,
+        'mac_address': node.mac_address,
+        'hint': '边缘 Docker 需 privileged + pid: host，才能重启/关闭宿主机。',
     })

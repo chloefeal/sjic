@@ -4,7 +4,9 @@
 #   1. 编辑 config.yaml：architecture=jetson，填入平台 MQTT/API 地址
 #   2. docker compose up -d --build
 #
-# 远程重启：平台下发 agent/restart → 容器进程退出 → restart: unless-stopped 自动拉起
+# 远程重启 Agent：平台下发 agent/restart → 容器进程退出 → restart: unless-stopped 自动拉起
+# 远程重启/关机主机：平台下发 agent/power → nsenter 宿主机 PID 1 执行 reboot/poweroff
+#   因此需要 privileged + pid: host；网卡需开启 WOL 才能被平台网络唤醒
 #
 # x86/CPU 调试:
 #   docker compose --profile x86 up -d --build
@@ -24,6 +26,8 @@ services:
     # host 网络：真实 MAC / 局域网 IP、MQTT、RTSP 更稳定
     network_mode: host
     ipc: host
+    pid: host
+    privileged: true
     runtime: ${EDGE_RUNTIME:-nvidia}
     environment:
       - TZ=Asia/Shanghai
@@ -52,6 +56,8 @@ services:
     restart: unless-stopped
     network_mode: host
     ipc: host
+    pid: host
+    privileged: true
     environment:
       - TZ=Asia/Shanghai
     volumes:

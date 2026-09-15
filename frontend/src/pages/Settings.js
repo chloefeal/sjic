@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { Save, CloudUpload, Delete, RestartAlt } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
+import { UI_THEME_OPTIONS, DEFAULT_UI_THEME } from '../theme';
 
 const DEFAULT_SETTINGS = {
   external_alert_api: {
@@ -17,7 +18,8 @@ const DEFAULT_SETTINGS = {
     image_quality: 95
   },
   system: {
-    log_level: 'INFO'
+    log_level: 'INFO',
+    ui_theme: DEFAULT_UI_THEME
   },
   branding: {
     company_name: '',
@@ -192,14 +194,57 @@ function Settings() {
         <Typography variant="h5" gutterBottom>系统设置</Typography>
       </Grid>
 
+      <Grid item xs={12}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>界面主题</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              同时作用于登录页背景与平台整体配色，保存后立即生效。
+            </Typography>
+            <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+              {UI_THEME_OPTIONS.map((opt) => {
+                const selected = (settings.system.ui_theme || DEFAULT_UI_THEME) === opt.value;
+                return (
+                  <Box
+                    key={opt.value}
+                    onClick={() => {
+                      if (!licenseValid) return;
+                      setSettings((prev) => ({
+                        ...prev,
+                        system: { ...prev.system, ui_theme: opt.value },
+                      }));
+                    }}
+                    sx={{
+                      width: 180,
+                      cursor: licenseValid ? 'pointer' : 'default',
+                      opacity: licenseValid ? 1 : 0.55,
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                      border: selected ? '2px solid' : '1px solid',
+                      borderColor: selected ? 'primary.main' : 'divider',
+                      boxShadow: selected ? 4 : 0,
+                    }}
+                  >
+                    <Box sx={{ height: 72, background: opt.preview }} />
+                    <Box sx={{ p: 1.25 }}>
+                      <Typography variant="subtitle2">{opt.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {opt.description}
+                      </Typography>
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
+          </CardContent>
+        </Card>
+      </Grid>
+
       {isVendor && (
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>品牌定制</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                用于集成商 / 运营商白标：登录页与顶栏将显示公司名称与 Logo。
-              </Typography>
               <TextField
                 fullWidth
                 label="公司名称"
@@ -207,6 +252,7 @@ function Settings() {
                 onChange={handleChange('branding', 'company_name')}
                 margin="normal"
                 disabled={!licenseValid}
+                helperText="显示在登录页最下方，格式如 @某某科技"
               />
               <TextField
                 fullWidth

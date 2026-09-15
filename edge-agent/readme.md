@@ -108,10 +108,12 @@ git clone //gitee.com/MooreThreads-AI-SOC/m1000_npu_model_zoo.git
 cd Object_Detection/001yolov8m
 python export.py
 
-## Docker 部署与远程重启（推荐）
+## Docker 部署与远程电源（推荐）
 
-平台可通过 MQTT 下发 `agent/restart`，Agent 优雅停任务后退出进程；
-需用 Docker Compose `restart: unless-stopped` 自动拉起容器。
+平台可通过 MQTT 下发：
+- `agent/restart`：Agent 优雅停任务后退出进程，Docker Compose `restart: unless-stopped` 自动拉起容器。
+- `agent/power`（`reboot` / `shutdown`）：停任务后通过 `nsenter` 重启或关闭**宿主机**。
+  需 `privileged: true` 与 `pid: host`。关机后由平台「网络唤醒」发送 WoL 魔术包（网卡需开启 WOL，且与平台同一二层网络）。
 
 ### Jetson（默认）
 

@@ -46,9 +46,7 @@ function Layout({ children }) {
         logo_url: data.logo_url || '',
       });
       if (data.product_name) {
-        document.title = data.company_name
-          ? `${data.product_name} · ${data.company_name}`
-          : data.product_name;
+        document.title = data.product_name;
       }
     } catch (e) {
       // 保持默认标题
@@ -119,16 +117,9 @@ function Layout({ children }) {
                 }}
               />
             )}
-            <Box>
-              <Typography variant="h6" noWrap component="div" sx={{ lineHeight: 1.2, fontSize: '1rem' }}>
-                {branding.product_name}
-              </Typography>
-              {branding.company_name && (
-                <Typography variant="caption" sx={{ opacity: 0.7, color: 'secondary.main' }}>
-                  {branding.company_name}
-                </Typography>
-              )}
-            </Box>
+            <Typography variant="h6" noWrap component="div" sx={{ fontSize: '1rem' }}>
+              {branding.product_name}
+            </Typography>
           </Stack>
           <IconButton
             color="inherit"

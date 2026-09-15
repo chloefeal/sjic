@@ -3,15 +3,16 @@ import {
   Grid, Card, CardContent, Typography, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Dialog, DialogTitle, DialogContent,
   DialogActions, TablePagination, IconButton, TextField, Button, Box, Stack,
-  Chip, MenuItem, Alert as MuiAlert
+  Chip, MenuItem, Alert as MuiAlert, InputAdornment
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
-  ZoomIn, Search, FileDownload, Clear, CheckCircle, Cancel, Undo
+  ZoomIn, Search, FileDownload, Clear, CheckCircle, Cancel, Undo, Event
 } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
 
 const REVIEW_OPTIONS = [
-  { value: '', label: '全部状态' },
+  { value: 'all', label: '全部状态' },
   { value: 'pending', label: '待确认' },
   { value: 'confirmed', label: '已确认' },
   { value: 'false_positive', label: '误报' },
@@ -22,6 +23,129 @@ const STATUS_META = {
   confirmed: { label: '已确认', color: 'success' },
   false_positive: { label: '误报', color: 'default' },
 };
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function nowDateTimeParts() {
+  const d = new Date();
+  return {
+    date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+    time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+  };
+}
+
+function splitDateTime(value) {
+  if (!value) return { date: '', time: '' };
+  const [date, time] = String(value).split('T');
+  return { date: date || '', time: (time || '').slice(0, 5) };
+}
+
+function DateTimeFilterField({ label, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [draftDate, setDraftDate] = useState('');
+  const [draftTime, setDraftTime] = useState('');
+
+  const handleOpen = (event) => {
+    event?.stopPropagation?.();
+    const parts = value ? splitDateTime(value) : nowDateTimeParts();
+    setDraftDate(parts.date);
+    setDraftTime(parts.time || '00:00');
+    setOpen(true);
+  };
+
+  const nativePickerSx = {
+    '& input::-webkit-calendar-picker-indicator': {
+      cursor: 'pointer',
+      opacity: 1,
+      filter: (theme) => (theme.palette.mode === 'dark' ? 'invert(1)' : 'none'),
+    },
+  };
+
+  return (
+    <>
+      <TextField
+        size="small"
+        label={label}
+        value={value ? value.replace('T', ' ') : ''}
+        placeholder="未选择"
+        onClick={handleOpen}
+        InputLabelProps={{ shrink: true }}
+        InputProps={{
+          readOnly: true,
+          endAdornment: (
+            <InputAdornment position="end">
+              <IconButton
+                color="primary"
+                onClick={handleOpen}
+                edge="end"
+                size="small"
+                aria-label={`选择${label}`}
+                sx={{
+                  bgcolor: (theme) => alpha(theme.palette.primary.main, 0.16),
+                  '&:hover': {
+                    bgcolor: (theme) => alpha(theme.palette.primary.main, 0.28),
+                  },
+                }}
+              >
+                <Event fontSize="small" />
+              </IconButton>
+            </InputAdornment>
+          ),
+        }}
+        sx={{ minWidth: 240, cursor: 'pointer', '& .MuiInputBase-input': { cursor: 'pointer' } }}
+      />
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>{label}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="日期"
+              type="date"
+              value={draftDate}
+              onChange={(e) => setDraftDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+              sx={nativePickerSx}
+            />
+            <TextField
+              label="时间"
+              type="time"
+              value={draftTime}
+              onChange={(e) => setDraftTime(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{ step: 60 }}
+              fullWidth
+              sx={nativePickerSx}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              onChange('');
+              setOpen(false);
+            }}
+          >
+            清除
+          </Button>
+          <Button onClick={() => setOpen(false)}>取消</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (draftDate && draftTime) onChange(`${draftDate}T${draftTime}`);
+              setOpen(false);
+            }}
+            disabled={!draftDate || !draftTime}
+          >
+            确定
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
 
 function Alerts() {
   const [alerts, setAlerts] = useState([]);
@@ -51,7 +175,9 @@ function Alerts() {
     if (filters.keyword) params.keyword = filters.keyword;
     if (filters.start) params.start = filters.start;
     if (filters.end) params.end = filters.end;
-    if (filters.review_status) params.review_status = filters.review_status;
+    if (filters.review_status && filters.review_status !== 'all') {
+      params.review_status = filters.review_status;
+    }
     return params;
   };
 
@@ -86,9 +212,9 @@ function Alerts() {
     setKeyword('');
     setStartTime('');
     setEndTime('');
-    setReviewStatus('');
+    setReviewStatus('all');
     setPage(0);
-    setAppliedFilters({ keyword: '', start: '', end: '', review_status: '' });
+    setAppliedFilters({ keyword: '', start: '', end: '', review_status: 'all' });
   };
 
   const handleExport = async () => {
@@ -215,7 +341,7 @@ function Alerts() {
               <TextField
                 size="small"
                 label="关键字"
-                placeholder="摄像头 / 类型 / 说明"
+                placeholder="视频源 / 场景 / 说明"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
@@ -230,24 +356,18 @@ function Alerts() {
                 sx={{ minWidth: 140 }}
               >
                 {REVIEW_OPTIONS.map((opt) => (
-                  <MenuItem key={opt.value || 'all'} value={opt.value}>{opt.label}</MenuItem>
+                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
                 ))}
               </TextField>
-              <TextField
-                size="small"
+              <DateTimeFilterField
                 label="开始时间"
-                type="datetime-local"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                InputLabelProps={{ shrink: true }}
+                onChange={setStartTime}
               />
-              <TextField
-                size="small"
+              <DateTimeFilterField
                 label="结束时间"
-                type="datetime-local"
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                InputLabelProps={{ shrink: true }}
+                onChange={setEndTime}
               />
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 <Button variant="contained" startIcon={<Search />} onClick={handleSearch}>

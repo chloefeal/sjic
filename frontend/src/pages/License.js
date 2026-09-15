@@ -101,7 +101,6 @@ function License() {
               value={license?.machine_code || ''}
               margin="normal"
               InputProps={{ readOnly: true }}
-              helperText="绑定宿主机/虚机标识，克隆镜像后通常会变化"
             />
             <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
               <Button

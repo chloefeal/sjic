@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import theme from './theme';
+import { createAppTheme, DEFAULT_UI_THEME } from './theme';
+import axios from './utils/axios';
 import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
@@ -19,6 +20,21 @@ import Nodes from './pages/Nodes';
 
 function App() {
   const isSuperAdmin = localStorage.getItem('user_role') === 'vendor';
+  const [uiTheme, setUiTheme] = useState(DEFAULT_UI_THEME);
+  const theme = useMemo(() => createAppTheme(uiTheme), [uiTheme]);
+
+  useEffect(() => {
+    const loadTheme = () => {
+      axios.get('/api/branding')
+        .then((data) => {
+          if (data?.ui_theme) setUiTheme(data.ui_theme);
+        })
+        .catch(() => {});
+    };
+    loadTheme();
+    window.addEventListener('branding-updated', loadTheme);
+    return () => window.removeEventListener('branding-updated', loadTheme);
+  }, []);
 
   return (
     <ThemeProvider theme={theme}>

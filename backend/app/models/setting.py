@@ -23,7 +23,8 @@ class Setting(db.Model):
             'image_quality': 95
         },
         'system': {
-            'log_level': 'INFO'
+            'log_level': 'INFO',
+            'ui_theme': 'night-tech'
         },
         'branding': {
             'company_name': '',

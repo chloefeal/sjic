@@ -28,7 +28,20 @@ function mergeAlgoDefaults(algorithm, prevParams = {}) {
   return next;
 }
 
+function getTaskSceneNames(task) {
+  const params = task?.algorithm_parameters || {};
+  const items = [
+    ...(Array.isArray(params.rules) ? params.rules : []),
+    ...(Array.isArray(params.behaviors) ? params.behaviors : []),
+  ];
+  return items
+    .filter((item) => item && item.enabled !== false)
+    .map((item) => item.name || item.type)
+    .filter(Boolean);
+}
+
 function Tasks() {
+  const isSuperAdmin = localStorage.getItem('user_role') === 'vendor';
   const [tasks, setTasks] = useState([]);
   const [cameras, setCameras] = useState([]);
   const [algorithms, setAlgorithms] = useState([]);
@@ -725,6 +738,7 @@ function Tasks() {
                 <TableCell>视频源</TableCell>
                 <TableCell>算力节点</TableCell>
                 <TableCell>算法</TableCell>
+                <TableCell>场景</TableCell>
                 <TableCell>状态</TableCell>
                 <TableCell>操作</TableCell>
               </TableRow>
@@ -748,6 +762,19 @@ function Tasks() {
                   <TableCell>{cameras.find(c => c.id === task.cameraId)?.name}</TableCell>
                   <TableCell>{nodes.find(n => n.id === task.edge_node_id)?.name || "无"}</TableCell>
                   <TableCell>{algorithms.find(a => a.id === task.algorithm_id)?.name}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const scenes = getTaskSceneNames(task);
+                      if (scenes.length === 0) return '-';
+                      return (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {scenes.map((name, idx) => (
+                            <Chip key={`${task.id}-${idx}-${name}`} size="small" label={name} variant="outlined" />
+                          ))}
+                        </Box>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell>{task.status}</TableCell>
                   <TableCell>
                     <IconButton onClick={() => handleEdit(task)}>
@@ -853,7 +880,7 @@ function Tasks() {
                 {taskAlgorithms.map(algorithm => (
                   <MenuItem key={algorithm.id} value={algorithm.id}>
                     {algorithm.name}
-                    {algorithm.engine ? ` · ${algorithm.engine}` : ''}
+                    {isSuperAdmin && algorithm.engine ? ` · ${algorithm.engine}` : ''}
                   </MenuItem>
                 ))}
               </Select>
