@@ -7,6 +7,7 @@ import cv2
 from urllib.parse import urlparse
 from algorithms import get_algorithm
 from runtime import create_runtime
+from utils.stream import open_rtsp_capture
 
 logger = logging.getLogger('engine.task')
 
@@ -69,13 +70,22 @@ class TaskManager:
             return
 
         logger.info(f"Initializing task {task_id} ({task_config.get('task_name')})")
+        task_config.setdefault('paths', self.config.get('paths') or {})
 
-        # 1. 检查并下载模型
-        model_info = task_config.get('model', {})
-        model_path = self._ensure_model_exists(model_info)
-        if not model_path:
-            self._report_status(task_id, "failed", "Model download failed")
-            return
+        # 1. 检查并下载模型（部分引擎无需模型）
+        from algorithms import NO_MODEL_ENGINES
+        algo_type = task_config.get('algorithm_type')
+        model_info = task_config.get('model', {}) or {}
+        needs_model = model_info.get('required', algo_type not in NO_MODEL_ENGINES)
+
+        model_path = None
+        if needs_model:
+            model_path = self._ensure_model_exists(model_info)
+            if not model_path:
+                self._report_status(task_id, "failed", "Model download failed")
+                return
+        else:
+            logger.info(f"Task {task_id} engine={algo_type} does not require a model")
 
         # 2. 准备运行 (创建线程)
         stop_event = threading.Event()
@@ -105,6 +115,32 @@ class TaskManager:
             # 等待结束并在 _run_inference_loop 中清理字典
         else:
             logger.warning(f"Task {task_id} not found or not running.")
+
+    def stop_all_tasks_for_restart(self, join_timeout=8):
+        """
+        进程重启前停止全部任务，但保留 tasks.json，便于重启后 reload_tasks 自恢复。
+        """
+        task_ids = list(self.stop_events.keys())
+        if not task_ids:
+            logger.info("No active tasks to stop before restart")
+            return
+
+        logger.warning(f"Stopping {len(task_ids)} tasks for agent restart (keeping persistence)")
+        for task_id in task_ids:
+            try:
+                self.stop_events[task_id].set()
+            except Exception as e:
+                logger.warning(f"Failed to signal stop for task {task_id}: {e}")
+
+        deadline = time.time() + join_timeout
+        for task_id, thread in list(self.active_tasks.items()):
+            remaining = max(0.0, deadline - time.time())
+            if remaining <= 0:
+                break
+            try:
+                thread.join(timeout=remaining)
+            except Exception:
+                pass
 
     def _ensure_model_exists(self, model_info):
         """如果本地没有 `.engine` 或 `.onnx`，从云端下载"""
@@ -151,6 +187,7 @@ class TaskManager:
             return None
 
     def _run_inference_loop(self, task_id, task_config, model_path, stop_event):
+        cap = None
         try:
             logger.info(f"Task {task_id} Inference Loop Started. Model: {model_path}")
             
@@ -161,17 +198,23 @@ class TaskManager:
             if not algo_instance:
                 raise ValueError(f"Algorithm {algo_type} is not supported on this edge node.")
 
-            # 加载本地视频流/RTSP流
-            cap = cv2.VideoCapture(rtsp_url)
-            if not cap.isOpened():
-                raise ConnectionError(f"Cannot open camera stream at {rtsp_url}")
+            # 加载本地视频流/RTSP流（优先 TCP，避免 UDP 丢包导致 H.264 解码刷屏）
+            cap = open_rtsp_capture(rtsp_url)
 
             # 为了后续过程能拿到本地模型地址，注入 config 字典中
             task_config['model_local_path'] = model_path
 
             # 定义告警回调
-            def handle_alert(alert_type, confidence, image_frame):
-                self._upload_alert(task_config['camera']['id'], alert_type, confidence, image_frame=image_frame)
+            def handle_alert(alert_type, confidence, image_frame, message=None):
+                self._upload_alert(
+                    task_config['camera']['id'],
+                    alert_type,
+                    confidence,
+                    image_frame=image_frame,
+                    message=message,
+                    task_id=task_config.get('task_id'),
+                    algorithm_id=task_config.get('algorithm_id'),
+                )
 
             # 让纯业务代码接管！彻底剥离调度！
             logger.info(f"Handing over stream {rtsp_url} to algorithm: {algo_type}")
@@ -189,14 +232,17 @@ class TaskManager:
                 runtime=self.runtime
             )
 
-            # 当 stop_event.is_set() 后，process 循环会退出
-            cap.release()
             logger.info(f"Task {task_id} Inference Loop Stopped gracefully.")
             self._report_status(task_id, "stopped", "Task stopped by command")
         except Exception as e:
             logger.error(f"Task {task_id} failed: {str(e)}")
             self._report_status(task_id, "error", str(e))
         finally:
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
             self._cleanup_task(task_id)
 
     def _cleanup_task(self, task_id):
@@ -272,7 +318,7 @@ class TaskManager:
             }
             self.mqtt_client.publish_task_status(payload)
 
-    def _upload_alert(self, camera_id, alert_type, confidence, image_frame=None, image_path=None):
+    def _upload_alert(self, camera_id, alert_type, confidence, image_frame=None, image_path=None, message=None, task_id=None, algorithm_id=None):
         """HTTP POST 上传告警到云端"""
         url = f"{self.api_base_url}/alerts"
         try:
@@ -281,6 +327,12 @@ class TaskManager:
                 "alert_type": alert_type,
                 "confidence": confidence
             }
+            if message:
+                data["message"] = message
+            if task_id is not None:
+                data["task_id"] = task_id
+            if algorithm_id is not None:
+                data["algorithm_id"] = algorithm_id
             files = {}
             # 如果内存里有帧（例如 cv2读取的）或者有本地存储的图片
             if image_path and os.path.exists(image_path):
@@ -291,7 +343,7 @@ class TaskManager:
                 if success:
                     files['image'] = ('alert.jpg', encoded_image.tobytes(), 'image/jpeg')
 
-            response = requests.post(url, data=data, files=files, timeout=5)
+            response = requests.post(url, data=data, files=files if files else None, timeout=5)
             if response.ok:
                 logger.info(f"Alert uploaded successfully, type: {alert_type}")
             else:

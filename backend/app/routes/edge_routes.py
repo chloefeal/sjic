@@ -56,6 +56,9 @@ def receive_alert():
         camera_id = request.form.get('camera_id')
         alert_type = request.form.get('alert_type')
         confidence = request.form.get('confidence', 0.0)
+        message = request.form.get('message') or None
+        task_id = request.form.get('task_id') or None
+        algorithm_id = request.form.get('algorithm_id') or None
         
         # 接收图像文件
         image_file = request.files.get('image')
@@ -73,15 +76,22 @@ def receive_alert():
         # 写入数据库
         alert = Alert(
             camera_id=camera_id,
+            task_id=int(task_id) if task_id else None,
+            algorithm_id=int(algorithm_id) if algorithm_id else None,
             alert_type=alert_type,
             confidence=float(confidence),
-            image_url=image_url
+            image_url=image_url,
+            message=message,
+            review_status='pending',
         )
         db.session.add(alert)
         db.session.commit()
 
         # 推送给前端 WebSocket 进行实时展示
-        socketio.emit('new_alert', alert.to_dict())
+        from app.utils.algorithm_catalog import label_for_alert_type
+        payload = alert.to_dict()
+        payload['alert_type_label'] = label_for_alert_type(alert.alert_type)
+        socketio.emit('new_alert', payload)
 
         return jsonify({"success": True, "message": "Alert received successfully"}), 200
 

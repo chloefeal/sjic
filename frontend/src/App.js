@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { createAppTheme, DEFAULT_UI_THEME } from './theme';
+import axios from './utils/axios';
 import Layout from './components/Layout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
 import VideoStreams from './pages/VideoStreams';
 import Models from './pages/Models';
 import Tasks from './pages/Tasks';
@@ -12,22 +15,26 @@ import Training from './pages/Training';
 import Alerts from './pages/Alerts';
 import Algorithms from './pages/Algorithms';
 import Settings from './pages/Settings';
+import License from './pages/License';
 import Nodes from './pages/Nodes';
-
-const theme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
-});
 
 function App() {
   const isSuperAdmin = localStorage.getItem('user_role') === 'vendor';
+  const [uiTheme, setUiTheme] = useState(DEFAULT_UI_THEME);
+  const theme = useMemo(() => createAppTheme(uiTheme), [uiTheme]);
+
+  useEffect(() => {
+    const loadTheme = () => {
+      axios.get('/api/branding')
+        .then((data) => {
+          if (data?.ui_theme) setUiTheme(data.ui_theme);
+        })
+        .catch(() => {});
+    };
+    loadTheme();
+    window.addEventListener('branding-updated', loadTheme);
+    return () => window.removeEventListener('branding-updated', loadTheme);
+  }, []);
 
   return (
     <ThemeProvider theme={theme}>
@@ -38,7 +45,14 @@ function App() {
           <Route path="/" element={
             <PrivateRoute>
               <Layout>
-                <Navigate to="/streams" />
+                <Navigate to="/dashboard" replace />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/dashboard" element={
+            <PrivateRoute>
+              <Layout>
+                <Dashboard />
               </Layout>
             </PrivateRoute>
           } />
@@ -91,6 +105,13 @@ function App() {
               </Layout>
             </PrivateRoute>
           } />
+          <Route path="/license" element={
+            <PrivateRoute>
+              <Layout>
+                <License />
+              </Layout>
+            </PrivateRoute>
+          } />
           <Route path="/settings" element={
             <PrivateRoute>
               <Layout>
@@ -104,4 +125,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

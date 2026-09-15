@@ -17,6 +17,7 @@ function VideoStreams() {
   const [newStream, setNewStream] = useState({ name: '', url: '' });
   const [editingStream, setEditingStream] = useState(null);
   const [error, setError] = useState(null);
+  const [formError, setFormError] = useState(null);
   const [previewingCamera, setPreviewingCamera] = useState(null);
 
   useEffect(() => {
@@ -27,32 +28,28 @@ function VideoStreams() {
     try {
       const response = await axios.get('/api/cameras');
       setStreams(response || []);
+      setError(null);
       console.log('Streams:', response);
     } catch (error) {
       console.error('Error fetching streams:', error);
-      setError('Failed to load video streams');
+      setError(error.response?.data?.error || '加载视频源失败');
       setStreams([]);
-    }
-  };
-
-  const handleAddStream = async () => {
-    try {
-      await axios.post('/api/cameras', newStream);
-      setOpenDialog(false);
-      setNewStream({ name: '', url: '' });
-      fetchStreams();
-    } catch (error) {
-      console.error('Error adding stream:', error);
     }
   };
 
   const handleEditStream = (stream) => {
     setEditingStream(stream);
     setNewStream({ name: stream.name || '', url: stream.url || '' });
+    setFormError(null);
     setOpenDialog(true);
   };
 
   const handleSaveStream = async () => {
+    setFormError(null);
+    if (!newStream.name?.trim() || !newStream.url?.trim()) {
+      setFormError('请填写名称和视频流地址');
+      return;
+    }
     try {
       if (editingStream) {
         await axios.put(`/api/cameras/${editingStream.id}`, newStream);
@@ -62,9 +59,13 @@ function VideoStreams() {
       setOpenDialog(false);
       setEditingStream(null);
       setNewStream({ name: '', url: '' });
+      setFormError(null);
       fetchStreams();
     } catch (error) {
       console.error('Error saving stream:', error);
+      const data = error.response?.data;
+      const msg = data?.error || error.message || '保存失败，请稍后重试';
+      setFormError(msg);
     }
   };
 
@@ -72,6 +73,7 @@ function VideoStreams() {
     setOpenDialog(false);
     setEditingStream(null);
     setNewStream({ name: '', url: '' });
+    setFormError(null);
   };
 
   const handlePreview = (camera) => {
@@ -83,6 +85,7 @@ function VideoStreams() {
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm('确定要删除该视频源吗？此操作不可恢复。')) return;
     try {
       await axios.delete(`/api/cameras/${id}`);
       fetchStreams();
@@ -95,10 +98,18 @@ function VideoStreams() {
     <>
       <Grid container spacing={3}>
         <Grid item xs={12}>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
           <Button
             variant="contained"
             startIcon={<Add />}
-            onClick={() => setOpenDialog(true)}
+            onClick={() => {
+              setFormError(null);
+              setOpenDialog(true);
+            }}
             sx={{ mb: 2 }}
           >
             添加视频源
@@ -158,6 +169,11 @@ function VideoStreams() {
       <Dialog open={openDialog} onClose={handleCloseDialog}>
         <DialogTitle>{editingStream ? '修改视频源' : '添加视频源'}</DialogTitle>
         <DialogContent>
+          {formError && (
+            <Alert severity="error" sx={{ mt: 1, mb: 1 }}>
+              {formError}
+            </Alert>
+          )}
           <TextField
             autoFocus
             margin="dense"
@@ -172,6 +188,7 @@ function VideoStreams() {
             fullWidth
             value={newStream.url}
             onChange={(e) => setNewStream({ ...newStream, url: e.target.value })}
+            helperText="机位请直接写在名称里，例如「3号考位-考生位」"
           />
         </DialogContent>
         <DialogActions>

@@ -41,15 +41,18 @@ class DetectorService:
             camera_id=camera_id,
             alert_type=alert_type,
             confidence=confidence,
-            image_url=image_url
+            image_url=image_url,
+            review_status='pending',
         )
-        
+
         db.session.add(alert)
         db.session.commit()
-        
-        # 发送实时告警
-        socketio.emit('new_alert', alert.to_dict())
-        
+
+        from app.utils.algorithm_catalog import label_for_alert_type
+        payload = alert.to_dict()
+        payload['alert_type_label'] = label_for_alert_type(alert.alert_type)
+        socketio.emit('new_alert', payload)
+
         return alert
 
     def start_detection(self, task_id):
@@ -81,15 +84,22 @@ class DetectorService:
             if not camera:
                 return {"success": False, "message": "Camera not found"}
 
-            # 模型由算法绑定，任务不再直绑 modelId
-            if not algorithm.model_id:
-                return {"success": False, "message": f"Algorithm {algorithm.name} is not bound to a model"}
+            from app.utils.algorithm_catalog import engine_needs_model
 
-            model = DetectionModel.query.get(algorithm.model_id)
-            if not model:
-                return {"success": False, "message": "Bound model not found"}
-            
-            # TODO: 如果还是希望在云端跑（没有edge_node_id的情况），可以保留原逻辑。或者强迫下发。
+            engine = algorithm.resolved_engine()
+            needs_model = engine_needs_model(engine)
+
+            model = None
+            download_url = ""
+            if needs_model:
+                if not algorithm.model_id:
+                    return {"success": False, "message": f"Algorithm {algorithm.name} is not bound to a model"}
+                model = DetectionModel.query.get(algorithm.model_id)
+                if not model:
+                    return {"success": False, "message": "Bound model not found"}
+                from app.utils.storage import StorageService
+                download_url = StorageService.get_download_url(model.path, expires_in_seconds=86400)
+
             if not task.edge_node_id:
                 return {"success": False, "message": "此任务未指定边缘计算节点 (edge_node_id 为空)"}
 
@@ -97,30 +107,34 @@ class DetectorService:
             if not edge_node:
                 return {"success": False, "message": f"Edge node {task.edge_node_id} not found"}
 
-            # 生成受保护的模型下载 URL（24小时内有效）
-            from app.utils.storage import StorageService
-            download_url = StorageService.get_download_url(model.path, expires_in_seconds=86400) if model else ""
-
-            # 组装任务配置负载
+            # algorithm_type = 边缘引擎；algorithm_code = 产品算法标识
             task_payload = {
                 "msg_id": f"req_{int(datetime.now().timestamp())}",
                 "timestamp": int(datetime.now().timestamp()),
                 "task_id": task.id,
                 "task_name": task.name,
-                "algorithm_type": algorithm.type,
+                "algorithm_type": engine,
+                "algorithm_code": algorithm.type,
+                "algorithm_id": algorithm.id,
                 "camera": {
                     "id": camera.id,
-                    "rtsp_url": camera.get_rtsp_url()
+                    "rtsp_url": camera.get_rtsp_url(),
                 },
                 "model": {
                     "id": model.id if model else None,
                     "download_url": download_url,
-                    "filename": model.path if model else ""
+                    "filename": model.path if model else "",
+                    "required": needs_model,
                 },
                 "parameters": {
                     "confidence": task.confidence,
                     "alertThreshold": task.alertThreshold,
                     "algorithm_parameters": task.algorithm_parameters,
+                    # 服务商在算法实例上配置的推理帧率（客户任务不可改）
+                    "inferFps": algorithm.resolved_infer_fps(),
+                    # 任务级每日运行时段；场景级 schedule_* 优先
+                    "schedule_start": task.schedule_start,
+                    "schedule_end": task.schedule_end,
                 }
             }
 
@@ -129,6 +143,9 @@ class DetectorService:
 
             task.status = 'syncing'
             task.run_status = 'starting'
+            # 手动/自动启动后，允许调度器继续按时段管理
+            if task.has_schedule():
+                task.schedule_paused = False
             
             current_app.logger.info(f"Published task {task_id} to edge node {edge_node.mac_address}")
             db.session.commit()
@@ -140,7 +157,7 @@ class DetectorService:
             current_app.logger.error(f"Error starting detection: {str(e)}\n{traceback.format_exc()}")
             return {"success": False, "message": str(e)}
 
-    def stop_detection(self, task_id):
+    def stop_detection(self, task_id, *, pause_schedule=None):
         """停止检测任务（下发给边缘计算节点）"""
         try:
             task = Task.query.get(task_id)
@@ -148,6 +165,11 @@ class DetectorService:
                 return {"success": False, "message": "Task not found"}
 
             task.status = 'stopped'
+            # pause_schedule=True：用户手动停止，不再自动拉起
+            # pause_schedule=False：调度器按时段停止，次日仍可自动启动
+            # None：若为定时任务则视为手动暂停
+            if pause_schedule is True or (pause_schedule is None and task.has_schedule()):
+                task.schedule_paused = True
             db.session.commit()
 
             if task.edge_node_id:

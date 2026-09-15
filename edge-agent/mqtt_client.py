@@ -1,6 +1,9 @@
 import paho.mqtt.client as mqtt
 import json
 import logging
+import os
+import threading
+import time
 from engine.task_manager import TaskManager
 
 logger = logging.getLogger(__name__)
@@ -16,6 +19,7 @@ class EdgeMqttClient:
         self.client.on_message = self.on_message
         self.client.on_disconnect = self.on_disconnect
         self.task_manager = task_manager
+        self._power_lock = threading.Lock()
 
         self.topic_prefix = f"sjic/edge/{self.edge_id}"
 
@@ -59,6 +63,8 @@ class EdgeMqttClient:
             # 订阅与自己相关的指令
             client.subscribe(f"{self.topic_prefix}/task/start")
             client.subscribe(f"{self.topic_prefix}/task/stop")
+            client.subscribe(f"{self.topic_prefix}/agent/restart")
+            client.subscribe(f"{self.topic_prefix}/agent/power")
         else:
             logger.error(f"Failed to connect, return code {rc}")
 
@@ -70,15 +76,73 @@ class EdgeMqttClient:
         payload_str = msg.payload.decode('utf-8')
         logger.info(f"Received message on topic {msg.topic}")
         try:
-            data = json.loads(payload_str)
+            data = json.loads(payload_str) if payload_str.strip() else {}
             if msg.topic.endswith("/task/start"):
                 self.task_manager.start_task(data)
             elif msg.topic.endswith("/task/stop"):
                 task_id = data.get("task_id")
                 if task_id:
                     self.task_manager.stop_task(task_id)
+            elif msg.topic.endswith("/agent/restart"):
+                self._handle_agent_restart(data)
+            elif msg.topic.endswith("/agent/power"):
+                self._handle_agent_power(data)
         except Exception as e:
             logger.error(f"Error handling message: {str(e)}")
+
+    def _handle_agent_restart(self, data):
+        if not self._power_lock.acquire(blocking=False):
+            logger.warning("Agent power/restart already in progress, ignoring duplicate command")
+            return
+
+        reason = (data or {}).get("reason", "admin")
+        logger.warning(f"Agent restart requested via MQTT, reason={reason}")
+
+        def _restart():
+            try:
+                self.task_manager.stop_all_tasks_for_restart(join_timeout=8)
+            except Exception as e:
+                logger.error(f"Error stopping tasks before restart: {e}")
+            try:
+                self.stop()
+            except Exception as e:
+                logger.warning(f"Error during MQTT stop before restart: {e}")
+            time.sleep(0.3)
+            logger.warning("Exiting edge agent process for Docker Compose restart")
+            os._exit(0)
+
+        threading.Thread(target=_restart, name="agent-restart", daemon=True).start()
+
+    def _handle_agent_power(self, data):
+        action = (data or {}).get("action")
+        if action not in ("reboot", "shutdown"):
+            logger.warning(f"Ignore invalid power action: {action}")
+            return
+        if not self._power_lock.acquire(blocking=False):
+            logger.warning("Agent power/restart already in progress, ignoring duplicate command")
+            return
+
+        reason = (data or {}).get("reason", "admin")
+        logger.warning(f"Host {action} requested via MQTT, reason={reason}")
+
+        def _power():
+            try:
+                try:
+                    self.task_manager.stop_all_tasks_for_restart(join_timeout=8)
+                except Exception as e:
+                    logger.error(f"Error stopping tasks before {action}: {e}")
+                from utils.host_power import run_host_power
+                run_host_power(action)
+                try:
+                    self.stop()
+                except Exception as e:
+                    logger.warning(f"Error during MQTT stop before {action}: {e}")
+            except Exception as e:
+                logger.error(f"Host {action} failed, agent stays running: {e}")
+                if self._power_lock.locked():
+                    self._power_lock.release()
+
+        threading.Thread(target=_power, name=f"agent-{action}", daemon=True).start()
 
     def publish_heartbeat(self, status_payload):
         topic = f"{self.topic_prefix}/heartbeat"

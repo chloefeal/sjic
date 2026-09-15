@@ -170,5 +170,30 @@ class MqttService:
         self.client.publish(topic, json.dumps({"task_id": task_id}), qos=1)
         logger.info(f"Published task stop {task_id} to {mac_address}")
 
+    def publish_agent_restart(self, mac_address, reason='admin'):
+        """下发边缘 Agent 进程重启指令（需本机 systemd/supervisor 自动拉起）"""
+        topic = f"sjic/edge/{mac_address}/agent/restart"
+        payload = {
+            "reason": reason,
+            "timestamp": int(datetime.now().timestamp()),
+            "msg_id": uuid.uuid4().hex[:12],
+        }
+        self.client.publish(topic, json.dumps(payload), qos=1)
+        logger.info(f"Published agent restart to {mac_address}: {payload}")
+
+    def publish_agent_power(self, mac_address, action, reason='admin'):
+        """下发边缘主机重启 / 关机指令。"""
+        if action not in ('reboot', 'shutdown'):
+            raise ValueError(f'unsupported power action: {action}')
+        topic = f"sjic/edge/{mac_address}/agent/power"
+        payload = {
+            "action": action,
+            "reason": reason,
+            "timestamp": int(datetime.now().timestamp()),
+            "msg_id": uuid.uuid4().hex[:12],
+        }
+        self.client.publish(topic, json.dumps(payload), qos=1)
+        logger.info(f"Published agent power {action} to {mac_address}: {payload}")
+
 # 创建单例
 mqtt_service = MqttService()

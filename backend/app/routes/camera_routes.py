@@ -76,15 +76,21 @@ def create_camera():
         current_count = Camera.query.count()
         can_add, quota_reason, status = license_service.can_add_camera(current_count)
         if not can_add:
+            from app.middleware.license_guard import REASON_MESSAGES
+            max_cameras = status.get('max_cameras', 0)
+            msg = REASON_MESSAGES.get(quota_reason, f'授权路数校验失败: {quota_reason}')
+            if quota_reason == 'camera_quota_exceeded' and max_cameras:
+                msg = f'{msg}（当前 {current_count}/{max_cameras}）'
             return jsonify({
-                'error': f"License camera quota check failed: {quota_reason}",
-                'max_cameras': status.get('max_cameras', 0),
+                'error': msg,
+                'reason': quota_reason,
+                'max_cameras': max_cameras,
                 'current_cameras': current_count
             }), 403
 
         camera = Camera(
             name=data['name'],
-            url=data['url']
+            url=data['url'],
         )
         db.session.add(camera)
         db.session.commit()

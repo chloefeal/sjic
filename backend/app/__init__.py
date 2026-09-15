@@ -5,6 +5,7 @@ Flask 应用工厂模块。
 import os
 import tempfile
 import shutil
+from datetime import datetime
 from flask import Flask
 from config import Config
 from app.extensions import db, migrate, socketio, cors, sock
@@ -23,6 +24,7 @@ def create_app(config_class=Config):
     """
     app = Flask(__name__)
     app.config.from_object(config_class)
+    app.config['APP_STARTED_AT'] = datetime.now()
 
     # 设置最大内容长度
     app.config['MAX_CONTENT_LENGTH'] = config_class.MAX_CONTENT_LENGTH
@@ -35,7 +37,7 @@ def create_app(config_class=Config):
     cors.init_app(app, resources={
         r"/*": {
             "origins": "*",
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
             "expose_headers": ["Content-Type", "Authorization"],
             "supports_credentials": True,
@@ -72,7 +74,7 @@ def create_app(config_class=Config):
 
     # 确保应用核心工作目录与实例目录存在
     os.makedirs(app.instance_path, exist_ok=True)
-    for folder_key in ['MODEL_FOLDER', 'VIDEO_FOLDER', 'IMAGE_FOLDER', 'ALERT_FOLDER', 'LOG_FOLDER']:
+    for folder_key in ['MODEL_FOLDER', 'VIDEO_FOLDER', 'IMAGE_FOLDER', 'ALERT_FOLDER', 'LOG_FOLDER', 'BRANDING_FOLDER']:
         folder_path = app.config.get(folder_key)
         if folder_path:
             os.makedirs(folder_path, exist_ok=True)
@@ -124,9 +126,20 @@ def create_app(config_class=Config):
         # 注册错误处理器
         _register_error_handlers(app)
 
+        # 未授权时拦截业务 API（登录与授权导入除外）
+        from app.middleware.license_guard import register_request_guards
+        register_request_guards(app)
+
     # 初始化 MQTT
     from app.services.mqtt_service import mqtt_service
     mqtt_service.init_app(app)
+
+    # 定时任务每日时段自动启停
+    try:
+        from app.services.task_scheduler import start_task_scheduler
+        start_task_scheduler(app)
+    except Exception as e:
+        app.logger.warning(f"Task scheduler not started: {e}")
 
     # 注册 Swagger
     from flasgger import Swagger

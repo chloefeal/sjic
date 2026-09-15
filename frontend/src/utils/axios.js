@@ -33,10 +33,15 @@ const instance = axios.create({
 // 请求拦截器
 instance.interceptors.request.use(
   config => {
-    // 从 localStorage 获取 token
     const token = localStorage.getItem('token');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    // FormData 需由浏览器自动带 multipart boundary
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (config.headers && config.headers['Content-Type']) {
+        delete config.headers['Content-Type'];
+      }
     }
     return config;
   },
@@ -52,9 +57,13 @@ instance.interceptors.response.use(
   },
   error => {
     if (error.response && error.response.status === 401) {
-      // 未授权，清除 token 并重定向到登录页
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      const reqUrl = error.config?.url || '';
+      const onLoginPage = typeof window !== 'undefined' && window.location.pathname === '/login';
+      // 登录接口失败只把错误交给页面提示，不要整页重载（否则提示一闪而过、输入被清空）
+      if (!reqUrl.includes('/api/login') && !onLoginPage) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

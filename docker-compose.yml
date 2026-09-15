@@ -20,16 +20,24 @@ services:
       - ./models:/app/models
       - ./videos:/app/videos
       - ./logs:/app/logs
+      - ./branding:/app/branding
+      # Linux 生产环境建议挂载，授权绑定宿主机/虚机；Windows Docker Desktop 请勿启用
+      # - /etc/machine-id:/host/etc/machine-id:ro
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Shanghai
       - DATABASE_URL=sqlite:///instance/app.db
       - ALERT_STORAGE_PATH=/app/alerts
+      - BRANDING_STORAGE_PATH=/app/branding
       - MQTT_BROKER_URL=127.0.0.1
       - MQTT_BROKER_PORT=38883
       - STORAGE_TYPE=${STORAGE_TYPE:-NGINX}
       - DOWNLOAD_SECURE_KEY=${DOWNLOAD_SECURE_KEY:-my-super-secret-key-for-nginx}
+      - LICENSE_SIGNING_KEY=${LICENSE_SIGNING_KEY:-change-me-sjic-license-signing-key}
+      - SJIC_IN_CONTAINER=1
+      # 可选：无 machine-id 挂载时显式传入宿主机标识
+      - HOST_MACHINE_ID=${HOST_MACHINE_ID:-}
     networks:
       - sjic-network
 
@@ -44,6 +52,7 @@ services:
     volumes:
       - ./models:/usr/share/nginx/models:ro
     environment:
+      - TZ=Asia/Shanghai
       - DOWNLOAD_SECURE_KEY=${DOWNLOAD_SECURE_KEY:-my-super-secret-key-for-nginx}
     depends_on:
       - backend

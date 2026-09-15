@@ -84,28 +84,85 @@ def create_tasks():
 
     # 任务不再接收 modelId，模型由 algorithm.model_id 决定
     data.pop('modelId', None)
+    data.pop('algorithm_type', None)
+    data.pop('algorithm_engine', None)
+    data.pop('algorithm_camera_role', None)
+    data.pop('id', None)
+    data.pop('created_at', None)
+    data.pop('status', None)
+    data.pop('run_status', None)
+    data.pop('is_scheduled', None)
+
+    # 规范化时段：空串视为未设置
+    for key in ('schedule_start', 'schedule_end'):
+        if key in data and not str(data.get(key) or '').strip():
+            data[key] = None
+        elif key in data and data[key] is not None:
+            data[key] = str(data[key]).strip()
+    if data.get('schedule_start') and data.get('schedule_end'):
+        data.setdefault('schedule_paused', False)
 
     algorithm_id = data.get('algorithm_id')
     if not algorithm_id:
+        current_app.logger.warning("Create task rejected: algorithm_id is required")
         return jsonify({'error': 'algorithm_id is required'}), 400
 
     algorithm = Algorithm.query.get(algorithm_id)
     if not algorithm:
+        current_app.logger.warning(f"Create task rejected: Algorithm {algorithm_id} not found")
         return jsonify({'error': 'Algorithm not found'}), 400
     if not _is_algorithm_published(algorithm):
-        return jsonify({'error': 'Algorithm is not published'}), 400
-    if not algorithm.model_id:
-        return jsonify({'error': 'Algorithm has no bound model. Please bind a model in edit first.'}), 400
+        current_app.logger.warning(
+            f"Create task rejected: Algorithm {algorithm_id} ({algorithm.type}) is not published"
+        )
+        return jsonify({'error': 'Algorithm is not published. Please publish it in Algorithms first.'}), 400
+    if algorithm.is_system_template():
+        current_app.logger.warning(
+            f"Create task rejected: Algorithm {algorithm_id} is a system template"
+        )
+        return jsonify({
+            'error': 'Cannot create task from system template. Use a published algorithm instance derived from the template.',
+        }), 400
+
+    algorithm.ensure_catalog_schema(persist=True)
+    from app.utils.algorithm_catalog import engine_needs_model
+    if engine_needs_model(algorithm.resolved_engine()) and not algorithm.model_id:
+        current_app.logger.warning(
+            f"Create task rejected: Algorithm {algorithm_id} ({algorithm.type}) has no bound model"
+        )
+        return jsonify({'error': 'Algorithm has no bound model. Please bind a pose/detection model in Algorithms edit, then publish.'}), 400
 
     allowed, deny_reason = license_service.is_algorithm_allowed(algorithm.type)
     if not allowed:
+        current_app.logger.warning(
+            f"Create task rejected: Algorithm {algorithm.type} not allowed by license ({deny_reason})"
+        )
         return jsonify({'error': f'Algorithm not allowed by license: {deny_reason}'}), 403
 
-    task = Task(**data)
-    task.save_calibration_image()
-    db.session.add(task)
-    db.session.commit()
-    return jsonify(task.to_dict()), 201
+    # 新建任务时合并算法模板默认参数（前端未传 rules/behaviors 时）
+    params = dict(data.get('algorithm_parameters') or {})
+    defaults = (algorithm.parameter_schema or {}).get('default_task_params') or {}
+    if defaults:
+        merged = dict(defaults)
+        merged.update(params)
+        # rules/behaviors：仅当任务侧为空时用模板预设
+        if not params.get('rules') and defaults.get('rules'):
+            merged['rules'] = defaults['rules']
+        if not params.get('behaviors') and defaults.get('behaviors'):
+            merged['behaviors'] = defaults['behaviors']
+        data['algorithm_parameters'] = merged
+
+    try:
+        task = Task(**data)
+        task.save_calibration_image()
+        db.session.add(task)
+        db.session.commit()
+        current_app.logger.info(f"Task created successfully: id={task.id} name={task.name}")
+        return jsonify(task.to_dict()), 201
+    except Exception as e:
+        current_app.logger.error(f"Error creating task: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @task_bp.route('/api/tasks/<int:task_id>', methods=['PUT'])
@@ -141,6 +198,17 @@ def update_tasks(task_id):
       data = request.json or {}
       # 任务更新忽略 modelId，模型由算法绑定决定
       data.pop('modelId', None)
+      data.pop('is_scheduled', None)
+      data.pop('algorithm_type', None)
+      data.pop('algorithm_engine', None)
+      data.pop('created_at', None)
+      data.pop('id', None)
+
+      for key in ('schedule_start', 'schedule_end'):
+        if key in data and not str(data.get(key) or '').strip():
+          data[key] = None
+        elif key in data and data[key] is not None:
+          data[key] = str(data[key]).strip()
 
       task = Task.query.get_or_404(task_id)
 
@@ -151,7 +219,8 @@ def update_tasks(task_id):
           return jsonify({'error': 'Algorithm not found'}), 400
         if not _is_algorithm_published(algorithm):
           return jsonify({'error': 'Algorithm is not published'}), 400
-        if not algorithm.model_id:
+        from app.utils.algorithm_catalog import engine_needs_model
+        if engine_needs_model(algorithm.resolved_engine()) and not algorithm.model_id:
           return jsonify({'error': 'Algorithm has no bound model. Please bind a model in edit first.'}), 400
         allowed, deny_reason = license_service.is_algorithm_allowed(algorithm.type)
         if not allowed:

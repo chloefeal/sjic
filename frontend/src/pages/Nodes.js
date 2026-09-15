@@ -2,17 +2,23 @@ import React, { useState, useEffect } from 'react';
 import {
     Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
     TableRow, Button, IconButton, Typography, Box, Dialog, DialogTitle,
-    DialogContent, DialogActions, TextField, Chip, Select, MenuItem, OutlinedInput
+    DialogContent, DialogActions, TextField, Chip, Select, MenuItem, OutlinedInput,
+    Menu, ListItemIcon, ListItemText, Divider
 } from '@mui/material';
-import { Edit, Delete, Computer, Circle } from '@mui/icons-material';
+import {
+    Edit, Delete, Circle, RestartAlt, PowerSettingsNew, WifiTethering, SettingsBackupRestore
+} from '@mui/icons-material';
 import axios from '../utils/axios';
 
 function Nodes() {
+    const canPower = ['customer', 'vendor'].includes(localStorage.getItem('user_role'));
     const [nodes, setNodes] = useState([]);
     const [cameras, setCameras] = useState([]);
     const [openDialog, setOpenDialog] = useState(false);
     const [editingNode, setEditingNode] = useState(null);
     const [formData, setFormData] = useState({ name: '', bound_camera_ids: [] });
+    const [powerBusyId, setPowerBusyId] = useState(null);
+    const [powerMenu, setPowerMenu] = useState({ anchor: null, node: null });
 
     useEffect(() => {
         fetchNodes();
@@ -70,6 +76,47 @@ function Nodes() {
         }
     };
 
+    const closePowerMenu = () => setPowerMenu({ anchor: null, node: null });
+
+    const handleAgentRestart = async (node) => {
+        closePowerMenu();
+        if (!window.confirm(`确定重启边缘程序「${node.name}」？\n仅重启 Agent 容器，不关闭主机。需盒子侧 Docker Compose（restart: unless-stopped）。`)) {
+            return;
+        }
+        setPowerBusyId(node.id);
+        try {
+            const result = await axios.post(`/api/nodes/${node.id}/restart`);
+            window.alert(result.message || '重启程序指令已下发');
+        } catch (error) {
+            console.error('Error restarting agent:', error);
+            window.alert('重启程序失败: ' + (error.response?.data?.error || error.message));
+        } finally {
+            setPowerBusyId(null);
+        }
+    };
+
+    const handleNodePower = async (node, action) => {
+        closePowerMenu();
+        const messages = {
+            reboot: `确定重启边缘主机「${node.name}」？\n主机将重新开机，正在运行的任务会中断。`,
+            shutdown: `确定关闭边缘主机「${node.name}」？\n关机后需网络唤醒或现场开机才能再上线。`,
+            wake: `向「${node.name}」发送网络唤醒（WoL）？\n请确认网卡已开启 WOL，且与平台在同一局域网。`,
+        };
+        if (!window.confirm(messages[action])) {
+            return;
+        }
+        setPowerBusyId(node.id);
+        try {
+            const result = await axios.post(`/api/nodes/${node.id}/power`, { action });
+            window.alert(result.message || '指令已下发');
+        } catch (error) {
+            console.error('Error node power:', error);
+            window.alert('操作失败: ' + (error.response?.data?.error || error.message));
+        } finally {
+            setPowerBusyId(null);
+        }
+    };
+
     const getStatusColor = (status, lastHeartbeat) => {
         if (status !== 'online') return 'error';
         if (!lastHeartbeat) return 'warning';
@@ -81,9 +128,6 @@ function Nodes() {
 
         // 边缘节点心跳周期为 30 秒，设置 90 秒（3倍周期）作为失联缓冲，避免正常网络波动误判离线
         const ageMs = Date.now() - lastTime;
-        // #region agent log
-        fetch('http://127.0.0.1:7453/ingest/081782cc-6465-4a44-ac05-89d5ee6ce675',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'902a99'},body:JSON.stringify({sessionId:'902a99',hypothesisId:'H4',location:'Nodes.js:getStatusColor',message:'frontend status calc',data:{status,lastHeartbeat,lastTime,ageMs,tzOffsetMin:new Date().getTimezoneOffset()},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (ageMs > 90000) return 'warning';
         return 'success';
     };
@@ -95,12 +139,25 @@ function Nodes() {
         return '离线';
     };
 
+    const formatLastOnline = (lastHeartbeat) => {
+        if (!lastHeartbeat) return '-';
+        const timeStr = typeof lastHeartbeat === 'string' ? lastHeartbeat.replace(/-/g, '/') : lastHeartbeat;
+        const lastTime = new Date(timeStr);
+        if (isNaN(lastTime.getTime())) return String(lastHeartbeat);
+        return lastTime.toLocaleString();
+    };
+
     return (
         <Grid container spacing={3}>
             <Grid item xs={12}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Typography variant="h5">节点</Typography>
                 </div>
+                {canPower && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        电源菜单可重启/关闭主机，或网络唤醒（需网卡开启 WOL，平台与盒子同一局域网）。关机、重启主机要求边缘 Docker 使用 privileged 与 pid: host。
+                    </Typography>
+                )}
             </Grid>
 
             <Grid item xs={12}>
@@ -114,7 +171,7 @@ function Nodes() {
                                 <TableCell>IP 地址</TableCell>
                                 <TableCell>机器型号</TableCell>
                                 <TableCell>绑定视频源</TableCell>
-                                <TableCell>心跳时间</TableCell>
+                                <TableCell>最近在线时间</TableCell>
                                 <TableCell>操作</TableCell>
                             </TableRow>
                         </TableHead>
@@ -149,12 +206,22 @@ function Nodes() {
                                                 </Box>
                                             )}
                                         </TableCell>
-                                        <TableCell>{node.last_heartbeat || "-"}</TableCell>
+                                        <TableCell>{formatLastOnline(node.last_heartbeat)}</TableCell>
                                         <TableCell>
-                                            <IconButton onClick={() => handleEdit(node)} color="primary">
+                                            <IconButton onClick={() => handleEdit(node)} color="primary" title="编辑">
                                                 <Edit />
                                             </IconButton>
-                                            <IconButton onClick={() => handleDelete(node.id)} color="error">
+                                            {canPower && (
+                                                <IconButton
+                                                    onClick={(e) => setPowerMenu({ anchor: e.currentTarget, node })}
+                                                    color="warning"
+                                                    title="电源操作"
+                                                    disabled={powerBusyId === node.id}
+                                                >
+                                                    <PowerSettingsNew />
+                                                </IconButton>
+                                            )}
+                                            <IconButton onClick={() => handleDelete(node.id)} color="error" title="移除">
                                                 <Delete />
                                             </IconButton>
                                         </TableCell>
@@ -175,9 +242,33 @@ function Nodes() {
                 </TableContainer>
             </Grid>
 
+            <Menu
+                anchorEl={powerMenu.anchor}
+                open={Boolean(powerMenu.anchor)}
+                onClose={closePowerMenu}
+            >
+                <MenuItem onClick={() => powerMenu.node && handleNodePower(powerMenu.node, 'reboot')}>
+                    <ListItemIcon><RestartAlt fontSize="small" /></ListItemIcon>
+                    <ListItemText primary="重启主机" secondary="整机重新开机" />
+                </MenuItem>
+                <MenuItem onClick={() => powerMenu.node && handleNodePower(powerMenu.node, 'shutdown')}>
+                    <ListItemIcon><PowerSettingsNew fontSize="small" /></ListItemIcon>
+                    <ListItemText primary="关机" secondary="关闭后需唤醒或现场开机" />
+                </MenuItem>
+                <MenuItem onClick={() => powerMenu.node && handleNodePower(powerMenu.node, 'wake')}>
+                    <ListItemIcon><WifiTethering fontSize="small" /></ListItemIcon>
+                    <ListItemText primary="网络唤醒" secondary="发送 WoL 魔术包" />
+                </MenuItem>
+                <Divider />
+                <MenuItem onClick={() => powerMenu.node && handleAgentRestart(powerMenu.node)}>
+                    <ListItemIcon><SettingsBackupRestore fontSize="small" /></ListItemIcon>
+                    <ListItemText primary="重启程序" secondary="仅重启 Agent 容器" />
+                </MenuItem>
+            </Menu>
+
             {/* 修改设备名弹窗 */}
             <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
-                <DialogTitle>重命名节点</DialogTitle>
+                <DialogTitle>编辑节点</DialogTitle>
                 <DialogContent>
                     <Box sx={{ pt: 1, minWidth: 400 }}>
                         <TextField
@@ -186,7 +277,7 @@ function Nodes() {
                             value={formData.name}
                             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                         />
-                        <Box sx={{ mt: 2 }}>
+                        <Box label="绑定视频源" sx={{ mt: 2 }}>
                             <Select
                                 fullWidth
                                 multiple
@@ -203,9 +294,6 @@ function Nodes() {
                                     return names.join(', ');
                                 }}
                             >
-                                <MenuItem disabled value="">
-                                    未绑定视频源（全部可选）
-                                </MenuItem>
                                 {cameras.map((camera) => (
                                     <MenuItem key={camera.id} value={camera.id}>
                                         {camera.name}
