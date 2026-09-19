@@ -3,6 +3,7 @@
 # Jetson（默认）:
 #   1. 编辑 config.yaml：architecture=jetson，填入平台 MQTT/API 地址
 #   2. docker compose up -d --build
+#   RTSP 默认走 NVDEC（nvv4l2decoder）；失败回退 avdec_h264。SJIC_RTSP_HWDEC=0 可强制软解。
 #
 # 远程重启 Agent：平台下发 agent/restart → 容器进程退出 → restart: unless-stopped 自动拉起
 # 远程重启/关机主机：平台下发 agent/power → nsenter 宿主机 PID 1 执行 reboot/poweroff
@@ -32,6 +33,7 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - NVIDIA_VISIBLE_DEVICES=all
+      # video：打开 NVDEC，RTSP 硬解走 GPU 而不是 avdec_h264 软解
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
     volumes:
       - ./config.yaml:/app/config.yaml:ro

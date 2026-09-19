@@ -205,9 +205,9 @@ POSE_SCENE_PRESETS = [
         'id': 'person_fall',
         'type': 'fall',
         'name': '人员倒地',
-        'description': '姿态接近倒地',
+        'description': '躺倒在地。俯视考场坐姿/伏案不算；需姿态关键点且头不再明显高于肩',
         'defaults': {
-            'seconds': 1.5,
+            'seconds': 3,
             'alert_type': 'person_fall',
             'enabled': True,
         },

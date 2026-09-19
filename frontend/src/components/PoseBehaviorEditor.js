@@ -168,6 +168,13 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                   />
                 </Grid>
               )}
+              {b.type === 'fall' && (
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary">
+                    倒地需躺姿关键点；俯视考场里坐着考试、低头看屏不会报警。
+                  </Typography>
+                </Grid>
+              )}
               <Grid item xs={12} md={3}>
                 <TextField
                   fullWidth
