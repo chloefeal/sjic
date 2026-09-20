@@ -7,6 +7,7 @@ from app.models.algorithm import Algorithm
 from config import Config
 import requests
 from datetime import datetime
+from app.models.camera import normalize_mount_position
 from app.services.license_service import license_service
 
 class DetectorService:
@@ -119,6 +120,7 @@ class DetectorService:
                 "camera": {
                     "id": camera.id,
                     "rtsp_url": camera.get_rtsp_url(),
+                    "mount_position": normalize_mount_position(camera.mount_position),
                 },
                 "model": {
                     "id": model.id if model else None,

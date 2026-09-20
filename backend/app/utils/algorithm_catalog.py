@@ -3,7 +3,7 @@
 
 - type / engine：对客户可见的算法能力（通常 1:1，如 object_detection）
 - scene_presets：任务里可勾选添加的规则/行为模板（手机、帽子、张望等）
-机位用摄像头名称表达，不再使用 camera_role。
+摄像头 mount_position（前/后/侧/正上方）只影响姿态几何，不再使用 camera_role。
 """
 
 ENGINES = {
@@ -53,6 +53,13 @@ CATEGORIES = [
     {'value': 'exam', 'label': '驾考监考'},
     {'value': 'industrial', 'label': '工业检测'},
     {'value': 'generic', 'label': '通用'},
+]
+
+CAMERA_MOUNT_POSITIONS = [
+    {'value': 'front_top', 'label': '前上方', 'hint': '考生前方高处，能看到脸'},
+    {'value': 'back_top', 'label': '后上方', 'hint': '考生后方高处，主要看到后脑/后背（科目一考场常见）'},
+    {'value': 'side_top', 'label': '侧上方', 'hint': '侧面高处，以侧脸为主'},
+    {'value': 'top', 'label': '正上方', 'hint': '接近天花板垂直向下'},
 ]
 
 # 目标检测任务内可添加的场景/规则预设（class_ids 发布后按模型 labelmap 调整）
@@ -145,7 +152,7 @@ POSE_SCENE_PRESETS = [
         'id': 'not_looking_screen',
         'type': 'gaze_away',
         'name': '长时间不看屏幕',
-        'description': '偏头或低头超过阈值并持续一段时间',
+        'description': '不看屏幕：左右转头、回头或过度埋头。正常低头看题不算。几何随摄像头安装位置变化。',
         'defaults': {
             'seconds': 15,
             'yaw_degrees': 25,
@@ -158,7 +165,7 @@ POSE_SCENE_PRESETS = [
         'id': 'look_aside',
         'type': 'look_aside',
         'name': '左右张望',
-        'description': '单边偏航超过设定角度',
+        'description': '头部相对肩线明显转向一侧（偷看邻座）。正常看屏幕不算。',
         'defaults': {
             'seconds': 3,
             'yaw_degrees': 45,
@@ -170,7 +177,7 @@ POSE_SCENE_PRESETS = [
         'id': 'head_down',
         'type': 'head_down',
         'name': '长时间低头',
-        'description': '低头俯仰超过阈值并持续一段时间',
+        'description': '相对看屏幕的正常坐姿，头部进一步埋下（看腿上/桌下）',
         'defaults': {
             'seconds': 15,
             'pitch_degrees': 30,
@@ -205,9 +212,9 @@ POSE_SCENE_PRESETS = [
         'id': 'person_fall',
         'type': 'fall',
         'name': '人员倒地',
-        'description': '姿态接近倒地',
+        'description': '躺倒在地。俯视考场坐姿/伏案不算；需姿态关键点且头不再明显高于肩',
         'defaults': {
-            'seconds': 1.5,
+            'seconds': 3,
             'alert_type': 'person_fall',
             'enabled': True,
         },
@@ -451,6 +458,7 @@ def catalog_for_api():
         ],
         'od_scene_presets': OD_SCENE_PRESETS,
         'pose_scene_presets': POSE_SCENE_PRESETS,
+        'camera_mount_positions': CAMERA_MOUNT_POSITIONS,
         'alert_type_labels': alert_type_labels(),
     }
 

@@ -65,6 +65,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
         <Typography variant="subtitle2" gutterBottom>姿态行为 / 场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           同一任务只跑一次姿态推理；可叠加多个行为。场景可单独设置运行时段（优先于任务时段）。
+          张望/不看屏幕等几何判断取决于视频源的安装位置（前上方/后上方/侧上方/正上方），请在「视频源」页配置。
         </Typography>
       </Grid>
 
@@ -166,6 +167,13 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                     onChange={(e) => patchBehavior(index, { min_standing: parseInt(e.target.value, 10) })}
                     inputProps={{ min: 1, step: 1 }}
                   />
+                </Grid>
+              )}
+              {b.type === 'fall' && (
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary">
+                    倒地需躺姿关键点；俯视考场里坐着考试、低头看屏不会报警。
+                  </Typography>
                 </Grid>
               )}
               <Grid item xs={12} md={3}>

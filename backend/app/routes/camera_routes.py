@@ -4,6 +4,7 @@
 from flask import Blueprint, jsonify, request, Response, current_app
 from app.extensions import db
 from app.models import Camera, Task, EdgeNode
+from app.models.camera import MOUNT_POSITIONS, DEFAULT_MOUNT_POSITION
 from app.middleware.auth import token_required
 from app.services.mqtt_service import mqtt_service
 from app.services.license_service import license_service
@@ -58,6 +59,9 @@ def create_camera():
             url:
               type: string
               description: RTSP/HTTP流地址
+            mount_position:
+              type: string
+              description: 安装位置 front_top/back_top/side_top/top
     responses:
       201:
         description: 摄像头创建成功
@@ -88,9 +92,16 @@ def create_camera():
                 'current_cameras': current_count
             }), 403
 
+        mount_position = data.get('mount_position') or DEFAULT_MOUNT_POSITION
+        if mount_position not in MOUNT_POSITIONS:
+            return jsonify({
+                'error': f'无效的摄像头位置: {mount_position}，可选 {", ".join(MOUNT_POSITIONS)}'
+            }), 400
+
         camera = Camera(
             name=data['name'],
             url=data['url'],
+            mount_position=mount_position,
         )
         db.session.add(camera)
         db.session.commit()
@@ -183,6 +194,13 @@ def update_camera(camera_id):
             camera.name = data['name']
         if 'url' in data:
             camera.url = data['url']
+        if 'mount_position' in data:
+            mount_position = data.get('mount_position') or DEFAULT_MOUNT_POSITION
+            if mount_position not in MOUNT_POSITIONS:
+                return jsonify({
+                    'error': f'无效的摄像头位置: {mount_position}，可选 {", ".join(MOUNT_POSITIONS)}'
+                }), 400
+            camera.mount_position = mount_position
 
         db.session.commit()
         current_app.logger.info(f"Camera updated successfully: id={camera.id}")
