@@ -3,10 +3,22 @@
 捂嘴报题 / AI 智能眼镜 / 考试员不巡场。
 
 依赖姿态模型（YOLO-Pose 等）经 runtime.infer 返回 keypoints。
-若当前 runtime 仅返回 boxes，则退化为「有人框 + 宽高比/位置」粗判，并在日志中提示。
+几何判断按摄像头 mount_position（前/后/侧/正上方）切换，避免把俯视看屏判成违规。
+若当前 runtime 仅返回 boxes，则跳过关键点行为，并在日志中提示。
 """
 from .base import BaseAlgorithm
-import math
+from .pose_geometry import (
+    is_chin_rest,
+    is_cover_mouth,
+    is_fall,
+    is_finger_point,
+    is_gaze_away,
+    is_head_down,
+    is_looking_aside,
+    is_standing,
+    is_wrist_near_ear,
+    normalize_mount_position,
+)
 import time
 from datetime import datetime
 from utils.calc import get_letterbox_params, preprocess
@@ -14,237 +26,30 @@ from utils.rtsp import FramePump, is_valid_frame
 from utils.schedule import is_item_active_now
 
 
-# COCO 17 keypoints 索引
-NOSE, L_EYE, R_EYE, L_EAR, R_EAR = 0, 1, 2, 3, 4
-L_SHOULDER, R_SHOULDER = 5, 6
-L_ELBOW, R_ELBOW = 7, 8
-L_WRIST, R_WRIST = 9, 10
-L_HIP, R_HIP = 11, 12
-L_KNEE, R_KNEE = 13, 14
-L_ANKLE, R_ANKLE = 15, 16
-
-
-def _kp_ok(kps, idx, min_conf=0.25):
-    if kps is None or idx >= len(kps):
-        return False
-    x, y, c = kps[idx]
-    return c >= min_conf and x > 0 and y > 0
-
-
-def _kp(kps, idx):
-    return kps[idx][0], kps[idx][1]
-
-
-def _shoulder_width(kps, default=80.0):
-    if _kp_ok(kps, L_SHOULDER) and _kp_ok(kps, R_SHOULDER):
-        return max(abs(_kp(kps, R_SHOULDER)[0] - _kp(kps, L_SHOULDER)[0]), 1.0)
-    return default
-
-
-def estimate_yaw_pitch(kps):
-    """粗略 yaw/pitch（度）。正 yaw=左转脸，正 pitch=低头倾向。"""
-    if not (_kp_ok(kps, L_SHOULDER) and _kp_ok(kps, R_SHOULDER) and _kp_ok(kps, NOSE)):
-        return None, None
-    ls = _kp(kps, L_SHOULDER)
-    rs = _kp(kps, R_SHOULDER)
-    nose = _kp(kps, NOSE)
-    mid_x = (ls[0] + rs[0]) / 2.0
-    mid_y = (ls[1] + rs[1]) / 2.0
-    shoulder_w = max(abs(rs[0] - ls[0]), 1.0)
-    # yaw：鼻相对肩中线的水平偏移 / 肩宽
-    yaw = max(-90.0, min(90.0, ((nose[0] - mid_x) / shoulder_w) * 90.0))
-    # pitch：鼻相对肩中线的竖直偏移（向下为正）
-    pitch = max(-90.0, min(90.0, ((nose[1] - mid_y) / shoulder_w) * 90.0))
-    return yaw, pitch
-
-
-def is_looking_aside(kps, yaw_degrees=45):
-    yaw, _ = estimate_yaw_pitch(kps)
-    if yaw is None:
-        return False
-    return abs(yaw) >= float(yaw_degrees)
-
-
-def is_head_down(kps, pitch_degrees=30):
-    _, pitch = estimate_yaw_pitch(kps)
-    if pitch is None:
-        return False
-    return pitch >= float(pitch_degrees)
-
-
-def is_gaze_away(kps, yaw_degrees=25, pitch_degrees=25):
-    """不看屏幕：偏头或低头超过阈值。"""
-    yaw, pitch = estimate_yaw_pitch(kps)
-    if yaw is None:
-        return False
-    return abs(yaw) >= float(yaw_degrees) or pitch >= float(pitch_degrees)
-
-
-def is_chin_rest(kps):
-    """手腕靠近下颌（鼻/嘴附近）。"""
-    if not _kp_ok(kps, NOSE):
-        return False
-    nose = _kp(kps, NOSE)
-    sw = _shoulder_width(kps)
-    for wi in (L_WRIST, R_WRIST):
-        if not _kp_ok(kps, wi):
-            continue
-        wx, wy = _kp(kps, wi)
-        dist = math.hypot(wx - nose[0], wy - nose[1]) / sw
-        if dist < 0.55 and wy >= nose[1] - 0.2 * sw:
-            return True
+def _eval_behavior(btype, kps, box, spec, view):
+    if btype == 'gaze_away':
+        return is_gaze_away(
+            kps, spec.get('yaw_degrees', 25), spec.get('pitch_degrees', 25), view
+        )
+    if btype == 'look_aside':
+        return is_looking_aside(kps, spec.get('yaw_degrees', 45), view)
+    if btype == 'head_down':
+        return is_head_down(kps, spec.get('pitch_degrees', 30), view)
+    if btype == 'chin_rest':
+        return is_chin_rest(kps, view)
+    if btype == 'cover_mouth':
+        return is_cover_mouth(kps, view)
+    if btype == 'fall':
+        return is_fall(kps, box, spec.get('_peer_boxes'), view)
+    if btype == 'finger_point':
+        return is_finger_point(kps, bool(spec.get('require_standing', True)), view)
     return False
 
 
-def is_cover_mouth(kps):
-    """捂嘴：手腕贴近口鼻前方（略高于下巴托）。"""
-    if not _kp_ok(kps, NOSE):
-        return False
-    nose = _kp(kps, NOSE)
-    sw = _shoulder_width(kps)
-    for wi in (L_WRIST, R_WRIST):
-        if not _kp_ok(kps, wi):
-            continue
-        wx, wy = _kp(kps, wi)
-        dist = math.hypot(wx - nose[0], wy - nose[1]) / sw
-        # 更贴近口部：水平接近、竖直略低于鼻
-        if dist < 0.42 and abs(wy - nose[1]) < 0.35 * sw and wy >= nose[1] - 0.15 * sw:
-            return True
-    return False
-
-
-def is_wrist_near_ear(kps, dist_ratio=0.45):
-    """手腕靠近任一耳（镜脚/太阳穴区域）。"""
-    sw = _shoulder_width(kps)
-    ears = []
-    for ei in (L_EAR, R_EAR):
-        if _kp_ok(kps, ei):
-            ears.append(_kp(kps, ei))
-    if not ears:
-        return False
-    for wi in (L_WRIST, R_WRIST):
-        if not _kp_ok(kps, wi):
-            continue
-        wx, wy = _kp(kps, wi)
-        for ex, ey in ears:
-            if math.hypot(wx - ex, wy - ey) / sw < float(dist_ratio):
-                return True
-    return False
-
-
-def is_standing(kps, box=None):
-    """站立：踝明显低于髋，或框高宽比较大。"""
-    if kps is not None:
-        if _kp_ok(kps, L_HIP) and _kp_ok(kps, L_ANKLE):
-            if _kp(kps, L_ANKLE)[1] > _kp(kps, L_HIP)[1] + 25:
-                return True
-        if _kp_ok(kps, R_HIP) and _kp_ok(kps, R_ANKLE):
-            if _kp(kps, R_ANKLE)[1] > _kp(kps, R_HIP)[1] + 25:
-                return True
-    if box is not None:
-        w = max(float(box.x2 - box.x1), 1.0)
-        h = max(float(box.y2 - box.y1), 1.0)
-        if h / w >= 1.45:
-            return True
-    return False
-
-
-def _head_above_torso(kps, min_ratio=0.16):
-    """头在肩/髋之上 → 坐或站，不是倒地。俯视考场坐姿的核心排除条件。"""
-    if kps is None:
-        return False
-    head_ys = []
-    for i in (NOSE, L_EYE, R_EYE, L_EAR, R_EAR):
-        if _kp_ok(kps, i, min_conf=0.3):
-            head_ys.append(_kp(kps, i)[1])
-    if not head_ys:
-        return False
-    head_y = min(head_ys)
-    torso_ys = []
-    if _kp_ok(kps, L_SHOULDER, 0.3) and _kp_ok(kps, R_SHOULDER, 0.3):
-        torso_ys.append((_kp(kps, L_SHOULDER)[1] + _kp(kps, R_SHOULDER)[1]) / 2.0)
-    if _kp_ok(kps, L_HIP, 0.3) and _kp_ok(kps, R_HIP, 0.3):
-        torso_ys.append((_kp(kps, L_HIP)[1] + _kp(kps, R_HIP)[1]) / 2.0)
-    if not torso_ys:
-        return False
-    sw = _shoulder_width(kps)
-    return head_y < min(torso_ys) - min_ratio * sw
-
-
-def _torso_nearly_horizontal(kps, max_degrees=16):
-    """肩-髋连线接近水平（躺姿）。"""
-    if not (
-        _kp_ok(kps, L_SHOULDER, 0.3) and _kp_ok(kps, R_SHOULDER, 0.3)
-        and _kp_ok(kps, L_HIP, 0.3) and _kp_ok(kps, R_HIP, 0.3)
-    ):
-        return False
-    sy = (_kp(kps, L_SHOULDER)[1] + _kp(kps, R_SHOULDER)[1]) / 2.0
-    hy = (_kp(kps, L_HIP)[1] + _kp(kps, R_HIP)[1]) / 2.0
-    sx = (_kp(kps, L_SHOULDER)[0] + _kp(kps, R_SHOULDER)[0]) / 2.0
-    hx = (_kp(kps, L_HIP)[0] + _kp(kps, R_HIP)[0]) / 2.0
-    dx, dy = abs(hx - sx), abs(hy - sy)
-    length = math.hypot(dx, dy)
-    if length < 10:
-        return False
-    angle = math.degrees(math.atan2(dy, dx))
-    return angle <= float(max_degrees)
-
-
-def is_fall(kps, box=None, peer_boxes=None):
-    """
-    倒地：必须是躺姿，不能把俯视考场里低头/伏案的坐姿判进去。
-    禁止仅凭检测框宽高比判定（高位摄像头下坐姿框经常偏扁）。
-    """
-    if kps is None:
-        return False
-    if _head_above_torso(kps):
-        return False
-    if not _torso_nearly_horizontal(kps):
-        return False
-
-    # 考场里多人坐姿高度接近；倒地通常更靠近地面（画面更下方）
-    if box is not None and peer_boxes and len(peer_boxes) >= 3:
-        others = [b for b in peer_boxes if b is not None and b is not box]
-        if others:
-            other_cy = sorted((b.y1 + b.y2) / 2.0 for b in others)
-            med_cy = other_cy[len(other_cy) // 2]
-            med_h = sorted(max(b.y2 - b.y1, 1.0) for b in others)[len(others) // 2]
-            my_cy = (box.y1 + box.y2) / 2.0
-            if my_cy < med_cy + 0.28 * med_h:
-                return False
-    return True
-
-
-def is_finger_point(kps, require_standing=True):
-    """站立 + 手腕明显高于肘（伸臂指向）。"""
-    standing = True
-    if require_standing and _kp_ok(kps, L_HIP) and _kp_ok(kps, L_ANKLE):
-        standing = _kp(kps, L_ANKLE)[1] > _kp(kps, L_HIP)[1] + 20
-    if require_standing and not standing:
-        return False
-    for elbow, wrist in ((L_ELBOW, L_WRIST), (R_ELBOW, R_WRIST)):
-        if _kp_ok(kps, elbow) and _kp_ok(kps, wrist):
-            if _kp(kps, wrist)[1] < _kp(kps, elbow)[1] - 15:
-                return True
-    return False
-
-
-# 逐人布尔判定（不含需跨帧计数的特殊类型）
-BEHAVIOR_EVALUATORS = {
-    'gaze_away': lambda kps, box, spec: is_gaze_away(
-        kps, spec.get('yaw_degrees', 25), spec.get('pitch_degrees', 25)
-    ),
-    'look_aside': lambda kps, box, spec: is_looking_aside(kps, spec.get('yaw_degrees', 45)),
-    'head_down': lambda kps, box, spec: is_head_down(kps, spec.get('pitch_degrees', 30)),
-    'chin_rest': lambda kps, box, spec: is_chin_rest(kps),
-    'cover_mouth': lambda kps, box, spec: is_cover_mouth(kps),
-    'fall': lambda kps, box, spec: is_fall(kps, box, spec.get('_peer_boxes')),
-    'finger_point': lambda kps, box, spec: is_finger_point(
-        kps, bool(spec.get('require_standing', True))
-    ),
-}
-
-# 需要在主循环里做跨帧状态的类型
+POINTWISE_TYPES = frozenset({
+    'gaze_away', 'look_aside', 'head_down', 'chin_rest',
+    'cover_mouth', 'fall', 'finger_point',
+})
 STATEFUL_BEHAVIORS = frozenset({'smart_glasses', 'invigilator_absent'})
 
 
@@ -317,7 +122,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
             return True, hit_box
         return False, None
 
-    def _eval_invigilator_absent(self, persons, spec, state, now):
+    def _eval_invigilator_absent(self, persons, spec, state, now, view):
         """站立人数持续少于 min_standing 达到 seconds（默认 120s）则告警。"""
         min_standing = int(spec.get('min_standing', 2))
         seconds = float(spec.get('seconds', 120))
@@ -325,12 +130,11 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         sample_box = None
         for box, kps in persons:
             if kps is None:
-                # 无关键点时用框粗判
-                if box is not None and is_standing(None, box):
+                if box is not None and is_standing(None, box, view):
                     standing_n += 1
                     sample_box = sample_box or box
                 continue
-            if is_standing(kps, box):
+            if is_standing(kps, box, view):
                 standing_n += 1
                 sample_box = sample_box or box
 
@@ -368,6 +172,9 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 return
 
             rtsp_url = config_dict.get('camera', {}).get('rtsp_url')
+            view = normalize_mount_position(
+                (config_dict.get('camera') or {}).get('mount_position')
+            )
             infer_fps = float(
                 parameters.get('inferFps')
                 or algo_params.get('infer_fps')
@@ -380,7 +187,8 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
             try:
                 runtime.load(model_path)
                 logger.info(
-                    f"Throughput caps: inferFps={infer_fps:.1f} decodeFps≈{decode_fps:.1f}"
+                    f"Throughput caps: inferFps={infer_fps:.1f} decodeFps≈{decode_fps:.1f} "
+                    f"mount_position={view}"
                 )
                 first_frame, last_seq = pump.get_latest(last_seq=0, wait_sec=8.0)
                 if first_frame is None:
@@ -464,7 +272,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                                 )
                         elif btype == 'invigilator_absent':
                             ok, box, standing_n = self._eval_invigilator_absent(
-                                persons, spec, extra_state[bid], now
+                                persons, spec, extra_state[bid], now, view
                             )
                             if ok:
                                 hit_person = (box, None)
@@ -472,10 +280,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                                     f"行为[{spec.get('name') or btype}] "
                                     f"站立仅 {standing_n} 人（需≥{spec.get('min_standing', 2)}）"
                                 )
-                        else:
-                            evaluator = BEHAVIOR_EVALUATORS.get(btype)
-                            if not evaluator:
-                                continue
+                        elif btype in POINTWISE_TYPES:
                             seconds = float(spec.get('seconds', 3))
                             peer_boxes = [b for b, _ in persons if b is not None]
                             for box, kps in persons:
@@ -486,7 +291,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                                     if btype == 'fall':
                                         spec_eval = dict(spec)
                                         spec_eval['_peer_boxes'] = peer_boxes
-                                    if evaluator(kps, box, spec_eval):
+                                    if _eval_behavior(btype, kps, box, spec_eval, view):
                                         hit_person = (box, kps)
                                         break
                                 except Exception as e:

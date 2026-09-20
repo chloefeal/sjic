@@ -759,7 +759,15 @@ function Tasks() {
                       )}
                     </Box>
                   </TableCell>
-                  <TableCell>{cameras.find(c => c.id === task.cameraId)?.name}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const cam = cameras.find(c => c.id === task.cameraId);
+                      if (!cam) return '';
+                      return cam.mount_position_label
+                        ? `${cam.name}（${cam.mount_position_label}）`
+                        : cam.name;
+                    })()}
+                  </TableCell>
                   <TableCell>{nodes.find(n => n.id === task.edge_node_id)?.name || "无"}</TableCell>
                   <TableCell>{algorithms.find(a => a.id === task.algorithm_id)?.name}</TableCell>
                   <TableCell>
@@ -849,7 +857,9 @@ function Tasks() {
                     : cameras;
                   return filtered.map(camera => (
                     <MenuItem key={camera.id} value={camera.id}>
-                      {camera.name}
+                      {camera.mount_position_label
+                        ? `${camera.name}（${camera.mount_position_label}）`
+                        : camera.name}
                     </MenuItem>
                   ));
                 })()}

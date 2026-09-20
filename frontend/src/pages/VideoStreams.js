@@ -2,19 +2,33 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Grid, Card, CardContent, Typography, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Alert, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, Paper, IconButton
+  TableCell, TableContainer, TableHead, TableRow, Paper, IconButton,
+  FormControl, InputLabel, Select, MenuItem, FormHelperText
 } from '@mui/material';
 import { Add, Visibility, Delete, Close, Edit } from '@mui/icons-material';
 import axios, { getBaseUrl, getWebSocketUrl } from '../utils/axios';
 import VideoPlayer from '../components/VideoPlayer';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
 
+const EMPTY_STREAM = { name: '', url: '', mount_position: 'back_top' };
+
+const CAMERA_MOUNT_POSITIONS = [
+  { value: 'front_top', label: '前上方', hint: '考生前方高处，能看到脸' },
+  { value: 'back_top', label: '后上方', hint: '考生后方高处，主要看到后脑/后背（科目一考场常见）' },
+  { value: 'side_top', label: '侧上方', hint: '侧面高处，以侧脸为主' },
+  { value: 'top', label: '正上方', hint: '接近天花板垂直向下' },
+];
+
+const mountPositionLabel = (value) => (
+  CAMERA_MOUNT_POSITIONS.find((p) => p.value === value)?.label || value || '未设置'
+);
+
 function VideoStreams() {
   const [streams, setStreams] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [openPreview, setOpenPreview] = useState(false);
   const [selectedStream, setSelectedStream] = useState(null);
-  const [newStream, setNewStream] = useState({ name: '', url: '' });
+  const [newStream, setNewStream] = useState({ ...EMPTY_STREAM });
   const [editingStream, setEditingStream] = useState(null);
   const [error, setError] = useState(null);
   const [formError, setFormError] = useState(null);
@@ -39,7 +53,11 @@ function VideoStreams() {
 
   const handleEditStream = (stream) => {
     setEditingStream(stream);
-    setNewStream({ name: stream.name || '', url: stream.url || '' });
+    setNewStream({
+      name: stream.name || '',
+      url: stream.url || '',
+      mount_position: stream.mount_position || 'back_top',
+    });
     setFormError(null);
     setOpenDialog(true);
   };
@@ -58,7 +76,7 @@ function VideoStreams() {
       }
       setOpenDialog(false);
       setEditingStream(null);
-      setNewStream({ name: '', url: '' });
+      setNewStream({ ...EMPTY_STREAM });
       setFormError(null);
       fetchStreams();
     } catch (error) {
@@ -72,7 +90,7 @@ function VideoStreams() {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingStream(null);
-    setNewStream({ name: '', url: '' });
+    setNewStream({ ...EMPTY_STREAM });
     setFormError(null);
   };
 
@@ -107,6 +125,7 @@ function VideoStreams() {
             variant="contained"
             startIcon={<Add />}
             onClick={() => {
+              setNewStream({ ...EMPTY_STREAM });
               setFormError(null);
               setOpenDialog(true);
             }}
@@ -120,6 +139,7 @@ function VideoStreams() {
                 <TableRow>
                   <TableCell>ID</TableCell>
                   <TableCell>名称</TableCell>
+                  <TableCell>安装位置</TableCell>
                   <TableCell>URL</TableCell>
                   <TableCell>状态</TableCell>
                   <TableCell>创建时间</TableCell>
@@ -131,6 +151,7 @@ function VideoStreams() {
                   <TableRow key={stream.id}>
                     <TableCell>{stream.id}</TableCell>
                     <TableCell>{stream.name}</TableCell>
+                    <TableCell>{stream.mount_position_label || mountPositionLabel(stream.mount_position)}</TableCell>
                     <TableCell>{stream.url}</TableCell>
                     <TableCell>{stream.status ? '在线' : '离线'}</TableCell>
                     <TableCell>{new Date(stream.created_at).toLocaleString()}</TableCell>
@@ -166,7 +187,7 @@ function VideoStreams() {
       </Grid>
 
       {/* 添加视频源对话框 */}
-      <Dialog open={openDialog} onClose={handleCloseDialog}>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>{editingStream ? '修改视频源' : '添加视频源'}</DialogTitle>
         <DialogContent>
           {formError && (
@@ -182,13 +203,31 @@ function VideoStreams() {
             value={newStream.name}
             onChange={(e) => setNewStream({ ...newStream, name: e.target.value })}
           />
+          <FormControl fullWidth margin="dense">
+            <InputLabel id="camera-mount-position-label">安装位置</InputLabel>
+            <Select
+              labelId="camera-mount-position-label"
+              label="安装位置"
+              value={newStream.mount_position || 'back_top'}
+              onChange={(e) => setNewStream({ ...newStream, mount_position: e.target.value })}
+            >
+              {CAMERA_MOUNT_POSITIONS.map((p) => (
+                <MenuItem key={p.value} value={p.value}>
+                  {p.label}（{p.value}）
+                </MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>
+              {CAMERA_MOUNT_POSITIONS.find((p) => p.value === (newStream.mount_position || 'back_top'))?.hint}
+              。姿态检测会按此位置使用不同判断逻辑。改完后请重新启动相关姿态任务。
+            </FormHelperText>
+          </FormControl>
           <TextField
             margin="dense"
             label="视频流地址"
             fullWidth
             value={newStream.url}
             onChange={(e) => setNewStream({ ...newStream, url: e.target.value })}
-            helperText="机位请直接写在名称里，例如「3号考位-考生位」"
           />
         </DialogContent>
         <DialogActions>
