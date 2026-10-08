@@ -43,6 +43,7 @@ class MqttService:
             logger.info("MQTT connected successfully")
             # 订阅来自所有边缘节点的消息
             client.subscribe("sjic/edge/#")
+            self.publish_display_config_from_db()
         else:
             logger.error(f"MQTT connection failed with code {rc}")
 
@@ -204,6 +205,27 @@ class MqttService:
         body['msg_id'] = uuid.uuid4().hex[:12]
         self.client.publish(topic, json.dumps(body), qos=1)
         logger.info(f"Published agent upgrade to {mac_address}: version={body.get('version')}")
+
+    def publish_display_config(self, show_skeleton):
+        """广播告警图是否绘制骨骼。retain 让后上线的边缘节点也能拿到当前值。"""
+        payload = json.dumps({'show_skeleton': bool(show_skeleton)})
+        try:
+            self.client.publish('sjic/edge/config', payload, qos=1, retain=True)
+            logger.info(f"Published display config show_skeleton={bool(show_skeleton)}")
+        except Exception as exc:
+            logger.warning(f"Failed to publish display config: {exc}")
+
+    def publish_display_config_from_db(self):
+        if not self.app:
+            return
+        try:
+            with self.app.app_context():
+                from app.models.setting import Setting
+                row = Setting.query.first()
+                enabled = Setting.skeleton_overlay_enabled(row.config if row else None)
+                self.publish_display_config(enabled)
+        except Exception as exc:
+            logger.warning(f"Skip display config publish: {exc}")
 
     def publish_task_start(self, mac_address, task_payload):
         """下发任务配置到盒子"""

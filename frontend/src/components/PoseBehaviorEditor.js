@@ -68,7 +68,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>姿态行为 / 场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          同一任务只跑一次姿态推理；可叠加多个行为。场景时段、置信度优先于任务。人员倒地请用目标检测场景。
+          同一任务只跑一次姿态推理；可叠加多个行为。场景时段、置信度优先于任务。人员倒地请用目标检测场景。手指点击手表请在混合任务的融合场景里添加「智能手表作弊检测」。
           张望/不看屏幕等几何判断取决于视频源的安装位置（前上方/后上方/侧上方/正上方），请在「视频源」页配置。
         </Typography>
       </Grid>

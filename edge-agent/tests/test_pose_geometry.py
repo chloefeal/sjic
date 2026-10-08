@@ -1,14 +1,17 @@
 """Synthetic COCO-17 keypoints covering exam-hall camera views."""
 import unittest
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'algorithms'))
 
 from pose_geometry import (
+    accumulate_rising_count,
     is_chin_rest,
     is_cover_mouth,
     is_fall,
+    is_finger_click_watch,
     is_gaze_away,
     is_head_down,
     is_looking_aside,
@@ -208,6 +211,74 @@ class HandsAndFallTest(unittest.TestCase):
             r_ear=(90, 202, 0.7),
         )
         self.assertTrue(is_fall(lie, view='back_top'))
+
+
+class _Box:
+    def __init__(self, x1, y1, x2, y2):
+        self.x1, self.y1, self.x2, self.y2 = x1, y1, x2, y2
+
+
+class FingerClickWatchTest(unittest.TestCase):
+    """肩宽 80。手表在左手腕，右手靠近才算点击。"""
+
+    def setUp(self):
+        self.watch = _Box(80, 240, 100, 260)
+
+    def _person(self, right_wrist):
+        return sitting_torso(
+            l_wrist=(90, 250, 0.9),
+            r_wrist=(*right_wrist, 0.9),
+        )
+
+    def test_other_hand_on_watch_is_click(self):
+        self.assertTrue(is_finger_click_watch(self._person((125, 250)), [self.watch]))
+
+    def test_wearing_without_other_hand_is_not_click(self):
+        self.assertFalse(is_finger_click_watch(self._person((170, 260)), [self.watch]))
+
+    def test_missing_wrist_is_not_click(self):
+        kps_one_hand = sitting_torso(l_wrist=(90, 250, 0.9))
+        self.assertFalse(is_finger_click_watch(kps_one_hand, [self.watch]))
+
+    def test_no_watch_box_is_not_click(self):
+        self.assertFalse(is_finger_click_watch(self._person((125, 250)), []))
+
+
+class RisingCountTest(unittest.TestCase):
+    def test_one_click_triggers_immediately(self):
+        state = {}
+        now = datetime(2026, 10, 8, 9, 0, 0)
+        self.assertTrue(accumulate_rising_count(state, True, now, 1, 30, hold_contact=True))
+        self.assertFalse(accumulate_rising_count(
+            state, True, now + timedelta(seconds=1), 1, 30, hold_contact=True
+        ))
+        self.assertFalse(accumulate_rising_count(
+            state, False, now + timedelta(seconds=2), 1, 30, hold_contact=True
+        ))
+        self.assertTrue(accumulate_rising_count(
+            state, True, now + timedelta(seconds=3), 1, 30, hold_contact=True
+        ))
+
+    def test_glasses_needs_three_separate_touches(self):
+        state = {}
+        now = datetime(2026, 10, 8, 9, 0, 0)
+        self.assertFalse(accumulate_rising_count(state, True, now, 3, 30))
+        self.assertFalse(accumulate_rising_count(state, True, now + timedelta(seconds=1), 3, 30))
+        self.assertFalse(accumulate_rising_count(state, False, now + timedelta(seconds=2), 3, 30))
+        self.assertFalse(accumulate_rising_count(state, True, now + timedelta(seconds=3), 3, 30))
+        self.assertFalse(accumulate_rising_count(state, False, now + timedelta(seconds=4), 3, 30))
+        self.assertTrue(accumulate_rising_count(state, True, now + timedelta(seconds=5), 3, 30))
+
+    def test_window_resets_old_clicks(self):
+        state = {}
+        now = datetime(2026, 10, 8, 9, 0, 0)
+        self.assertFalse(accumulate_rising_count(state, True, now, 2, 30, hold_contact=True))
+        self.assertFalse(accumulate_rising_count(
+            state, False, now + timedelta(seconds=31), 2, 30, hold_contact=True
+        ))
+        self.assertFalse(accumulate_rising_count(
+            state, True, now + timedelta(seconds=32), 2, 30, hold_contact=True
+        ))
 
 
 if __name__ == '__main__':

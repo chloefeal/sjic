@@ -1,6 +1,7 @@
 """
 姿态行为引擎：张望 / 低头 / 不看屏幕 / 手托下巴 / 手指屏幕 /
-捂嘴报题 / AI 智能眼镜 / 考试员不巡场。
+捂嘴报题 / AI 智能眼镜 / 手指点击手表 / 考试员不巡场。
+智能眼镜和智能手表是融合场景，混合任务里才和目标检测一起判定。
 
 依赖姿态模型（YOLO-Pose 等）经 runtime.infer 返回 keypoints。
 几何判断按摄像头 mount_position（前/后/侧/正上方）切换，避免把俯视看屏判成违规。
@@ -8,8 +9,10 @@
 """
 from .base import BaseAlgorithm, effective_confidence
 from .pose_geometry import (
+    accumulate_rising_count,
     is_chin_rest,
     is_cover_mouth,
+    is_finger_click_watch,
     is_finger_point,
     is_gaze_away,
     is_head_down,
@@ -47,7 +50,7 @@ POINTWISE_TYPES = frozenset({
     'gaze_away', 'look_aside', 'head_down', 'chin_rest',
     'cover_mouth', 'finger_point',
 })
-STATEFUL_BEHAVIORS = frozenset({'smart_glasses', 'invigilator_absent'})
+STATEFUL_BEHAVIORS = frozenset({'smart_glasses', 'smart_watch', 'invigilator_absent'})
 
 
 class PoseBehaviorAlgorithm(BaseAlgorithm):
@@ -87,8 +90,6 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         手腕靠近耳朵计为一次接触；离开后再靠近累加次数。
         在 seconds 窗口内达到 min_touches 则触发。
         """
-        min_touches = int(spec.get('min_touches', 3))
-        window = float(spec.get('seconds', 30))
         near = False
         hit_box = None
         hit_kps = None
@@ -100,24 +101,42 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 hit_box = box
                 hit_kps = kps
                 break
+        triggered = accumulate_rising_count(
+            state,
+            near,
+            now,
+            spec.get('min_touches', 3),
+            spec.get('seconds', 30),
+        )
+        if triggered:
+            return True, hit_box, hit_kps
+        return False, None, None
 
-        if near and not state.get('near'):
-            state['touches'] = int(state.get('touches') or 0) + 1
-            state['window_start'] = state.get('window_start') or now
-        if not near:
-            state['near'] = False
-        else:
-            state['near'] = True
-
-        ws = state.get('window_start')
-        if ws and (now - ws).total_seconds() > window:
-            state['touches'] = 1 if near else 0
-            state['window_start'] = now if near else None
-
-        if int(state.get('touches') or 0) >= min_touches:
-            state['touches'] = 0
-            state['window_start'] = None
-            state['near'] = False
+    def _eval_smart_watch(self, persons, watch_boxes, spec, state, now):
+        """
+        另一只手进入手表附近计为一次点击；离开后再进入累加。
+        默认 1 次即触发。没有手表框时不计点击。
+        """
+        clicking = False
+        hit_box = None
+        hit_kps = None
+        for box, kps in persons:
+            if kps is None:
+                continue
+            if is_finger_click_watch(kps, watch_boxes, spec.get('watch_dist_ratio', 0.50)):
+                clicking = True
+                hit_box = box
+                hit_kps = kps
+                break
+        triggered = accumulate_rising_count(
+            state,
+            clicking,
+            now,
+            spec.get('min_touches', 1),
+            spec.get('seconds', 30),
+            hold_contact=True,
+        )
+        if triggered:
             return True, hit_box, hit_kps
         return False, None, None
 
@@ -266,6 +285,11 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                         if btype == 'fall':
                             if not extra_state[bid].get('warned'):
                                 logger.warning("人员倒地已改为目标检测场景，姿态任务中的跌倒行为已忽略")
+                                extra_state[bid]['warned'] = True
+                            continue
+                        if btype == 'smart_watch':
+                            if not extra_state[bid].get('warned'):
+                                logger.warning("智能手表作弊检测是融合场景，请在混合任务里配置手表类别")
                                 extra_state[bid]['warned'] = True
                             continue
 

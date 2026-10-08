@@ -79,6 +79,19 @@ def _tasks_blocking_camera_unbind(node, removed_camera_ids):
     detail = "；".join(parts)
     return f"节点「{node.name}」上还有未删除的任务，请先到任务模块删除后再取消绑定：{detail}。"
 
+@edge_bp.route('/api/edge/display-config', methods=['GET'])
+def get_display_config():
+    """边缘节点启动时读取告警图是否绘制骨骼。未配置时默认不画。"""
+    from app.models.setting import Setting
+    try:
+        row = Setting.query.first()
+        enabled = Setting.skeleton_overlay_enabled(row.config if row else None)
+        return jsonify({'show_skeleton': enabled})
+    except Exception as e:
+        current_app.logger.error(f"Error getting display config: {str(e)}")
+        return jsonify({'show_skeleton': False})
+
+
 @edge_bp.route('/api/edge/alerts', methods=['POST'])
 def receive_alert():
     """

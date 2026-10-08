@@ -287,6 +287,20 @@ class TaskManager:
         except Exception as e:
             logger.error(f"Failed to save tasks: {str(e)}")
 
+    def sync_display_config(self):
+        """启动时向平台读取骨骼绘制开关。失败则保持默认不画。"""
+        from algorithms.base import set_show_pose_skeleton, show_pose_skeleton
+        url = f"{self.api_base_url.rstrip('/')}/display-config"
+        try:
+            res = requests.get(url, timeout=3)
+            if not res.ok:
+                logger.warning(f"Display config request failed: HTTP {res.status_code}")
+                return
+            set_show_pose_skeleton((res.json() or {}).get('show_skeleton'))
+            logger.info(f"Pose skeleton overlay from platform: {show_pose_skeleton()}")
+        except Exception as e:
+            logger.warning(f"Display config sync failed, skeleton overlay stays hidden: {e}")
+
     def reload_tasks(self):
         """重启后重新加载任务，通过与云端校验差集防留痕"""
         if not os.path.exists(self.persistence_file):

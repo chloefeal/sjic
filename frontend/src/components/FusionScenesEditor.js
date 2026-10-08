@@ -55,7 +55,7 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>融合场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          智能眼镜会在同一帧上先做目标检测、再做姿态。只有眼镜框落在头部、且手腕靠近耳朵，才计为一次触碰。
+          融合场景在同一帧上先做目标检测、再做姿态。智能眼镜要眼镜框落在头部，且手腕靠近耳朵，才计一次触碰。智能手表要先检出手表，另一只手再点击这块表；默认点击 1 次即有作弊嫌疑，只戴表不算。
         </Typography>
       </Grid>
 
@@ -65,7 +65,20 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
         </Grid>
       )}
 
-      {fusions.map((item, index) => (
+      {fusions.map((item, index) => {
+        const isWatch = item.type === 'smart_watch';
+        const classPlaceholder = isWatch ? '选择手表类别' : '选择眼镜类别';
+        const classIdLabel = isWatch ? '手表类别 ID' : '眼镜类别 ID';
+        const countLabel = isWatch ? '最少点击次数' : '最少触碰次数';
+        const countDefault = isWatch ? 1 : 3;
+        const countMin = isWatch ? 1 : 2;
+        const distLabel = isWatch ? '点击距离阈值' : '耳旁距离阈值';
+        const distKey = isWatch ? 'watch_dist_ratio' : 'ear_dist_ratio';
+        const distDefault = isWatch ? 0.5 : 0.28;
+        const distHelp = isWatch
+          ? '相对肩宽。另一只手进入该范围算一次点击，只戴表不算'
+          : '相对肩宽，越小越要贴近耳朵';
+        return (
         <Grid item xs={12} key={item.id || index}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
@@ -102,7 +115,7 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
                     value={Array.isArray(item.class_ids) ? item.class_ids : []}
                     onChange={(e) => patch(index, { class_ids: e.target.value.map((id) => Number(id)) })}
                     renderValue={(selected) => {
-                      if (!selected.length) return '选择眼镜类别';
+                      if (!selected.length) return classPlaceholder;
                       return selected.map((id) => labels.find((label) => label.id === id)?.name || id).join('、');
                     }}
                   >
@@ -116,7 +129,7 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
                   <TextField
                     fullWidth
                     size="small"
-                    label="眼镜类别 ID"
+                    label={classIdLabel}
                     value={Array.isArray(item.class_ids) ? item.class_ids.join(',') : ''}
                     onChange={(e) => {
                       const classIds = e.target.value
@@ -138,6 +151,7 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
                   value={item.seconds ?? 30}
                   onChange={(e) => patch(index, { seconds: parseFloat(e.target.value) })}
                   inputProps={{ min: 1, step: 1 }}
+                  helperText={isWatch ? '多次点击需落在这个窗口内；默认 1 次会立刻计数' : '多次触碰需落在这个窗口内'}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
@@ -145,10 +159,10 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
                   fullWidth
                   size="small"
                   type="number"
-                  label="最少触碰次数"
-                  value={item.min_touches ?? 3}
+                  label={countLabel}
+                  value={item.min_touches ?? countDefault}
                   onChange={(e) => patch(index, { min_touches: parseInt(e.target.value, 10) })}
-                  inputProps={{ min: 2, step: 1 }}
+                  inputProps={{ min: countMin, step: 1 }}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
@@ -156,11 +170,11 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
                   fullWidth
                   size="small"
                   type="number"
-                  label="耳旁距离阈值"
-                  value={item.ear_dist_ratio ?? 0.28}
-                  onChange={(e) => patch(index, { ear_dist_ratio: parseFloat(e.target.value) })}
-                  inputProps={{ min: 0.05, max: 1, step: 0.01 }}
-                  helperText="相对肩宽，越小越要贴近耳朵"
+                  label={distLabel}
+                  value={item[distKey] ?? distDefault}
+                  onChange={(e) => patch(index, { [distKey]: parseFloat(e.target.value) })}
+                  inputProps={{ min: 0.05, max: isWatch ? 1.5 : 1, step: 0.01 }}
+                  helperText={distHelp}
                 />
               </Grid>
               <Grid item xs={12} md={4}>
@@ -206,7 +220,8 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
             </Grid>
           </Paper>
         </Grid>
-      ))}
+        );
+      })}
 
       {scenePresets.length > 0 && (
         <Grid item xs={12}>

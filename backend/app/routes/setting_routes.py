@@ -86,6 +86,11 @@ def update_settings():
         settings.update(data)
         db.session.commit()
         current_app.logger.info("Settings committed to database")
+        try:
+            from app.services.mqtt_service import mqtt_service
+            mqtt_service.publish_display_config(settings.skeleton_overlay_enabled(settings.config))
+        except Exception as exc:
+            current_app.logger.warning(f"Display config was saved but not pushed to edge nodes: {exc}")
         return jsonify({'message': 'Settings updated successfully', 'config': settings.to_dict()})
     except Exception as e:
         current_app.logger.error(f"Error updating settings: {str(e)}")

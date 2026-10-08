@@ -627,7 +627,7 @@ function Tasks() {
               algorithmParameters={formData.algorithm_parameters}
               catalogPresets={catalog?.pose_scene_presets}
               taskConfidence={formData.confidence}
-              excludePresetIds={['smart_glasses']}
+              excludePresetIds={['smart_glasses', 'smart_watch']}
               onChange={patchParams}
             />
           </Grid>
@@ -806,7 +806,7 @@ function Tasks() {
           </Button>
         </div>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          驾考可以建一个混合任务，同一路视频里同时挂检测场景和姿态场景。只有检测时不跑姿态，只有姿态时不跑检测；两者都有或包含智能眼镜时，同一帧先检测再姿态。皮带、画面健康等仍是单算法任务。
+          驾考可以建一个混合任务，同一路视频里同时挂检测场景和姿态场景。只有检测时不跑姿态，只有姿态时不跑检测；两者都有，或包含智能眼镜、智能手表时，同一帧先检测再姿态。皮带、画面健康等仍是单算法任务。
         </Typography>
 
         {/* 高级过滤栏 */}
@@ -1098,7 +1098,7 @@ function Tasks() {
                 </Grid>
                 <Grid item xs={12}>
                   <Alert severity="info">
-                    只选检测时，这一帧不跑姿态；只选姿态时，不跑检测。两个都选并且场景同时需要时，同一帧先检测再姿态。智能眼镜需要两个都选，并指定眼镜类别。
+                    只选检测时，这一帧不跑姿态；只选姿态时，不跑检测。两个都选并且场景同时需要时，同一帧先检测再姿态。智能眼镜需要两个都选并指定眼镜类别；智能手表同样需要两个都选并指定手表类别，默认点击 1 次即有作弊嫌疑。
                   </Alert>
                   {cameraShareWarning(tasks, formData, editingTask) && (
                     <Alert severity="warning" sx={{ mt: 1 }}>
@@ -1170,7 +1170,7 @@ function Tasks() {
                 const tip = engine === 'object_detection'
                   ? '可在下方添加多条检测规则/场景（缺席、手机、帽子、人员倒地等），同一任务只推理一次。倒地用目标检测，不用姿态。'
                   : engine === 'pose_behavior'
-                    ? '可在下方添加多个姿态行为/场景（张望、手托下巴等），同一任务只推理一次。智能眼镜请用混合任务。'
+                    ? '可在下方添加多个姿态行为/场景（张望、手托下巴等），同一任务只推理一次。智能眼镜、智能手表请用混合任务。'
                     : null;
                 if (!tip) return null;
                 return <Alert severity="info" sx={{ mt: 1 }}>{tip}</Alert>;

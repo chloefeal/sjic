@@ -266,6 +266,21 @@ FUSION_SCENE_PRESETS = [
             'enabled': True,
         },
     },
+    {
+        'id': 'smart_watch',
+        'type': 'smart_watch',
+        'name': '智能手表作弊检测',
+        'description': '先检出手表，再看另一只手是否点击这块表。点击 1 次即有作弊嫌疑',
+        'requires': ['object_detection', 'pose_behavior'],
+        'defaults': {
+            'seconds': 30,
+            'min_touches': 1,
+            'watch_dist_ratio': 0.50,
+            'class_ids': [],
+            'alert_type': 'smart_watch',
+            'enabled': True,
+        },
+    },
 ]
 
 
@@ -450,9 +465,9 @@ def _merge_scene_presets(existing, catalog):
     return ordered
 
 
-# 合并时从姿态 schema 去掉：跌倒改由目标检测；智能眼镜改由混合任务的融合场景
-_POSE_DROPPED_PRESET_IDS = frozenset({'person_fall', 'smart_glasses'})
-_POSE_DROPPED_TYPES = frozenset({'fall', 'smart_glasses'})
+# 合并时从姿态 schema 去掉：跌倒改由目标检测；眼镜/手表改由混合任务的融合场景
+_POSE_DROPPED_PRESET_IDS = frozenset({'person_fall', 'smart_glasses', 'smart_watch'})
+_POSE_DROPPED_TYPES = frozenset({'fall', 'smart_glasses', 'smart_watch'})
 
 
 def merge_catalog_schema(existing_schema, engine: str, *, origin=None) -> dict:

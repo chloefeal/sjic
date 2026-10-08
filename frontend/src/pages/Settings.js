@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Grid, TextField, Button, Typography, Snackbar, Alert,
-  Card, CardContent, Box, Avatar, Stack
+  Card, CardContent, Box, Avatar, Stack, FormControlLabel, Switch
 } from '@mui/material';
 import { Save, CloudUpload, Delete, RestartAlt, Upgrade } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
@@ -15,7 +15,8 @@ const DEFAULT_SETTINGS = {
   },
   alert: {
     retention_days: 30,
-    image_quality: 95
+    image_quality: 95,
+    show_skeleton: false
   },
   system: {
     log_level: 'INFO',
@@ -439,6 +440,29 @@ function Settings() {
               <option value="WARNING">WARNING</option>
               <option value="ERROR">ERROR</option>
             </TextField>
+            <FormControlLabel
+              sx={{ mt: 1, ml: 0, alignItems: 'center' }}
+              control={(
+                <Switch
+                  checked={Boolean(settings.alert.show_skeleton)}
+                  onChange={(event) => {
+                    const showSkeleton = event.target.checked;
+                    setSettings((prev) => ({
+                      ...prev,
+                      alert: {
+                        ...prev.alert,
+                        show_skeleton: showSkeleton,
+                      },
+                    }));
+                  }}
+                  disabled={!licenseValid}
+                />
+              )}
+              label="告警图显示骨骼点线条"
+            />
+            <Typography variant="body2" color="text.secondary">
+              默认关闭。打开后，新产生的姿态告警截图会画出骨骼点和连线；已经保存的告警图片不会改变。点击下方「保存设置」后，在线边缘节点立即按新开关绘制。
+            </Typography>
           </CardContent>
         </Card>
       </Grid>

@@ -317,6 +317,75 @@ def _point_in_upper_body(box, x, y):
     return x1 <= x <= x2 and y1 <= y <= y1 + 0.5 * (y2 - y1)
 
 
+def _point_near_box(x, y, box, margin):
+    """点落在检测框内，或离框边不超过 margin。"""
+    try:
+        x1, y1 = float(box.x1), float(box.y1)
+        x2, y2 = float(box.x2), float(box.y2)
+        pad = float(margin)
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return (x1 - pad) <= x <= (x2 + pad) and (y1 - pad) <= y <= (y2 + pad)
+
+
+def is_finger_click_watch(kps, watch_boxes, dist_ratio=0.50):
+    """
+    另一只手点击手表。
+
+    姿态模型没有指尖，用另一侧手腕近似手指。手表框贴着一只手腕时视为佩戴；
+    另一只手腕再进入这块表附近，才算一次点击。只戴表、另一只手远离时返回 False。
+    距离按肩宽缩放，俯视和侧视都能用。
+    """
+    if kps is None or not watch_boxes:
+        return False
+    if not (_kp_ok(kps, L_WRIST) and _kp_ok(kps, R_WRIST)):
+        return False
+    margin = float(dist_ratio) * _scale(kps)
+    left = _kp(kps, L_WRIST)
+    right = _kp(kps, R_WRIST)
+    for watch in watch_boxes:
+        if _point_near_box(left[0], left[1], watch, margin) and _point_near_box(right[0], right[1], watch, margin):
+            return True
+    return False
+
+
+def accumulate_rising_count(state, active, now, min_count, window_seconds, hold_contact=False):
+    """
+    active 从无到有计一次。窗口超时后重新计数。
+    达到 min_count 时清空计数并返回 True。就地修改 state。
+    hold_contact 为真时，同一次按住不重复计数，松开后再按才算下一次。
+    """
+    active = bool(active)
+    try:
+        min_count = int(min_count)
+    except (TypeError, ValueError):
+        min_count = 1
+    if min_count < 1:
+        min_count = 1
+    try:
+        window_seconds = float(window_seconds)
+    except (TypeError, ValueError):
+        window_seconds = 30.0
+
+    if active and not state.get('near'):
+        state['touches'] = int(state.get('touches') or 0) + 1
+        state['window_start'] = state.get('window_start') or now
+    state['near'] = active
+
+    window_start = state.get('window_start')
+    if window_start and (now - window_start).total_seconds() > window_seconds:
+        state['touches'] = 1 if active else 0
+        state['window_start'] = now if active else None
+
+    if int(state.get('touches') or 0) >= min_count:
+        state['touches'] = 0
+        state['window_start'] = None
+        if not hold_contact:
+            state['near'] = False
+        return True
+    return False
+
+
 def person_has_glasses(box, kps, glasses_boxes):
     """眼镜框中心落在头部区域（关键点不足时用人体框上半部分）才算戴着眼镜。"""
     if not glasses_boxes:

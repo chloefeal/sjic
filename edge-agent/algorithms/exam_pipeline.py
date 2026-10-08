@@ -1,8 +1,9 @@
 """
 混合任务：一路视频，按启用场景决定跑目标检测、姿态，或两者。
 
-两者都需要时（含智能眼镜），同一帧先检测再姿态。
+两者都需要时（含智能眼镜、智能手表），同一帧先检测再姿态。
 智能眼镜：眼镜框落在头部区域，且手腕靠近耳朵，才计入触碰。
+智能手表：手表框附近另一只手点一下即计入点击，默认 1 次即有作弊嫌疑。
 """
 import time
 from datetime import datetime
@@ -41,7 +42,10 @@ def _class_ids(spec):
     return ids
 
 
-def _glasses_boxes(boxes, class_ids, min_confidence):
+_FUSION_TYPES = frozenset({'smart_glasses', 'smart_watch'})
+
+
+def _boxes_of_classes(boxes, class_ids, min_confidence):
     wanted = set(class_ids)
     if not wanted:
         return []
@@ -77,7 +81,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
             rules_raw = _enabled(algo_params.get('rules'))
             behaviors = _enabled([
                 item for item in (algo_params.get('behaviors') or [])
-                if isinstance(item, dict) and item.get('type') != 'smart_glasses'
+                if isinstance(item, dict) and item.get('type') not in _FUSION_TYPES
             ])
             fusions = _enabled(algo_params.get('fusions'))
             need_od = bool(rules_raw or fusions)
@@ -380,32 +384,51 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
         algorithm_id, last_alert, extra_state, pose_helper, on_alert, logger,
     ):
         for spec in fusions:
-            if spec.get('type') != 'smart_glasses':
-                logger.warning(f"Unknown fusion scene: {spec.get('type')}")
+            btype = spec.get('type')
+            if btype not in _FUSION_TYPES:
+                logger.warning(f"Unknown fusion scene: {btype}")
                 continue
-            bid = spec.get('id') or spec.get('type')
+            bid = spec.get('id') or btype
             if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
                 extra_state[bid] = {}
                 continue
             scene_conf = effective_confidence(spec, task_confidence)
-            glasses = _glasses_boxes(boxes, _class_ids(spec), scene_conf)
-            wearing = []
-            for box, kps in persons:
-                if box is not None and float(getattr(box, 'confidence', 0) or 0) < scene_conf:
+            target_boxes = _boxes_of_classes(boxes, _class_ids(spec), scene_conf)
+            persons_for_spec = [
+                (box, kps) for box, kps in persons
+                if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
+            ]
+            if btype == 'smart_glasses':
+                wearing = [
+                    (box, kps) for box, kps in persons_for_spec
+                    if person_has_glasses(box, kps, target_boxes)
+                ]
+                ok, box, kps = pose_helper._eval_smart_glasses(
+                    wearing, spec, extra_state[bid], now
+                )
+                if not ok:
                     continue
-                if person_has_glasses(box, kps, glasses):
-                    wearing.append((box, kps))
-            ok, box, kps = pose_helper._eval_smart_glasses(wearing, spec, extra_state[bid], now)
-            if not ok:
-                continue
-            message = (
-                f"行为[{spec.get('name') or 'smart_glasses'}] "
-                f"检出眼镜且镜脚触碰达 {spec.get('min_touches', 3)} 次"
-            )
+                message = (
+                    f"行为[{spec.get('name') or 'smart_glasses'}] "
+                    f"检出眼镜且镜脚触碰达 {spec.get('min_touches', 3)} 次"
+                )
+                matched = wearing
+            else:
+                ok, box, kps = pose_helper._eval_smart_watch(
+                    persons_for_spec, target_boxes, spec, extra_state[bid], now
+                )
+                if not ok:
+                    continue
+                clicks = spec.get('min_touches', 1)
+                message = (
+                    f"行为[{spec.get('name') or 'smart_watch'}] "
+                    f"检出手表且手指点击达 {clicks} 次"
+                )
+                matched = persons_for_spec
             self._emit_pose_alert(
-                spec, 'smart_glasses', bid, (box, kps), message, wearing, processed,
+                spec, btype, bid, (box, kps), message, matched, processed,
                 now, alert_threshold, task_name, algorithm_id, last_alert, {},
-                on_alert, logger, extra_boxes=glasses,
+                on_alert, logger, extra_boxes=target_boxes,
             )
 
     def _emit_pose_alert(
@@ -447,5 +470,5 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
             algorithm_id=algorithm_id,
         )
         last_alert[bid] = now
-        if btype not in ('smart_glasses', 'invigilator_absent') and bid in state_since:
+        if btype not in ('smart_glasses', 'smart_watch', 'invigilator_absent') and bid in state_since:
             state_since[bid] = now

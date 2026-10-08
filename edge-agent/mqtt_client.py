@@ -66,6 +66,7 @@ class EdgeMqttClient:
             client.subscribe(f"{self.topic_prefix}/agent/restart")
             client.subscribe(f"{self.topic_prefix}/agent/power")
             client.subscribe(f"{self.topic_prefix}/agent/upgrade")
+            client.subscribe("sjic/edge/config")
         else:
             logger.error(f"Failed to connect, return code {rc}")
 
@@ -78,6 +79,11 @@ class EdgeMqttClient:
         logger.info(f"Received message on topic {msg.topic}")
         try:
             data = json.loads(payload_str) if payload_str.strip() else {}
+            if msg.topic == "sjic/edge/config":
+                from algorithms.base import set_show_pose_skeleton, show_pose_skeleton
+                set_show_pose_skeleton((data or {}).get("show_skeleton"))
+                logger.info(f"Pose skeleton overlay set to {show_pose_skeleton()}")
+                return
             if msg.topic.endswith("/task/start"):
                 self.task_manager.start_task(data)
             elif msg.topic.endswith("/task/stop"):

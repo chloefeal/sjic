@@ -5,6 +5,21 @@ import os
 from shapely.geometry import Point, Polygon
 import numpy as np
 
+# 告警截图是否绘制骨骼点和连线。平台未下发时默认不画。
+_show_pose_skeleton = False
+
+
+def set_show_pose_skeleton(enabled):
+    global _show_pose_skeleton
+    if isinstance(enabled, str):
+        _show_pose_skeleton = enabled.strip().lower() in ('1', 'true', 'yes', 'on')
+        return
+    _show_pose_skeleton = bool(enabled)
+
+
+def show_pose_skeleton():
+    return _show_pose_skeleton
+
 def effective_confidence(spec, task_confidence, default=0.5):
     """场景单独设置了置信度时以场景为准，否则用任务置信度。"""
     try:
@@ -94,9 +109,10 @@ class BaseAlgorithm(ABC):
         return frame
 
     def draw_alert_overlay(self, frame, boxes=None, roi_points=None, caption=None, skeletons=None):
-        """在告警截图上画规则 ROI、检测框、姿态骨骼和说明文字。"""
+        """在告警截图上画规则 ROI、检测框和说明文字。骨骼点和连线仅在系统设置开启时绘制。"""
         vis = frame.copy()
-        _draw_pose_skeletons(vis, skeletons)
+        if show_pose_skeleton():
+            _draw_pose_skeletons(vis, skeletons)
         if roi_points and len(roi_points) >= 3:
             pts = np.array(roi_points, dtype=np.int32).reshape((-1, 1, 2))
             overlay = vis.copy()

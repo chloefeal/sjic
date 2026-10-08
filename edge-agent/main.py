@@ -73,6 +73,7 @@ def main():
     mqtt_client = EdgeMqttClient(config, task_manager)
     task_manager.set_mqtt_client(mqtt_client) # 反向注入以便发状态
     mqtt_client.start()
+    task_manager.sync_display_config()
 
     try:
         from utils.upgrade import read_host_status
