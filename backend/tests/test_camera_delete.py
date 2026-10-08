@@ -67,7 +67,31 @@ class TestDeleteCamera(unittest.TestCase):
             db.session.remove()
             db.drop_all()
 
+    def test_delete_camera_rejected_while_tasks_exist(self):
+        response = self.client.delete(f'/api/cameras/{self.camera_id}', headers=self.headers)
+        self.assertEqual(response.status_code, 400, response.get_data(as_text=True))
+        message = response.get_json()['error']
+        self.assertIn('门口', message)
+        self.assertIn('检测', message)
+        self.assertIn('请先到任务模块删除这些任务后再删除视频源', message)
+        with self.app.app_context():
+            self.assertIsNotNone(Camera.query.get(self.camera_id))
+            self.assertEqual(Task.query.filter_by(cameraId=self.camera_id).count(), 1)
+            alerts = Alert.query.order_by(Alert.id).all()
+            self.assertEqual(len(alerts), 3)
+            for alert in alerts:
+                self.assertEqual(alert.camera_id, self.camera_id)
+                self.assertIsNotNone(alert.task_id)
+                self.assertEqual(alert.image_url, 'edge_alert_keep.jpg')
+            node = EdgeNode.query.first()
+            self.assertEqual(node.bound_cameras, [self.camera_id])
+
     def test_delete_camera_keeps_alerts_and_images(self):
+        with self.app.app_context():
+            for task in Task.query.filter_by(cameraId=self.camera_id).all():
+                db.session.delete(task)
+            db.session.commit()
+
         response = self.client.delete(f'/api/cameras/{self.camera_id}', headers=self.headers)
         self.assertEqual(response.status_code, 204, response.get_data(as_text=True))
         with self.app.app_context():
@@ -76,7 +100,6 @@ class TestDeleteCamera(unittest.TestCase):
             self.assertEqual(len(alerts), 3)
             for alert in alerts:
                 self.assertIsNone(alert.camera_id)
-                self.assertIsNone(alert.task_id)
                 self.assertEqual(alert.camera_name, '门口')
                 self.assertEqual(alert.image_url, 'edge_alert_keep.jpg')
                 self.assertEqual(alert.to_dict()['camera_name'], '门口')

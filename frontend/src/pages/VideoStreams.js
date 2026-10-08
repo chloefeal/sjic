@@ -102,13 +102,28 @@ function VideoStreams() {
     setPreviewingCamera(null);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (stream) => {
+    try {
+      const tasks = await axios.get('/api/tasks');
+      const bound = (tasks || []).filter((task) => Number(task.cameraId) === Number(stream.id));
+      if (bound.length > 0) {
+        const names = bound.map((task) => task.name).filter(Boolean).join('、');
+        const detail = names ? `：${names}` : '';
+        window.alert(`视频源「${stream.name}」已绑定任务${detail}。请先到任务模块删除这些任务后再删除视频源。`);
+        return;
+      }
+    } catch (error) {
+      // 任务列表拉不到时仍交给删除接口判断
+    }
     if (!window.confirm('确定要删除该视频源吗？此操作不可恢复。')) return;
     try {
-      await axios.delete(`/api/cameras/${id}`);
+      await axios.delete(`/api/cameras/${stream.id}`);
       fetchStreams();
     } catch (error) {
       console.error('Error deleting stream:', error);
+      const msg = error.response?.data?.error || '删除视频源失败';
+      setError(msg);
+      window.alert(msg);
     }
   };
 
@@ -172,7 +187,7 @@ function VideoStreams() {
                       </IconButton>
                       <IconButton
                         color="error"
-                        onClick={() => handleDelete(stream.id)}
+                        onClick={() => handleDelete(stream)}
                         title="删除"
                       >
                         <Delete />

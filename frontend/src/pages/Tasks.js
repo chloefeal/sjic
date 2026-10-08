@@ -952,14 +952,27 @@ function Tasks() {
                 <Alert severity="error">{formError}</Alert>
               </Grid>
             )}
-            <Grid item xs={12}>
-              <TextField
+            <Grid item xs={12} md={6}>
+              <Select
                 fullWidth
-                label="任务名称"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                margin="normal"
-              />
+                value={formData.edge_node_id || ''}
+                onChange={(e) => {
+                  const edge_node_id = e.target.value;
+                  setFormData((prev) => ({
+                    ...prev,
+                    edge_node_id,
+                    cameraId: '',
+                  }));
+                }}
+                displayEmpty
+              >
+                <MenuItem value="">选择运算节点</MenuItem>
+                {nodes.map(node => (
+                  <MenuItem key={node.id} value={node.id}>
+                    {node.name} ({node.status === 'online' ? '🟢 在线' : '🔴 离线'})
+                  </MenuItem>
+                ))}
+              </Select>
             </Grid>
 
             <Grid item xs={12} md={6}>
@@ -978,8 +991,9 @@ function Tasks() {
                 value={formData.cameraId}
                 onChange={(e) => setFormData({ ...formData, cameraId: e.target.value })}
                 displayEmpty
+                disabled={!formData.edge_node_id}
               >
-                <MenuItem value="">选择视频源</MenuItem>
+                <MenuItem value="">{formData.edge_node_id ? '选择视频源' : '请先选择运算节点'}</MenuItem>
                 {(() => {
                   const boundIds = getNodeBoundCameraIds();
                   const filtered = Array.isArray(boundIds) && boundIds.length > 0
@@ -994,6 +1008,16 @@ function Tasks() {
                   ));
                 })()}
               </Select>
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="任务名称"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                margin="normal"
+              />
             </Grid>
 
             <Grid item xs={12} md={6}>
@@ -1153,22 +1177,6 @@ function Tasks() {
               })()}
             </Grid>
             )}
-
-            <Grid item xs={12} md={6}>
-              <Select
-                fullWidth
-                value={formData.edge_node_id || ''}
-                onChange={(e) => setFormData({ ...formData, edge_node_id: e.target.value })}
-                displayEmpty
-              >
-                <MenuItem value="">选择运算节点</MenuItem>
-                {nodes.map(node => (
-                  <MenuItem key={node.id} value={node.id}>
-                    {node.name} ({node.status === 'online' ? '🟢 在线' : '🔴 离线'})
-                  </MenuItem>
-                ))}
-              </Select>
-            </Grid>
 
             <Grid item xs={12} md={6}>
               <TextField
