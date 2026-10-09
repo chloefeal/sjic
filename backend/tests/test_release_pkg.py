@@ -57,6 +57,24 @@ class TestReleasePackage(unittest.TestCase):
         handle.close()
         return handle.name
 
+    def test_frontend_build_manifest_is_listed(self):
+        import importlib.util
+        module_path = Path(__file__).resolve().parents[2] / 'deploy' / 'build_release.py'
+        spec = importlib.util.spec_from_file_location('sjic_build_release', module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = Path(tempfile.mkdtemp())
+        try:
+            nested = root / 'frontend' / 'build' / 'manifest.json'
+            nested.parent.mkdir(parents=True)
+            nested.write_text('{"files":{}}', encoding='utf-8')
+            (root / 'install.sh').write_text('echo ok\n', encoding='utf-8')
+            listed = {item['path'] for item in module.file_records(root)}
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+        self.assertIn('frontend/build/manifest.json', listed)
+        self.assertIn('install.sh', listed)
+
     def test_accepts_pyc_package(self):
         path = self._write_blob(self._archive({
             'install.sh': '#!/bin/bash\necho ok\n',

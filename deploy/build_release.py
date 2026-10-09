@@ -64,9 +64,12 @@ def write_version(root: Path, version: str, extra: list) -> None:
 def file_records(root: Path) -> list:
     records = []
     for path in sorted(root.rglob('*')):
-        if not path.is_file() or path.name == 'manifest.json':
+        if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
+        # 只排除安装包自己的清单。前端构建产物里也有 frontend/build/manifest.json。
+        if relative == 'manifest.json':
+            continue
         records.append({'path': relative, 'sha256': verify_release.sha256_file(str(path))})
     return records
 
