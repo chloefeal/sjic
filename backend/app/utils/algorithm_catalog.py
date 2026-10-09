@@ -66,7 +66,7 @@ CAMERA_MOUNT_POSITIONS = [
     {'value': 'top', 'label': '正上方', 'hint': '接近天花板垂直向下'},
 ]
 
-# 目标检测任务内可添加的场景/规则预设（class_ids 发布后按模型 labelmap 调整）
+# 目标检测任务内可添加的场景/规则预设。类别在创建任务时按模型 labelmap 选择。
 OD_SCENE_PRESETS = [
     {
         'id': 'person_absence',
@@ -76,7 +76,7 @@ OD_SCENE_PRESETS = [
         'defaults': {
             'absent_seconds': 600,
             'alert_type': 'person_absence',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -88,7 +88,7 @@ OD_SCENE_PRESETS = [
         'defaults': {
             'linger_seconds': 300,
             'alert_type': 'exam_area_linger',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -99,7 +99,7 @@ OD_SCENE_PRESETS = [
         'description': '出现手机即告警（需模型含 phone 类）',
         'defaults': {
             'alert_type': 'phone_detect',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -110,7 +110,7 @@ OD_SCENE_PRESETS = [
         'description': '出现帽子即告警（需模型含 hat 类）',
         'defaults': {
             'alert_type': 'hat_detect',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -121,7 +121,7 @@ OD_SCENE_PRESETS = [
         'description': '出现火情或烟雾（需模型含 fire/smoke 类）',
         'defaults': {
             'alert_type': 'fire_smoke',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -134,7 +134,7 @@ OD_SCENE_PRESETS = [
             'min_count': 5,
             'seconds': 10,
             'alert_type': 'aisle_crowd',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -145,7 +145,7 @@ OD_SCENE_PRESETS = [
         'description': '自定义类别在区域内出现',
         'defaults': {
             'alert_type': 'object_detection',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -156,7 +156,7 @@ OD_SCENE_PRESETS = [
         'description': '用目标检测模型识别倒地人员（模型需含跌倒类别），不使用姿态关键点',
         'defaults': {
             'alert_type': 'person_fall',
-            'class_ids': [0],
+            'class_ids': [],
             'enabled': True,
         },
     },
@@ -453,6 +453,9 @@ def _merge_scene_presets(existing, catalog):
             merged.update(cur)
             if isinstance(p.get('defaults'), dict):
                 merged['defaults'] = {**(p.get('defaults') or {}), **(cur.get('defaults') or {})}
+                # 旧目录把检测场景预填成 class 0；任务里改为必选，不再保留这个占位。
+                if (p.get('defaults') or {}).get('class_ids') == [] and merged['defaults'].get('class_ids') == [0]:
+                    merged['defaults']['class_ids'] = []
             ordered.append(merged)
         else:
             ordered.append(dict(p))

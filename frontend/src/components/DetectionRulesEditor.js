@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Box, Button, Chip, FormControlLabel, Grid, MenuItem, Paper, Select,
+  Box, Button, Chip, FormControl, FormControlLabel, FormHelperText, Grid, MenuItem, Paper, Select,
   Switch, TextField, Typography, IconButton
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
@@ -14,7 +14,19 @@ const TYPE_FIELDS = {
   crowd_count: ['min_count', 'seconds'],
 };
 
-function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence }) {
+function normalizeLabelmap(raw) {
+  if (Array.isArray(raw)) {
+    return raw.filter((item) => item && Number.isInteger(item.id));
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw)
+      .map(([id, name]) => ({ id: Number(id), name: String(name) }))
+      .filter((item) => Number.isInteger(item.id));
+  }
+  return [];
+}
+
+function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap }) {
   const [addPreset, setAddPreset] = useState('');
 
   const scenePresets = useMemo(() => {
@@ -24,6 +36,7 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
   }, [algorithm, catalogPresets]);
 
   const rules = Array.isArray(algorithmParameters?.rules) ? algorithmParameters.rules : [];
+  const labels = useMemo(() => normalizeLabelmap(labelmap), [labelmap]);
 
   const updateRules = (nextRules) => {
     onChange({
@@ -41,11 +54,15 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       name: preset.name,
       scene_preset_id: preset.id,
       ...(preset.defaults || {}),
+      class_ids: [],
       enabled: true,
       detection_region: null,
       schedule_start: '',
       schedule_end: '',
     };
+    // #region agent log
+    fetch('http://127.0.0.1:7453/ingest/081782cc-6465-4a44-ac05-89d5ee6ce675',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4b467c'},body:JSON.stringify({sessionId:'4b467c',hypothesisId:'A',location:'DetectionRulesEditor.js:handleAddPreset',message:'add od scene',data:{presetId:preset.id,presetClassIds:(preset.defaults||{}).class_ids,savedClassIds:next.class_ids,labelCount:labels.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     updateRules([...rules, next]);
     setAddPreset('');
   };
@@ -63,7 +80,7 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>检测场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          从预设添加场景（如人员缺席、识别手机、人员倒地）。同一任务只推理一次。场景时段、置信度优先于任务。
+          从预设添加场景（如人员缺席、识别手机、人员倒地）。每个场景都要选择检测类别。同一任务只推理一次。场景时段、置信度优先于任务。
         </Typography>
       </Grid>
 
@@ -104,6 +121,46 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
               </Box>
 
               <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  {labels.length > 0 ? (
+                    <FormControl fullWidth size="small" error={!Array.isArray(rule.class_ids) || rule.class_ids.length === 0}>
+                      <Select
+                        multiple
+                        displayEmpty
+                        value={Array.isArray(rule.class_ids) ? rule.class_ids : []}
+                        onChange={(e) => patchRule(index, { class_ids: e.target.value.map((id) => Number(id)) })}
+                        renderValue={(selected) => {
+                          if (!selected.length) return '选择类别';
+                          return selected.map((id) => labels.find((label) => label.id === id)?.name || id).join('、');
+                        }}
+                      >
+                        {labels.map((label) => (
+                          <MenuItem key={label.id} value={label.id}>
+                            {label.name}（{label.id}）
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      <FormHelperText>请选择该场景要检测的类别</FormHelperText>
+                    </FormControl>
+                  ) : (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      required
+                      label="类别 ID"
+                      value={Array.isArray(rule.class_ids) ? rule.class_ids.join(',') : ''}
+                      onChange={(e) => {
+                        const classIds = e.target.value
+                          .split(',')
+                          .map((part) => parseInt(part.trim(), 10))
+                          .filter((id) => Number.isInteger(id));
+                        patchRule(index, { class_ids: classIds });
+                      }}
+                      helperText="检测模型未配置 labelmap 时，填写类别 ID，多个用逗号分隔"
+                      error={!Array.isArray(rule.class_ids) || rule.class_ids.length === 0}
+                    />
+                  )}
+                </Grid>
                 {fields.includes('linger_seconds') && (
                   <Grid item xs={12} md={4}>
                     <TextField

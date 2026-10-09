@@ -29,6 +29,15 @@ function mergeAlgoDefaults(algorithm, prevParams = {}) {
   return next;
 }
 
+function detectionClassError(params) {
+  const rules = Array.isArray(params?.rules) ? params.rules : [];
+  const missing = rules.find((rule) => (
+    rule && rule.enabled !== false && (!Array.isArray(rule.class_ids) || rule.class_ids.length === 0)
+  ));
+  if (!missing) return '';
+  return `检测场景「${missing.name || '未命名'}」需要选择类别`;
+}
+
 function cameraShareWarning(tasks, formData, editingTask) {
   if (formData?.pipeline !== 'exam' || !formData.cameraId) return '';
   const others = (tasks || []).filter((task) => (
@@ -202,6 +211,14 @@ function Tasks() {
       setFormError('请至少绑定一个目标检测或姿态算法');
       return;
     }
+    const classError = detectionClassError(formData.algorithm_parameters);
+    // #region agent log
+    fetch('http://127.0.0.1:7453/ingest/081782cc-6465-4a44-ac05-89d5ee6ce675',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4b467c'},body:JSON.stringify({sessionId:'4b467c',hypothesisId:'B',location:'Tasks.js:handleCreate',message:'create task class check',data:{classError,rules:(formData.algorithm_parameters?.rules||[]).map((rule)=>({name:rule.name,class_ids:rule.class_ids,enabled:rule.enabled}))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (classError) {
+      setFormError(classError);
+      return;
+    }
     try {
       const response = await axios.post('/api/tasks', buildTaskPayload(formData));
       setTasks([...tasks, response]);
@@ -218,6 +235,14 @@ function Tasks() {
     setFormError('');
     if (formData.pipeline === 'exam' && !formData.od_algorithm_id && !formData.pose_algorithm_id) {
       setFormError('请至少绑定一个目标检测或姿态算法');
+      return;
+    }
+    const classError = detectionClassError(formData.algorithm_parameters);
+    // #region agent log
+    fetch('http://127.0.0.1:7453/ingest/081782cc-6465-4a44-ac05-89d5ee6ce675',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4b467c'},body:JSON.stringify({sessionId:'4b467c',hypothesisId:'B',location:'Tasks.js:handleUpdate',message:'update task class check',data:{classError,rules:(formData.algorithm_parameters?.rules||[]).map((rule)=>({name:rule.name,class_ids:rule.class_ids,enabled:rule.enabled}))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (classError) {
+      setFormError(classError);
       return;
     }
     try {
@@ -417,6 +442,7 @@ function Tasks() {
                     {rule.type === 'absence' ? ` · 缺席 ${rule.absent_seconds ?? 600} 秒` : ''}
                     {rule.type === 'crowd_count' ? ` · ≥${rule.min_count ?? 5}人 / ${rule.seconds ?? 10}秒` : ''}
                     {rule.confidence != null && rule.confidence !== '' ? ` · 置信度 ${rule.confidence}` : ''}
+                    {Array.isArray(rule.class_ids) && rule.class_ids.length ? ` · 类别 ${rule.class_ids.join(',')}` : ''}
                     {` · 告警 ${rule.alert_type || '-'}`}
                     {rule.detection_region?.points?.length ? ` · ROI ${rule.detection_region.points.length} 点` : ' · 整帧'}
                     {rule.schedule_start && rule.schedule_end ? ` · 时段 ${rule.schedule_start}–${rule.schedule_end}` : ''}
@@ -616,6 +642,7 @@ function Tasks() {
               algorithmParameters={formData.algorithm_parameters}
               catalogPresets={catalog?.od_scene_presets}
               taskConfidence={formData.confidence}
+              labelmap={odAlgorithm.model_labelmap}
               onChange={patchParams}
             />
           </Grid>
@@ -666,6 +693,7 @@ function Tasks() {
               algorithmParameters={formData.algorithm_parameters}
               catalogPresets={catalog?.od_scene_presets}
               taskConfidence={formData.confidence}
+              labelmap={algorithm.model_labelmap}
               onChange={(nextParams) => setFormData((prev) => ({
                 ...prev,
                 algorithm_parameters: nextParams,

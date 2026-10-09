@@ -75,5 +75,60 @@ class SmartWatchSceneTest(unittest.TestCase):
         self.assertEqual(needs['fusions'][0]['type'], 'smart_watch')
 
 
+class DetectionSceneClassTest(unittest.TestCase):
+    def test_od_presets_leave_class_empty(self):
+        for preset in catalog.OD_SCENE_PRESETS:
+            self.assertEqual(preset['defaults'].get('class_ids'), [], preset['id'])
+
+    def test_merge_clears_legacy_class_zero(self):
+        merged = catalog.merge_catalog_schema(
+            {'scene_presets': [{
+                'id': 'phone_detect',
+                'type': 'presence',
+                'name': '识别手机',
+                'defaults': {'class_ids': [0], 'alert_type': 'phone_detect', 'enabled': True},
+            }]},
+            'object_detection',
+        )
+        phone = next(item for item in merged['scene_presets'] if item['id'] == 'phone_detect')
+        self.assertEqual(phone['defaults']['class_ids'], [])
+
+    def test_merge_keeps_explicit_class(self):
+        merged = catalog.merge_catalog_schema(
+            {'scene_presets': [{
+                'id': 'phone_detect',
+                'type': 'presence',
+                'name': '识别手机',
+                'defaults': {'class_ids': [3], 'alert_type': 'phone_detect', 'enabled': True},
+            }]},
+            'object_detection',
+        )
+        phone = next(item for item in merged['scene_presets'] if item['id'] == 'phone_detect')
+        self.assertEqual(phone['defaults']['class_ids'], [3])
+
+    def test_enabled_detection_scene_requires_class(self):
+        self.assertEqual(
+            exam_task.validate_scene_bindings(
+                {'rules': [{'name': '识别手机', 'enabled': True, 'class_ids': []}]},
+                1,
+                None,
+            ),
+            '检测场景「识别手机」需要选择类别',
+        )
+        self.assertIsNone(exam_task.validate_scene_bindings(
+            {'rules': [{'name': '识别手机', 'enabled': True, 'class_ids': [2]}]},
+            1,
+            None,
+        ))
+        self.assertIsNone(exam_task.validate_scene_bindings(
+            {'rules': [{'name': '识别手机', 'enabled': False, 'class_ids': []}]},
+            1,
+            None,
+        ))
+        self.assertIsNone(exam_task.missing_detection_class([
+            {'name': '人员缺席', 'class_ids': [0], 'enabled': True},
+        ]))
+
+
 if __name__ == '__main__':
     unittest.main()
