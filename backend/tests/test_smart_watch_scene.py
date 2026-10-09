@@ -129,6 +129,32 @@ class DetectionSceneClassTest(unittest.TestCase):
             {'name': '人员缺席', 'class_ids': [0], 'enabled': True},
         ]))
 
+    def test_scene_class_must_stay_inside_algorithm_labels(self):
+        params = {'rules': [{'name': '识别手机', 'enabled': True, 'class_ids': [1]}]}
+        self.assertEqual(
+            exam_task.validate_scene_bindings(params, 1, None, allowed_class_ids=[2, 4]),
+            '场景「识别手机」只能选择算法已勾选的类别',
+        )
+        self.assertIsNone(exam_task.validate_scene_bindings(
+            {'rules': [{'name': '识别手机', 'enabled': True, 'class_ids': [4]}]},
+            1,
+            None,
+            allowed_class_ids=[2, 4],
+        ))
+        self.assertIsNone(exam_task.validate_scene_bindings(
+            {'rules': [{'name': '识别手机', 'enabled': True, 'class_ids': [1]}]},
+            1,
+            None,
+            allowed_class_ids=[],
+        ))
+        self.assertEqual(
+            exam_task.classes_outside_allowlist(
+                [{'name': '智能手表', 'type': 'smart_watch', 'enabled': True, 'class_ids': [1]}],
+                [4],
+            ),
+            '场景「智能手表」只能选择算法已勾选的类别',
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

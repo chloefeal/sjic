@@ -68,7 +68,12 @@ def _apply_exam_or_single(data, existing=None):
     单算法任务：沿用 algorithm_id。
     返回 (error_response or None)。
     """
-    from app.utils.exam_task import missing_detection_class, sanitize_exam_params, validate_scene_bindings
+    from app.utils.exam_task import (
+        classes_outside_allowlist,
+        missing_detection_class,
+        sanitize_exam_params,
+        validate_scene_bindings,
+    )
 
     od_id = data.get('od_algorithm_id', getattr(existing, 'od_algorithm_id', None) if existing else None)
     pose_id = data.get('pose_algorithm_id', getattr(existing, 'pose_algorithm_id', None) if existing else None)
@@ -83,14 +88,15 @@ def _apply_exam_or_single(data, existing=None):
     if od_id or pose_id:
         if algorithm_id:
             return (jsonify({'error': '混合任务不要再绑定单个算法'}), 400)
-        _, err = _check_published_algorithm(od_id, 'object_detection')
+        od_algorithm, err = _check_published_algorithm(od_id, 'object_detection')
         if err:
             return err
         _, err = _check_published_algorithm(pose_id, 'pose_behavior')
         if err:
             return err
         params = sanitize_exam_params(data.get('algorithm_parameters') or (existing.algorithm_parameters if existing else {}) or {})
-        scene_err = validate_scene_bindings(params, od_id, pose_id)
+        allowed_ids = list(od_algorithm.labels or []) if od_algorithm is not None else []
+        scene_err = validate_scene_bindings(params, od_id, pose_id, allowed_class_ids=allowed_ids)
         if scene_err:
             return (jsonify({'error': scene_err}), 400)
         data['algorithm_id'] = None
@@ -121,6 +127,9 @@ def _apply_exam_or_single(data, existing=None):
         params = merged
     if algorithm.resolved_engine() == 'object_detection':
         class_err = missing_detection_class(params.get('rules'))
+        if class_err:
+            return (jsonify({'error': class_err}), 400)
+        class_err = classes_outside_allowlist(params.get('rules'), algorithm.labels or [])
         if class_err:
             return (jsonify({'error': class_err}), 400)
     return None

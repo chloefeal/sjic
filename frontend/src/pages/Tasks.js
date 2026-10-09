@@ -212,9 +212,6 @@ function Tasks() {
       return;
     }
     const classError = detectionClassError(formData.algorithm_parameters);
-    // #region agent log
-    fetch('http://127.0.0.1:7453/ingest/081782cc-6465-4a44-ac05-89d5ee6ce675',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4b467c'},body:JSON.stringify({sessionId:'4b467c',hypothesisId:'B',location:'Tasks.js:handleCreate',message:'create task class check',data:{classError,rules:(formData.algorithm_parameters?.rules||[]).map((rule)=>({name:rule.name,class_ids:rule.class_ids,enabled:rule.enabled}))},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (classError) {
       setFormError(classError);
       return;
@@ -238,9 +235,6 @@ function Tasks() {
       return;
     }
     const classError = detectionClassError(formData.algorithm_parameters);
-    // #region agent log
-    fetch('http://127.0.0.1:7453/ingest/081782cc-6465-4a44-ac05-89d5ee6ce675',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4b467c'},body:JSON.stringify({sessionId:'4b467c',hypothesisId:'B',location:'Tasks.js:handleUpdate',message:'update task class check',data:{classError,rules:(formData.algorithm_parameters?.rules||[]).map((rule)=>({name:rule.name,class_ids:rule.class_ids,enabled:rule.enabled}))},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (classError) {
       setFormError(classError);
       return;
@@ -666,6 +660,7 @@ function Tasks() {
               catalogPresets={catalog?.fusion_scene_presets}
               taskConfidence={formData.confidence}
               labelmap={odAlgorithm.model_labelmap}
+              allowedLabelIds={odAlgorithm.labels}
               onChange={patchParams}
             />
           </Grid>

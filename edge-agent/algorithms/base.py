@@ -123,7 +123,7 @@ class BaseAlgorithm(ABC):
         for box in boxes or []:
             x1, y1, x2, y2 = int(box.x1), int(box.y1), int(box.x2), int(box.y2)
             cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 1)
-            label = f"cls{getattr(box, 'class_id', 0)}:{float(box.confidence):.2f}"
+            label = f"{float(box.confidence):.2f}"
             vis = _put_text(vis, label, (x1, max(y1 - 16, 2)), color_bgr=(0, 255, 0))
             if hasattr(box, 'foot_center'):
                 fx, fy = box.foot_center

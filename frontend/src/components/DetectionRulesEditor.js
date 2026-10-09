@@ -26,6 +26,20 @@ function normalizeLabelmap(raw) {
   return [];
 }
 
+function labelsForScenes(labelmap, allowedIds) {
+  const all = normalizeLabelmap(labelmap);
+  const selected = (Array.isArray(allowedIds) ? allowedIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id));
+  if (!selected.length) return { labels: all, restricted: false };
+  const allowed = new Set(selected);
+  const filtered = all.filter((item) => allowed.has(item.id));
+  return {
+    labels: filtered.length ? filtered : selected.map((id) => ({ id, name: String(id) })),
+    restricted: true,
+  };
+}
+
 function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap }) {
   const [addPreset, setAddPreset] = useState('');
 
@@ -36,7 +50,10 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
   }, [algorithm, catalogPresets]);
 
   const rules = Array.isArray(algorithmParameters?.rules) ? algorithmParameters.rules : [];
-  const labels = useMemo(() => normalizeLabelmap(labelmap), [labelmap]);
+  const { labels, restricted } = useMemo(
+    () => labelsForScenes(labelmap, algorithm?.labels),
+    [labelmap, algorithm],
+  );
 
   const updateRules = (nextRules) => {
     onChange({
@@ -60,9 +77,6 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       schedule_start: '',
       schedule_end: '',
     };
-    // #region agent log
-    fetch('http://127.0.0.1:7453/ingest/081782cc-6465-4a44-ac05-89d5ee6ce675',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4b467c'},body:JSON.stringify({sessionId:'4b467c',hypothesisId:'A',location:'DetectionRulesEditor.js:handleAddPreset',message:'add od scene',data:{presetId:preset.id,presetClassIds:(preset.defaults||{}).class_ids,savedClassIds:next.class_ids,labelCount:labels.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     updateRules([...rules, next]);
     setAddPreset('');
   };
@@ -140,7 +154,9 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
                           </MenuItem>
                         ))}
                       </Select>
-                      <FormHelperText>请选择该场景要检测的类别</FormHelperText>
+                      <FormHelperText>
+                        {restricted ? '仅显示该算法已勾选的类别' : '请选择该场景要检测的类别'}
+                      </FormHelperText>
                     </FormControl>
                   ) : (
                     <TextField

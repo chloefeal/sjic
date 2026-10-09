@@ -34,6 +34,10 @@ const FALLBACK_ENGINES = [
   { value: 'pose_behavior', label: '姿态行为检测' },
   { value: 'camera_health', label: '画面健康检测' },
   { value: 'mouse_idle', label: '鼠标空闲检测' },
+  { value: 'belt_broken', label: '皮带破损检测' },
+  { value: 'belt_deviation_detection', label: '皮带跑偏检测' },
+  { value: 'belt_broken_series', label: '皮带撕裂序列检测' },
+  { value: 'belt_broken_high', label: '高精度皮带撕裂检测' },
 ];
 
 function Algorithms() {
@@ -364,7 +368,7 @@ function Algorithms() {
           </Typography>
           <Typography variant="body2" color="textSecondary">
             {isSuperAdmin
-              ? '系统模板提供场景预设，不可直接发布。从模板「派生上架」后绑定一个模型再发布；同一引擎若要换模型规格，再派生一条实例即可（同一时刻一条实例只绑一个模型）。'
+              ? '系统模板提供场景预设，不可直接发布。从模板「派生上架」后绑定一个模型再发布；同一引擎若要换模型规格，再派生一条实例即可。'
               : '以下为已发布可用算法，仅供查看；建任务时在「任务」页选择即可。'}
           </Typography>
         </Box>
@@ -479,7 +483,7 @@ function Algorithms() {
                   value={formData.infer_fps}
                   onChange={(e) => setFormData({ ...formData, infer_fps: e.target.value })}
                   inputProps={{ min: 0.5, max: 30, step: 0.5 }}
-                  helperText="边缘每秒推理次数；目标检测（含跌倒）常用 2～5，姿态行为建议 ≥5"
+                  helperText="边缘每秒推理次数；目标检测常用 2～5，姿态行为建议 ≥5"
                 />
               </Grid>
             )}
@@ -495,7 +499,12 @@ function Algorithms() {
                     setFormData({ ...formData, labels: newValue.map((v) => v.id) });
                   }}
                   renderInput={(params) => (
-                    <TextField {...params} variant="outlined" label="默认关注的检测目标（可选）" />
+                    <TextField
+                      {...params}
+                      variant="outlined"
+                      label="可用检测类别"
+                      helperText="勾选后，创建任务里的检测场景只能从这些类别中选择。都不勾选则显示模型的全部类别。"
+                    />
                   )}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => (

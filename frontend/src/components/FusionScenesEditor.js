@@ -17,10 +17,24 @@ function normalizeLabelmap(raw) {
   return [];
 }
 
-function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap }) {
+function labelsForScenes(labelmap, allowedIds) {
+  const all = normalizeLabelmap(labelmap);
+  const selected = (Array.isArray(allowedIds) ? allowedIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id));
+  if (!selected.length) return all;
+  const allowed = new Set(selected);
+  const filtered = all.filter((item) => allowed.has(item.id));
+  return filtered.length ? filtered : selected.map((id) => ({ id, name: String(id) }));
+}
+
+function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap, allowedLabelIds }) {
   const [addPreset, setAddPreset] = useState('');
   const fusions = Array.isArray(algorithmParameters?.fusions) ? algorithmParameters.fusions : [];
-  const labels = useMemo(() => normalizeLabelmap(labelmap), [labelmap]);
+  const labels = useMemo(
+    () => labelsForScenes(labelmap, allowedLabelIds),
+    [labelmap, allowedLabelIds],
+  );
   const scenePresets = Array.isArray(catalogPresets) ? catalogPresets : [];
 
   const update = (next) => {

@@ -77,7 +77,30 @@ def missing_detection_class(rules):
     return None
 
 
-def validate_scene_bindings(params, od_id, pose_id):
+def _allowlist(allowed_ids):
+    allowed = set()
+    for value in allowed_ids or []:
+        try:
+            allowed.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return allowed
+
+
+def classes_outside_allowlist(items, allowed_ids):
+    """算法勾选了部分类别时，场景只能使用这些类别。未勾选则不限制。"""
+    allowed = _allowlist(allowed_ids)
+    if not allowed:
+        return None
+    for item in _enabled(items):
+        outside = [class_id for class_id in _chosen_class_ids(item) if class_id not in allowed]
+        if outside:
+            name = item.get('name') or '场景'
+            return f'场景「{name}」只能选择算法已勾选的类别'
+    return None
+
+
+def validate_scene_bindings(params, od_id, pose_id, allowed_class_ids=None):
     """场景和绑定不一致时返回错误文案。"""
     params = params or {}
     rules = [item for item in (params.get('rules') or []) if isinstance(item, dict)]
@@ -97,28 +120,9 @@ def validate_scene_bindings(params, od_id, pose_id):
     if od_id:
         class_err = missing_detection_class(rules)
         if class_err:
-            # #region agent log
-            try:
-                import json
-                import time
-                with open(r'd:\lzw\src\sjic\debug-4b467c.log', 'a', encoding='utf-8') as _df:
-                    _df.write(json.dumps({
-                        'sessionId': '4b467c',
-                        'hypothesisId': 'D',
-                        'location': 'exam_task.py:validate_scene_bindings',
-                        'message': 'od scene missing class',
-                        'data': {
-                            'error': class_err,
-                            'rules': [
-                                {'name': rule.get('name'), 'class_ids': rule.get('class_ids')}
-                                for rule in rules
-                            ],
-                        },
-                        'timestamp': int(time.time() * 1000),
-                    }, ensure_ascii=False) + '\n')
-            except Exception:
-                pass
-            # #endregion
+            return class_err
+        class_err = classes_outside_allowlist(rules, allowed_class_ids)
+        if class_err:
             return class_err
     for fusion in _enabled(fusions):
         class_ids = fusion.get('class_ids') or []
@@ -127,28 +131,7 @@ def validate_scene_bindings(params, od_id, pose_id):
                 fusion.get('type'),
                 '融合场景需要选择检测类别',
             )
-    # #region agent log
-    try:
-        import json
-        import time
-        with open(r'd:\lzw\src\sjic\debug-4b467c.log', 'a', encoding='utf-8') as _df:
-            _df.write(json.dumps({
-                'sessionId': '4b467c',
-                'hypothesisId': 'D',
-                'location': 'exam_task.py:validate_scene_bindings',
-                'message': 'scene bindings accepted',
-                'data': {
-                    'rules': [
-                        {'name': rule.get('name'), 'class_ids': rule.get('class_ids'), 'enabled': rule.get('enabled', True)}
-                        for rule in rules
-                    ],
-                },
-                'timestamp': int(time.time() * 1000),
-            }, ensure_ascii=False) + '\n')
-    except Exception:
-        pass
-    # #endregion
-    return None
+    return classes_outside_allowlist(fusions, allowed_class_ids)
 
 
 def camera_pipeline_warnings(camera_id, exclude_task_id=None):
