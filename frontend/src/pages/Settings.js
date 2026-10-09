@@ -496,7 +496,7 @@ function Settings() {
             <CardContent>
               <Typography variant="h6" gutterBottom>系统升级</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                当前版本 {upgradeInfo?.version || '-'}。上传的是 Python 3.10 字节码安装包，不替换容器镜像。
+                当前版本 {upgradeInfo?.version || '-'}。
                 平台升级由宿主机执行；边缘安装包上传后，到「节点」页按台下发。
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
