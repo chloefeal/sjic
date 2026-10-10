@@ -87,13 +87,19 @@ function taskAlgorithmLabel(task, algorithms) {
   return algorithms.find((item) => item.id === task?.algorithm_id)?.name || '';
 }
 
+function isDroppedPoseBehavior(item) {
+  return item?.type === 'chin_rest'
+    || item?.scene_preset_id === 'chin_rest'
+    || item?.alert_type === 'chin_rest';
+}
+
 function getTaskSceneNames(task) {
   const params = task?.algorithm_parameters || {};
   const items = [
     ...(Array.isArray(params.rules) ? params.rules : []),
     ...(Array.isArray(params.behaviors) ? params.behaviors : []),
     ...(Array.isArray(params.fusions) ? params.fusions : []),
-  ];
+  ].filter((item) => !isDroppedPoseBehavior(item));
   return items
     .filter((item) => item && item.enabled !== false)
     .map((item) => item.name || item.type)
@@ -466,7 +472,8 @@ function Tasks() {
           );
         }
         case 'pose_behavior': {
-          const behaviors = Array.isArray(task.algorithm_parameters?.behaviors) ? task.algorithm_parameters.behaviors : [];
+          const behaviors = (Array.isArray(task.algorithm_parameters?.behaviors) ? task.algorithm_parameters.behaviors : [])
+            .filter((item) => !isDroppedPoseBehavior(item));
           return (
             <>
               <Typography variant="subtitle2" gutterBottom>姿态行为：</Typography>
@@ -665,7 +672,7 @@ function Tasks() {
               algorithmParameters={formData.algorithm_parameters}
               catalogPresets={catalog?.pose_scene_presets}
               taskConfidence={formData.confidence}
-              excludePresetIds={['smart_glasses', 'smart_watch']}
+              excludePresetIds={['smart_glasses', 'smart_watch', 'chin_rest']}
               onChange={patchParams}
             />
           </Grid>
@@ -1225,7 +1232,7 @@ function Tasks() {
                 const tip = engine === 'object_detection'
                   ? '可在下方添加多条检测规则/场景（缺席、手机、帽子、人员倒地等），同一任务只推理一次。倒地用目标检测，不用姿态。'
                   : engine === 'pose_behavior'
-                    ? '可在下方添加多个姿态行为/场景（张望、手托下巴等），同一任务只推理一次。智能眼镜、智能手表请用混合任务。'
+                    ? '可在下方添加多个姿态行为/场景（张望、低头、捂嘴等），同一任务只推理一次。智能眼镜、智能手表请用混合任务。'
                     : null;
                 if (!tip) return null;
                 return <Alert severity="info" sx={{ mt: 1 }}>{tip}</Alert>;

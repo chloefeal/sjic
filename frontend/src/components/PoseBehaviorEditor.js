@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, FormControlLabel, Grid, MenuItem, Paper, Select,
   Switch, TextField, Typography, IconButton, Chip
@@ -8,6 +8,14 @@ import { Add, Delete } from '@mui/icons-material';
 /**
  * 姿态行为：从场景预设添加多条行为，同一 pose task 一次推理。
  */
+const DROPPED_POSE_TYPES = new Set(['chin_rest']);
+
+function isDroppedPoseBehavior(item) {
+  return DROPPED_POSE_TYPES.has(item?.type)
+    || DROPPED_POSE_TYPES.has(item?.scene_preset_id)
+    || DROPPED_POSE_TYPES.has(item?.alert_type);
+}
+
 function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, excludePresetIds }) {
   const [addPreset, setAddPreset] = useState('');
 
@@ -15,15 +23,30 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
     ? algorithmParameters.behaviors
     : [];
 
+  useEffect(() => {
+    if (!behaviors.some(isDroppedPoseBehavior)) return;
+    onChange({
+      ...algorithmParameters,
+      behaviors: behaviors.filter((item) => !isDroppedPoseBehavior(item)),
+    });
+  }, [algorithmParameters, behaviors, onChange]);
+
   const scenePresets = useMemo(() => {
     const fromSchema = algorithm?.parameter_schema?.scene_presets;
     const source = Array.isArray(fromSchema) && fromSchema.length > 0
       ? fromSchema
       : (Array.isArray(catalogPresets) ? catalogPresets : []);
     const excluded = new Set(excludePresetIds || []);
-    if (excluded.size === 0) return source;
-    return source.filter((preset) => !excluded.has(preset.id) && !excluded.has(preset.type));
+    return source.filter((preset) => (
+      !isDroppedPoseBehavior(preset)
+      && !excluded.has(preset.id)
+      && !excluded.has(preset.type)
+    ));
   }, [algorithm, catalogPresets, excludePresetIds]);
+
+  const visibleBehaviors = behaviors
+    .map((b, index) => ({ b, index }))
+    .filter(({ b }) => !isDroppedPoseBehavior(b));
 
   const patchBehavior = (index, patch) => {
     const next = behaviors.map((b, i) => (i === index ? { ...b, ...patch } : b));
@@ -73,7 +96,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
         </Typography>
       </Grid>
 
-      {behaviors.length === 0 && (
+      {visibleBehaviors.length === 0 && (
         <Grid item xs={12}>
           <Typography variant="body2" color="text.secondary">
             {scenePresets.length === 0
@@ -83,7 +106,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
         </Grid>
       )}
 
-      {behaviors.map((b, index) => (
+      {visibleBehaviors.map(({ b, index }) => (
         <Grid item xs={12} key={b.id || index}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>

@@ -233,27 +233,6 @@ def is_gaze_away(kps, yaw_degrees=25, pitch_degrees=25, view=DEFAULT_MOUNT_POSIT
     return False
 
 
-def is_chin_rest(kps, view=DEFAULT_MOUNT_POSITION):
-    """手腕靠近下颌/头下部。后上方看不到下巴时，用头中心代替鼻尖。"""
-    view = normalize_mount_position(view)
-    anchor = None
-    if view in ('back_top', 'top'):
-        anchor = head_center(kps)
-    if anchor is None and _kp_ok(kps, NOSE):
-        anchor = _kp(kps, NOSE)
-    if anchor is None:
-        return False
-    sw = _scale(kps)
-    for wi in (L_WRIST, R_WRIST):
-        if not _kp_ok(kps, wi):
-            continue
-        wx, wy = _kp(kps, wi)
-        dist = math.hypot(wx - anchor[0], wy - anchor[1]) / sw
-        if dist < 0.58 and wy >= anchor[1] - 0.2 * sw:
-            return True
-    return False
-
-
 def is_cover_mouth(kps, view=DEFAULT_MOUNT_POSITION):
     """捂嘴：手腕贴近口鼻；后上方改为手腕压在头附近。"""
     view = normalize_mount_position(view)

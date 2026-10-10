@@ -15,7 +15,7 @@ ENGINES = {
     'pose_behavior': {
         'label': '姿态行为检测',
         'needs_model': True,
-        'description': '人体姿态：一次推理，任务内可挂多个行为（张望/低头/手托下巴等）',
+        'description': '人体姿态：一次推理，任务内可挂多个行为（张望/低头/捂嘴等）',
     },
     'camera_health': {
         'label': '画面健康检测',
@@ -197,17 +197,6 @@ POSE_SCENE_PRESETS = [
             'seconds': 15,
             'pitch_degrees': 30,
             'alert_type': 'head_down',
-            'enabled': True,
-        },
-    },
-    {
-        'id': 'chin_rest',
-        'type': 'chin_rest',
-        'name': '手托下巴',
-        'description': '手腕靠近下颌（袖口藏摄嫌疑）',
-        'defaults': {
-            'seconds': 5,
-            'alert_type': 'chin_rest',
             'enabled': True,
         },
     },
@@ -468,9 +457,14 @@ def _merge_scene_presets(existing, catalog):
     return ordered
 
 
-# 合并时从姿态 schema 去掉：跌倒改由目标检测；眼镜/手表改由混合任务的融合场景
-_POSE_DROPPED_PRESET_IDS = frozenset({'person_fall', 'smart_glasses', 'smart_watch'})
-_POSE_DROPPED_TYPES = frozenset({'fall', 'smart_glasses', 'smart_watch'})
+# 合并时从姿态 schema 去掉：跌倒改由目标检测；眼镜/手表改由混合任务的融合场景；手托下巴已下线
+_POSE_DROPPED_PRESET_IDS = frozenset({'person_fall', 'smart_glasses', 'smart_watch', 'chin_rest'})
+_POSE_DROPPED_TYPES = frozenset({'fall', 'smart_glasses', 'smart_watch', 'chin_rest'})
+
+# 已下线场景的历史告警仍显示中文名
+_LEGACY_ALERT_LABELS = {
+    'chin_rest': '手托下巴',
+}
 
 
 def merge_catalog_schema(existing_schema, engine: str, *, origin=None) -> dict:
@@ -543,6 +537,8 @@ def alert_type_labels():
             labels.setdefault(engine, product['name'])
     for engine, meta in ENGINES.items():
         labels.setdefault(engine, meta.get('label') or engine)
+    for alert_type, name in _LEGACY_ALERT_LABELS.items():
+        labels.setdefault(alert_type, name)
     return labels
 
 

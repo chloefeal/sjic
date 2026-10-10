@@ -72,6 +72,7 @@ def _apply_exam_or_single(data, existing=None):
         classes_outside_allowlist,
         missing_detection_class,
         sanitize_exam_params,
+        strip_dropped_pose_behaviors,
         validate_scene_bindings,
     )
 
@@ -125,6 +126,9 @@ def _apply_exam_or_single(data, existing=None):
             merged['behaviors'] = defaults['behaviors']
         data['algorithm_parameters'] = merged
         params = merged
+    if algorithm.resolved_engine() == 'pose_behavior':
+        params = strip_dropped_pose_behaviors(params)
+        data['algorithm_parameters'] = params
     if algorithm.resolved_engine() == 'object_detection':
         class_err = missing_detection_class(params.get('rules'))
         if class_err:

@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'algorithms'))
 
 from pose_geometry import (
     accumulate_rising_count,
-    is_chin_rest,
     is_cover_mouth,
     is_fall,
     is_finger_click_watch,
@@ -173,16 +172,6 @@ class TopViewTest(unittest.TestCase):
 
 
 class HandsAndFallTest(unittest.TestCase):
-    def test_chin_rest(self):
-        rest = sitting_torso(
-            nose=(140, 170, 0.9),
-            l_ear=(115, 165, 0.8),
-            r_ear=(165, 165, 0.8),
-            l_wrist=(138, 185, 0.9),
-        )
-        self.assertTrue(is_chin_rest(rest, view='front_top'))
-        self.assertTrue(is_chin_rest(rest, view='back_top'))
-
     def test_cover_mouth(self):
         cover = sitting_torso(
             nose=(140, 170, 0.9),

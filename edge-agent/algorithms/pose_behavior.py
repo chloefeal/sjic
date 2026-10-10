@@ -1,5 +1,5 @@
 """
-姿态行为引擎：张望 / 低头 / 不看屏幕 / 手托下巴 / 手指屏幕 /
+姿态行为引擎：张望 / 低头 / 不看屏幕 / 手指屏幕 /
 捂嘴报题 / AI 智能眼镜 / 手指点击手表 / 考试员不巡场。
 智能眼镜和智能手表是融合场景，混合任务里才和目标检测一起判定。
 
@@ -10,7 +10,6 @@
 from .base import BaseAlgorithm, effective_confidence
 from .pose_geometry import (
     accumulate_rising_count,
-    is_chin_rest,
     is_cover_mouth,
     is_finger_click_watch,
     is_finger_point,
@@ -37,8 +36,6 @@ def _eval_behavior(btype, kps, box, spec, view):
         return is_looking_aside(kps, spec.get('yaw_degrees', 45), view)
     if btype == 'head_down':
         return is_head_down(kps, spec.get('pitch_degrees', 30), view)
-    if btype == 'chin_rest':
-        return is_chin_rest(kps, view)
     if btype == 'cover_mouth':
         return is_cover_mouth(kps, view)
     if btype == 'finger_point':
@@ -47,9 +44,10 @@ def _eval_behavior(btype, kps, box, spec, view):
 
 
 POINTWISE_TYPES = frozenset({
-    'gaze_away', 'look_aside', 'head_down', 'chin_rest',
+    'gaze_away', 'look_aside', 'head_down',
     'cover_mouth', 'finger_point',
 })
+_DROPPED_BEHAVIOR_TYPES = frozenset({'chin_rest'})
 STATEFUL_BEHAVIORS = frozenset({'smart_glasses', 'smart_watch', 'invigilator_absent'})
 
 
@@ -177,7 +175,10 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
             algo_params = parameters.get('algorithm_parameters') or {}
             task_confidence = float(parameters.get('confidence', 0.5))
             alert_threshold = int(parameters.get('alertThreshold', 10))
-            behaviors = [b for b in (algo_params.get('behaviors') or []) if b.get('enabled', True)]
+            behaviors = [
+                b for b in (algo_params.get('behaviors') or [])
+                if b.get('enabled', True) and b.get('type') not in _DROPPED_BEHAVIOR_TYPES
+            ]
             confidence = min(
                 (effective_confidence(b, task_confidence) for b in behaviors),
                 default=task_confidence,

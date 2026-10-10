@@ -29,6 +29,7 @@ class SmartWatchSceneTest(unittest.TestCase):
         merged = catalog.merge_catalog_schema(
             {'scene_presets': [
                 {'id': 'smart_watch', 'type': 'smart_watch', 'name': '智能手表作弊检测'},
+                {'id': 'chin_rest', 'type': 'chin_rest', 'name': '手托下巴'},
                 {'id': 'look_aside', 'type': 'look_aside', 'name': '左右张望'},
             ]},
             'pose_behavior',
@@ -36,7 +37,10 @@ class SmartWatchSceneTest(unittest.TestCase):
         ids = [item['id'] for item in merged['scene_presets']]
         self.assertNotIn('smart_watch', ids)
         self.assertNotIn('smart_glasses', ids)
+        self.assertNotIn('chin_rest', ids)
         self.assertIn('look_aside', ids)
+        self.assertFalse(any(item['id'] == 'chin_rest' for item in catalog.POSE_SCENE_PRESETS))
+        self.assertEqual(catalog.alert_type_labels()['chin_rest'], '手托下巴')
 
     def test_watch_fusion_needs_both_models_and_class(self):
         params = {'fusions': [{'type': 'smart_watch', 'class_ids': [4], 'enabled': True}]}
@@ -64,6 +68,7 @@ class SmartWatchSceneTest(unittest.TestCase):
         params = exam_task.sanitize_exam_params({
             'behaviors': [
                 {'type': 'smart_watch', 'name': '手表'},
+                {'type': 'chin_rest', 'name': '手托下巴'},
                 {'type': 'look_aside', 'name': '张望'},
             ],
             'fusions': [{'type': 'smart_watch', 'class_ids': [4], 'enabled': True}],
