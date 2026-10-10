@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Card, CardContent, Chip, MenuItem, Stack, Table, TableBody, TableCell,
+  Box, Chip, MenuItem, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TablePagination, TableRow, TextField, Typography, Button,
 } from '@mui/material';
 import axios from '../utils/axios';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 const ACTIONS = [
   { value: 'all', label: '全部操作' },
@@ -76,8 +77,10 @@ function OperationLogs() {
   }, [page, rowsPerPage, applied]);
 
   return (
-    <Card>
-      <CardContent>
+    <ScrollableDataPage
+      variant="card"
+      header={(
+        <>
         <Typography variant="h6" gutterBottom>操作日志</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           记录登录、登出，以及创建、修改、删除等重要操作。
@@ -142,8 +145,26 @@ function OperationLogs() {
             查询
           </Button>
         </Stack>
-        <TableContainer>
-          <Table size="small">
+        </>
+      )}
+      footer={(
+        <TablePagination
+          component="div"
+          count={total}
+          page={page}
+          onPageChange={(event, next) => setPage(next)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(event) => {
+            setRowsPerPage(parseInt(event.target.value, 10));
+            setPage(0);
+          }}
+          rowsPerPageOptions={[10, 20, 50]}
+          labelRowsPerPage="每页"
+        />
+      )}
+    >
+        <TableContainer sx={scrollTableContainerSx}>
+          <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
                 <TableCell>时间</TableCell>
@@ -186,21 +207,7 @@ function OperationLogs() {
             </TableBody>
           </Table>
         </TableContainer>
-        <TablePagination
-          component="div"
-          count={total}
-          page={page}
-          onPageChange={(event, next) => setPage(next)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(event) => {
-            setRowsPerPage(parseInt(event.target.value, 10));
-            setPage(0);
-          }}
-          rowsPerPageOptions={[10, 20, 50]}
-          labelRowsPerPage="每页"
-        />
-      </CardContent>
-    </Card>
+    </ScrollableDataPage>
   );
 }
 

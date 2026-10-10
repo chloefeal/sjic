@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
+    Paper, Table, TableBody, TableCell, TableContainer, TableHead,
     TableRow, Button, IconButton, Typography, Box, Dialog, DialogTitle,
     DialogContent, DialogActions,     TextField, Chip, MenuItem, Checkbox, FormGroup, FormControlLabel, FormLabel,
     Menu, ListItemIcon, ListItemText, Divider, LinearProgress, Tooltip, Snackbar, Alert, Stack
@@ -9,6 +9,7 @@ import {
     Edit, Delete, Circle, RestartAlt, PowerSettingsNew, WifiTethering, SettingsBackupRestore, ContentCopy, Upgrade
 } from '@mui/icons-material';
 import axios from '../utils/axios';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 function Nodes() {
     const canPower = ['customer', 'vendor'].includes(localStorage.getItem('user_role'));
@@ -252,16 +253,16 @@ function Nodes() {
     };
 
     return (
-        <Grid container spacing={3}>
-            <Grid item xs={12}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <>
+        <ScrollableDataPage
+            header={(
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <Typography variant="h5">节点</Typography>
                 </div>
-            </Grid>
-
-            <Grid item xs={12}>
-                <TableContainer component={Paper}>
-                    <Table>
+            )}
+        >
+                <TableContainer component={Paper} sx={scrollTableContainerSx}>
+                    <Table stickyHeader>
                         <TableHead>
                             <TableRow>
                                 <TableCell sx={{ width: 64 }}>序号</TableCell>
@@ -351,7 +352,7 @@ function Nodes() {
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </Grid>
+        </ScrollableDataPage>
 
             <Menu
                 anchorEl={powerMenu.anchor}
@@ -484,7 +485,7 @@ function Nodes() {
                     {copyMsg.text}
                 </Alert>
             </Snackbar>
-        </Grid>
+        </>
     );
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Grid, Card, CardContent, Typography, Table, TableBody, TableCell,
+  Typography, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Dialog, DialogTitle, DialogContent,
   DialogActions, TablePagination, IconButton, TextField, Button, Box, Stack,
   Chip, MenuItem, Alert as MuiAlert, InputAdornment, Checkbox
@@ -10,6 +10,7 @@ import {
   ZoomIn, Search, FileDownload, Clear, CheckCircle, Cancel, Undo, Event
 } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 const REVIEW_OPTIONS = [
   { value: 'all', label: '全部状态' },
@@ -385,10 +386,11 @@ function Alerts() {
   };
 
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Card>
-          <CardContent>
+    <>
+    <ScrollableDataPage
+      variant="card"
+      header={(
+        <>
             <Typography variant="h6" gutterBottom>
               告警记录
             </Typography>
@@ -464,9 +466,23 @@ function Alerts() {
                 </Button>
               </Box>
             </Stack>
-
-            <TableContainer component={Paper}>
-              <Table>
+        </>
+      )}
+      footer={(
+              <TablePagination
+                component="div"
+                count={total}
+                page={page}
+                onPageChange={handleChangePage}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                labelRowsPerPage="每页行数"
+              />
+      )}
+    >
+            <TableContainer component={Paper} sx={scrollTableContainerSx}>
+              <Table stickyHeader>
                 <TableHead>
                   <TableRow>
                     <TableCell padding="checkbox">
@@ -586,20 +602,8 @@ function Alerts() {
                   )}
                 </TableBody>
               </Table>
-              <TablePagination
-                component="div"
-                count={total}
-                page={page}
-                onPageChange={handleChangePage}
-                rowsPerPage={rowsPerPage}
-                onRowsPerPageChange={handleChangeRowsPerPage}
-                rowsPerPageOptions={[10, 25, 50, 100]}
-                labelRowsPerPage="每页行数"
-              />
             </TableContainer>
-          </CardContent>
-        </Card>
-      </Grid>
+    </ScrollableDataPage>
 
       <Dialog
         open={Boolean(preview)}
@@ -664,7 +668,7 @@ function Alerts() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Grid>
+    </>
   );
 }
 

@@ -212,7 +212,7 @@ function Layout({ children }) {
   const logoSrc = branding.logo_url ? `${getBaseUrl()}${branding.logo_url}` : '';
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar sx={{ justifyContent: 'space-between' }}>
           <Stack direction="row" spacing={1.5} alignItems="center">
@@ -379,19 +379,33 @@ function Layout({ children }) {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
           minWidth: 0,
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
           position: 'relative',
         }}
       >
         <Toolbar />
         <ClickTracker />
         {licenseValid === false && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
+          <Alert severity="warning" sx={{ mx: 3, mt: 2, flexShrink: 0 }}>
             {licenseMessage || '尚未导入有效授权'}。请在「授权管理」导入试用版或正式版授权文件后继续使用。
           </Alert>
         )}
-        {children}
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            p: 3,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {children}
+        </Box>
       </Box>
     </Box>
   );

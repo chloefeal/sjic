@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Grid, Card, CardContent, Typography, Button, Dialog, DialogTitle,
+  Box, Typography, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Alert, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Paper, IconButton,
   FormControl, InputLabel, Select, MenuItem, FormHelperText
@@ -8,6 +8,7 @@ import {
 import { Add, Visibility, Delete, Close, Edit } from '@mui/icons-material';
 import axios, { getBaseUrl, getWebSocketUrl } from '../utils/axios';
 import VideoPlayer from '../components/VideoPlayer';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
 
 const EMPTY_STREAM = { name: '', url: '', mount_position: 'back_top' };
@@ -129,8 +130,9 @@ function VideoStreams() {
 
   return (
     <>
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
+      <ScrollableDataPage
+        header={(
+          <Box sx={{ mb: 2 }}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
               {error}
@@ -144,12 +146,14 @@ function VideoStreams() {
               setFormError(null);
               setOpenDialog(true);
             }}
-            sx={{ mb: 2 }}
           >
             添加视频源
           </Button>
-          <TableContainer component={Paper}>
-            <Table>
+          </Box>
+        )}
+      >
+          <TableContainer component={Paper} sx={scrollTableContainerSx}>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell>ID</TableCell>
@@ -198,8 +202,7 @@ function VideoStreams() {
               </TableBody>
             </Table>
           </TableContainer>
-        </Grid>
-      </Grid>
+      </ScrollableDataPage>
 
       {/* 添加视频源对话框 */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>

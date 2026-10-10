@@ -12,6 +12,7 @@ import BeltDeviationCalibrationTool from '../components/BeltDeviationCalibration
 import DetectionRulesEditor from '../components/DetectionRulesEditor';
 import PoseBehaviorEditor from '../components/PoseBehaviorEditor';
 import FusionScenesEditor from '../components/FusionScenesEditor';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 function mergeAlgoDefaults(algorithm, prevParams = {}) {
   const defaults = algorithm?.parameter_schema?.default_task_params || {};
@@ -831,8 +832,10 @@ function Tasks() {
   });
 
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
+    <>
+    <ScrollableDataPage
+      header={(
+        <Box sx={{ mb: 2 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <Typography variant="h5" sx={{ fontWeight: 'bold' }}>调度任务中心</Typography>
           <Button
@@ -896,11 +899,11 @@ function Tasks() {
             ))}
           </Select>
         </Paper>
-      </Grid>
-
-      <Grid item xs={12}>
-        <TableContainer component={Paper}>
-          <Table>
+        </Box>
+      )}
+    >
+        <TableContainer component={Paper} sx={scrollTableContainerSx}>
+          <Table stickyHeader>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ width: 64 }}>序号</TableCell>
@@ -980,7 +983,7 @@ function Tasks() {
             </TableBody>
           </Table>
         </TableContainer>
-      </Grid>
+    </ScrollableDataPage>
 
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>
@@ -1353,7 +1356,7 @@ function Tasks() {
           <Button onClick={() => setOpenDetailDialog(false)}>关闭</Button>
         </DialogActions>
       </Dialog>
-    </Grid>
+    </>
   );
 }
 

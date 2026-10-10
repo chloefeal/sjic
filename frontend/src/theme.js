@@ -314,6 +314,16 @@ export function createAppTheme(themeId = DEFAULT_UI_THEME) {
           },
         },
       },
+      MuiTableCell: {
+        styleOverrides: {
+          stickyHeader: {
+            backgroundColor: t.paper,
+            backgroundImage: isLight
+              ? 'none'
+              : `linear-gradient(${alpha('#ffffff', 0.05)}, ${alpha('#ffffff', 0.05)})`,
+          },
+        },
+      },
       MuiChip: {
         styleOverrides: {
           root: {

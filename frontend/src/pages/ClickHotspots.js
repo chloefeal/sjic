@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Card, CardContent, LinearProgress, MenuItem, Stack, Table, TableBody,
+  Box, LinearProgress, MenuItem, Stack, Table, TableBody, TableContainer,
   TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import axios from '../utils/axios';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 const PAGE_NAMES = {
   '/dashboard': '运行概览',
@@ -66,8 +67,10 @@ function ClickHotspots() {
   const maxClicks = items.reduce((max, item) => Math.max(max, item.clicks || 0), 0) || 1;
 
   return (
-    <Card>
-      <CardContent>
+    <ScrollableDataPage
+      variant="card"
+      header={(
+        <>
         <Typography variant="h6" gutterBottom>点击热点</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           统计界面按钮与菜单的点击次数，供后续优化布局。此页仅厂商管理员可见。
@@ -105,7 +108,11 @@ function ClickHotspots() {
             合计 {total} 次点击
           </Typography>
         </Stack>
-        <Table size="small">
+        </>
+      )}
+    >
+        <TableContainer sx={scrollTableContainerSx}>
+        <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
               <TableCell>页面</TableCell>
@@ -141,8 +148,8 @@ function ClickHotspots() {
             )}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+        </TableContainer>
+    </ScrollableDataPage>
   );
 }
 

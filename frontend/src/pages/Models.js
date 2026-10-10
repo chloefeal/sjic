@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Delete, Upload, Edit } from '@mui/icons-material';
 import axios from '../utils/axios';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 function Models() {
   const isSuperAdmin = localStorage.getItem('user_role') === 'vendor';
@@ -158,7 +159,10 @@ function Models() {
   };
 
   return (
-    <Box>
+    <>
+    <ScrollableDataPage
+      header={(
+        <Box sx={{ mb: 2 }}>
       {!isSuperAdmin && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           当前账号无权访问模型资产管理。
@@ -166,7 +170,6 @@ function Models() {
       )}
 
       {isSuperAdmin && (
-      <Box sx={{ mb: 2 }}>
         <Button
           variant="contained"
           startIcon={<Upload />}
@@ -174,11 +177,12 @@ function Models() {
         >
           上传模型
         </Button>
-      </Box>
       )}
-
-      <TableContainer component={Paper}>
-        <Table>
+        </Box>
+      )}
+    >
+      <TableContainer component={Paper} sx={scrollTableContainerSx}>
+        <Table stickyHeader>
           <TableHead>
             <TableRow>
               <TableCell>ID</TableCell>
@@ -226,6 +230,7 @@ function Models() {
           </TableBody>
         </Table>
       </TableContainer>
+    </ScrollableDataPage>
 
       <Dialog open={isSuperAdmin && openUpload} onClose={() => setOpenUpload(false)}>
         <DialogTitle>上传模型</DialogTitle>
@@ -325,7 +330,7 @@ function Models() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }
 
