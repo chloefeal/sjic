@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Box, Button, Chip, FormControl, FormControlLabel, FormHelperText, Grid, MenuItem, Paper, Select,
+  Box, Button, Chip, FormControl, FormControlLabel, Grid, InputLabel, MenuItem, Paper, Select,
   Switch, TextField, Typography, IconButton
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
@@ -31,16 +31,13 @@ function labelsForScenes(labelmap, allowedIds) {
   const selected = (Array.isArray(allowedIds) ? allowedIds : [])
     .map((id) => Number(id))
     .filter((id) => Number.isInteger(id));
-  if (!selected.length) return { labels: all, restricted: false };
+  if (!selected.length) return all;
   const allowed = new Set(selected);
   const filtered = all.filter((item) => allowed.has(item.id));
-  return {
-    labels: filtered.length ? filtered : selected.map((id) => ({ id, name: String(id) })),
-    restricted: true,
-  };
+  return filtered.length ? filtered : selected.map((id) => ({ id, name: String(id) }));
 }
 
-function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap }) {
+function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap, highlightMissing = false }) {
   const [addPreset, setAddPreset] = useState('');
 
   const scenePresets = useMemo(() => {
@@ -50,7 +47,7 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
   }, [algorithm, catalogPresets]);
 
   const rules = Array.isArray(algorithmParameters?.rules) ? algorithmParameters.rules : [];
-  const { labels, restricted } = useMemo(
+  const labels = useMemo(
     () => labelsForScenes(labelmap, algorithm?.labels),
     [labelmap, algorithm],
   );
@@ -107,6 +104,10 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       {rules.map((rule, index) => {
         const fields = TYPE_FIELDS[rule.type] || [];
         const hasRegion = Boolean(rule.detection_region?.points?.length);
+        const selectedClass = Array.isArray(rule.class_ids) && rule.class_ids.length
+          ? Number(rule.class_ids[0])
+          : '';
+        const classMissing = rule.enabled !== false && (selectedClass === '' || !Number.isInteger(selectedClass));
         return (
           <Grid item xs={12} key={rule.id || index}>
             <Paper variant="outlined" sx={{ p: 2 }}>
@@ -137,43 +138,40 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
               <Grid container spacing={2}>
                 <Grid item xs={12} md={4}>
                   {labels.length > 0 ? (
-                    <FormControl fullWidth size="small" error={!Array.isArray(rule.class_ids) || rule.class_ids.length === 0}>
+                    <FormControl fullWidth size="small" error={highlightMissing && classMissing}>
+                      <InputLabel>类别</InputLabel>
                       <Select
-                        multiple
-                        displayEmpty
-                        value={Array.isArray(rule.class_ids) ? rule.class_ids : []}
-                        onChange={(e) => patchRule(index, { class_ids: e.target.value.map((id) => Number(id)) })}
-                        renderValue={(selected) => {
-                          if (!selected.length) return '选择类别';
-                          return selected.map((id) => labels.find((label) => label.id === id)?.name || id).join('、');
+                        label="类别"
+                        value={selectedClass}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          patchRule(index, { class_ids: id === '' ? [] : [Number(id)] });
                         }}
                       >
+                        <MenuItem value="">选择类别</MenuItem>
                         {labels.map((label) => (
                           <MenuItem key={label.id} value={label.id}>
                             {label.name}（{label.id}）
                           </MenuItem>
                         ))}
                       </Select>
-                      <FormHelperText>
-                        {restricted ? '仅显示该算法已勾选的类别' : '请选择该场景要检测的类别'}
-                      </FormHelperText>
                     </FormControl>
                   ) : (
                     <TextField
                       fullWidth
                       size="small"
-                      required
                       label="类别 ID"
-                      value={Array.isArray(rule.class_ids) ? rule.class_ids.join(',') : ''}
+                      value={selectedClass === '' ? '' : String(selectedClass)}
                       onChange={(e) => {
-                        const classIds = e.target.value
-                          .split(',')
-                          .map((part) => parseInt(part.trim(), 10))
-                          .filter((id) => Number.isInteger(id));
-                        patchRule(index, { class_ids: classIds });
+                        const raw = e.target.value.trim();
+                        if (!raw) {
+                          patchRule(index, { class_ids: [] });
+                          return;
+                        }
+                        const id = parseInt(raw, 10);
+                        patchRule(index, { class_ids: Number.isInteger(id) ? [id] : [] });
                       }}
-                      helperText="检测模型未配置 labelmap 时，填写类别 ID，多个用逗号分隔"
-                      error={!Array.isArray(rule.class_ids) || rule.class_ids.length === 0}
+                      error={highlightMissing && classMissing}
                     />
                   )}
                 </Grid>

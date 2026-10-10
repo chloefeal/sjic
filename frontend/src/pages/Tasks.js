@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Select, MenuItem, IconButton,
+  TextField, Select, MenuItem, IconButton, FormControl,
   Typography, Divider, Box, InputAdornment, Alert, Chip
 } from '@mui/material';
 import { Add, Edit, Delete, PlayArrow, Stop, Info, Search } from '@mui/icons-material';
@@ -29,13 +29,32 @@ function mergeAlgoDefaults(algorithm, prevParams = {}) {
   return next;
 }
 
+function sceneMissingClass(item) {
+  return item && item.enabled !== false && (!Array.isArray(item.class_ids) || item.class_ids.length === 0);
+}
+
 function detectionClassError(params) {
   const rules = Array.isArray(params?.rules) ? params.rules : [];
-  const missing = rules.find((rule) => (
-    rule && rule.enabled !== false && (!Array.isArray(rule.class_ids) || rule.class_ids.length === 0)
-  ));
+  const fusions = Array.isArray(params?.fusions) ? params.fusions : [];
+  const missing = rules.find(sceneMissingClass) || fusions.find(sceneMissingClass);
   if (!missing) return '';
   return `检测场景「${missing.name || '未命名'}」需要选择类别`;
+}
+
+function taskFieldErrors(formData) {
+  return {
+    name: !String(formData.name || '').trim(),
+    node: !formData.edge_node_id,
+    camera: !formData.cameraId,
+    algorithm: formData.pipeline === 'exam'
+      ? (!formData.od_algorithm_id && !formData.pose_algorithm_id)
+      : !formData.algorithm_id,
+    classMessage: detectionClassError(formData.algorithm_parameters),
+  };
+}
+
+function hasTaskFieldErrors(errors) {
+  return errors.name || errors.node || errors.camera || errors.algorithm || Boolean(errors.classMessage);
 }
 
 function cameraShareWarning(tasks, formData, editingTask) {
@@ -113,6 +132,7 @@ function Tasks() {
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [formError, setFormError] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   // Filtering States
   const [filterNodeId, setFilterNodeId] = useState('all');
@@ -205,17 +225,19 @@ function Tasks() {
     return payload;
   };
 
-  const handleCreate = async () => {
+  const rejectIfIncomplete = () => {
+    setSubmitAttempted(true);
+    const errors = taskFieldErrors(formData);
+    if (hasTaskFieldErrors(errors)) {
+      setFormError('请补全标红的必填项');
+      return true;
+    }
     setFormError('');
-    if (formData.pipeline === 'exam' && !formData.od_algorithm_id && !formData.pose_algorithm_id) {
-      setFormError('请至少绑定一个目标检测或姿态算法');
-      return;
-    }
-    const classError = detectionClassError(formData.algorithm_parameters);
-    if (classError) {
-      setFormError(classError);
-      return;
-    }
+    return false;
+  };
+
+  const handleCreate = async () => {
+    if (rejectIfIncomplete()) return;
     try {
       const response = await axios.post('/api/tasks', buildTaskPayload(formData));
       setTasks([...tasks, response]);
@@ -229,16 +251,7 @@ function Tasks() {
   };
 
   const handleUpdate = async () => {
-    setFormError('');
-    if (formData.pipeline === 'exam' && !formData.od_algorithm_id && !formData.pose_algorithm_id) {
-      setFormError('请至少绑定一个目标检测或姿态算法');
-      return;
-    }
-    const classError = detectionClassError(formData.algorithm_parameters);
-    if (classError) {
-      setFormError(classError);
-      return;
-    }
+    if (rejectIfIncomplete()) return;
     try {
       await axios.put(`/api/tasks/${editingTask.id}`, buildTaskPayload(formData));
       setOpenDialog(false);
@@ -262,6 +275,7 @@ function Tasks() {
 
   const handleEdit = (task) => {
     setFormError('');
+    setSubmitAttempted(false);
     setFormData({
       id: task.id,
       name: task.name,
@@ -285,6 +299,7 @@ function Tasks() {
   const resetForm = () => {
     setEditingTask(null);
     setFormError('');
+    setSubmitAttempted(false);
     setFormData({
       name: '',
       cameraId: '',
@@ -637,6 +652,7 @@ function Tasks() {
               catalogPresets={catalog?.od_scene_presets}
               taskConfidence={formData.confidence}
               labelmap={odAlgorithm.model_labelmap}
+              highlightMissing={submitAttempted}
               onChange={patchParams}
             />
           </Grid>
@@ -661,6 +677,7 @@ function Tasks() {
               taskConfidence={formData.confidence}
               labelmap={odAlgorithm.model_labelmap}
               allowedLabelIds={odAlgorithm.labels}
+              highlightMissing={submitAttempted}
               onChange={patchParams}
             />
           </Grid>
@@ -689,6 +706,7 @@ function Tasks() {
               catalogPresets={catalog?.od_scene_presets}
               taskConfidence={formData.confidence}
               labelmap={algorithm.model_labelmap}
+              highlightMissing={submitAttempted}
               onChange={(nextParams) => setFormData((prev) => ({
                 ...prev,
                 algorithm_parameters: nextParams,
@@ -976,6 +994,7 @@ function Tasks() {
               </Grid>
             )}
             <Grid item xs={12} md={6}>
+              <FormControl fullWidth error={submitAttempted && !formData.edge_node_id}>
               <Select
                 fullWidth
                 value={formData.edge_node_id || ''}
@@ -996,6 +1015,7 @@ function Tasks() {
                   </MenuItem>
                 ))}
               </Select>
+              </FormControl>
             </Grid>
 
             <Grid item xs={12} md={6}>
@@ -1009,6 +1029,7 @@ function Tasks() {
                   </Alert>
                 );
               })()}
+              <FormControl fullWidth error={submitAttempted && !formData.cameraId}>
               <Select
                 fullWidth
                 value={formData.cameraId}
@@ -1031,6 +1052,7 @@ function Tasks() {
                   ));
                 })()}
               </Select>
+              </FormControl>
             </Grid>
 
             <Grid item xs={12}>
@@ -1040,6 +1062,7 @@ function Tasks() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 margin="normal"
+                error={submitAttempted && !String(formData.name || '').trim()}
               />
             </Grid>
 
@@ -1073,6 +1096,7 @@ function Tasks() {
             {isExamPipeline ? (
               <>
                 <Grid item xs={12} md={6}>
+                  <FormControl fullWidth error={submitAttempted && !formData.od_algorithm_id && !formData.pose_algorithm_id}>
                   <Select
                     fullWidth
                     value={formData.od_algorithm_id || ''}
@@ -1095,8 +1119,10 @@ function Tasks() {
                       <MenuItem key={algorithm.id} value={algorithm.id}>{algorithm.name}</MenuItem>
                     ))}
                   </Select>
+                  </FormControl>
                 </Grid>
                 <Grid item xs={12} md={6}>
+                  <FormControl fullWidth error={submitAttempted && !formData.od_algorithm_id && !formData.pose_algorithm_id}>
                   <Select
                     fullWidth
                     value={formData.pose_algorithm_id || ''}
@@ -1118,6 +1144,7 @@ function Tasks() {
                       <MenuItem key={algorithm.id} value={algorithm.id}>{algorithm.name}</MenuItem>
                     ))}
                   </Select>
+                  </FormControl>
                 </Grid>
                 <Grid item xs={12}>
                   <Alert severity="info">
@@ -1132,6 +1159,7 @@ function Tasks() {
               </>
             ) : (
             <Grid item xs={12} md={6}>
+              <FormControl fullWidth error={submitAttempted && !formData.algorithm_id}>
               <Select
                 fullWidth
                 value={formData.algorithm_id}
@@ -1159,6 +1187,7 @@ function Tasks() {
                   </MenuItem>
                 ))}
               </Select>
+              </FormControl>
               {(() => {
                 const selectedAlg = selectedAlgorithm;
                 if (!selectedAlg) {

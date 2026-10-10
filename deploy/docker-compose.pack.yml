@@ -20,6 +20,6 @@ services:
       SJIC_VERSION: ${SJIC_VERSION:-}
       SJIC_COMPONENT: ${SJIC_COMPONENT:-all}
     command: ["sh", "/src/deploy/pack/pack.sh"]
-
 volumes:
   pack_node_modules:
+

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Box, Button, Chip, FormControlLabel, Grid, MenuItem, Paper, Select,
+  Box, Button, Chip, FormControl, FormControlLabel, Grid, InputLabel, MenuItem, Paper, Select,
   Switch, TextField, Typography, IconButton
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
@@ -28,7 +28,7 @@ function labelsForScenes(labelmap, allowedIds) {
   return filtered.length ? filtered : selected.map((id) => ({ id, name: String(id) }));
 }
 
-function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap, allowedLabelIds }) {
+function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap, allowedLabelIds, highlightMissing = false }) {
   const [addPreset, setAddPreset] = useState('');
   const fusions = Array.isArray(algorithmParameters?.fusions) ? algorithmParameters.fusions : [];
   const labels = useMemo(
@@ -92,6 +92,9 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
         const distHelp = isWatch
           ? '相对肩宽。另一只手进入该范围算一次点击，只戴表不算'
           : '相对肩宽，越小越要贴近耳朵';
+        const selectedClass = Array.isArray(item.class_ids) && item.class_ids.length && Number.isInteger(Number(item.class_ids[0]))
+          ? Number(item.class_ids[0])
+          : '';
         return (
         <Grid item xs={12} key={item.id || index}>
           <Paper variant="outlined" sx={{ p: 2 }}>
@@ -121,38 +124,40 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
             <Grid container spacing={2}>
               <Grid item xs={12} md={4}>
                 {labels.length > 0 ? (
-                  <Select
-                    fullWidth
-                    size="small"
-                    multiple
-                    displayEmpty
-                    value={Array.isArray(item.class_ids) ? item.class_ids : []}
-                    onChange={(e) => patch(index, { class_ids: e.target.value.map((id) => Number(id)) })}
-                    renderValue={(selected) => {
-                      if (!selected.length) return classPlaceholder;
-                      return selected.map((id) => labels.find((label) => label.id === id)?.name || id).join('、');
-                    }}
-                  >
-                    {labels.map((label) => (
-                      <MenuItem key={label.id} value={label.id}>
-                        {label.name}（{label.id}）
-                      </MenuItem>
-                    ))}
-                  </Select>
+                  <FormControl fullWidth size="small" error={highlightMissing && item.enabled !== false && selectedClass === ''}>
+                    <InputLabel>{isWatch ? '手表类别' : '眼镜类别'}</InputLabel>
+                    <Select
+                      label={isWatch ? '手表类别' : '眼镜类别'}
+                      value={selectedClass}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        patch(index, { class_ids: id === '' ? [] : [Number(id)] });
+                      }}
+                    >
+                      <MenuItem value="">{classPlaceholder}</MenuItem>
+                      {labels.map((label) => (
+                        <MenuItem key={label.id} value={label.id}>
+                          {label.name}（{label.id}）
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 ) : (
                   <TextField
                     fullWidth
                     size="small"
                     label={classIdLabel}
-                    value={Array.isArray(item.class_ids) ? item.class_ids.join(',') : ''}
+                    value={selectedClass === '' ? '' : String(selectedClass)}
                     onChange={(e) => {
-                      const classIds = e.target.value
-                        .split(',')
-                        .map((part) => parseInt(part.trim(), 10))
-                        .filter((id) => Number.isInteger(id));
-                      patch(index, { class_ids: classIds });
+                      const raw = e.target.value.trim();
+                      if (!raw) {
+                        patch(index, { class_ids: [] });
+                        return;
+                      }
+                      const id = parseInt(raw, 10);
+                      patch(index, { class_ids: Number.isInteger(id) ? [id] : [] });
                     }}
-                    helperText="检测模型未配置 labelmap 时，填写类别 ID，多个用逗号分隔"
+                    error={highlightMissing && item.enabled !== false && selectedClass === ''}
                   />
                 )}
               </Grid>
