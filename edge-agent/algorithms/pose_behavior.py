@@ -3,16 +3,27 @@
 捂嘴报题 / AI 智能眼镜 / 手指点击手表 / 考试员不巡场 /
 人员缺席 / 人员滞留 / 通道聚集。
 智能眼镜和智能手表是融合场景，混合任务里才和目标检测一起判定。
-缺席、滞留、聚集只统计姿态检出的人数，不判断具体姿态。
+点状违规和眼镜、手表按人计时：同一次推理里每人一个轨迹 id。
+缺席、滞留、聚集、考试员不巡场仍按区域计数，不按人跟踪。
 
 依赖姿态模型（YOLO-Pose 等）经 runtime.infer 返回 keypoints。
 几何判断按摄像头 mount_position（前/后/侧/正上方）切换，避免把俯视看屏判成违规。
 若当前 runtime 仅返回 boxes，则跳过关键点行为；人数统计仍可用这些框。
 """
+import math
+import time
+from datetime import datetime
+
 from .base import BaseAlgorithm, effective_confidence
 from .detection_preview import offer_detection_preview
 from .object_detection import ObjectDetectionAlgorithm
 from .pose_geometry import (
+    L_HIP,
+    L_SHOULDER,
+    R_HIP,
+    R_SHOULDER,
+    _kp,
+    _midpoint,
     accumulate_rising_count,
     is_cover_mouth,
     is_finger_click_watch,
@@ -24,8 +35,6 @@ from .pose_geometry import (
     is_wrist_near_ear,
     normalize_mount_position,
 )
-import time
-from datetime import datetime
 from .rules import (
     PERSON_COUNT_TYPES,
     behavior_rois,
@@ -62,9 +71,173 @@ POINTWISE_TYPES = frozenset({
 _DROPPED_BEHAVIOR_TYPES = frozenset({'chin_rest'})
 STATEFUL_BEHAVIORS = frozenset({'smart_glasses', 'smart_watch', 'invigilator_absent'})
 
+# 连续这么多次推理都没再检出这个人，轨迹仍保留。大约 1 次/秒时就是两秒。
+TRACK_GRACE_MISSES = 2
+_SHOULDER_GATE = 0.75
+_BOX_GATE = 0.5
+
+
+def _pose_points(kps):
+    """只有 COCO 17 点才用来取肩、髋。短列表和字符串都当没有关键点。"""
+    if kps is None or isinstance(kps, (str, bytes)):
+        return None
+    try:
+        count = len(kps)
+    except TypeError:
+        return None
+    if count < 17:
+        return None
+    return kps
+
+
+def _box_center_width(box):
+    try:
+        x1, y1 = float(box.x1), float(box.y1)
+        x2, y2 = float(box.x2), float(box.y2)
+    except (TypeError, ValueError, AttributeError):
+        return None, None
+    if x2 <= x1 or y2 <= y1:
+        return None, None
+    return ((x1 + x2) / 2.0, (y1 + y2) / 2.0), (x2 - x1)
+
+
+def _person_anchor(box, kps):
+    """锚点和尺度。双肩中点优先，否则髋中点，否则框中心。有双肩时尺度是肩宽，否则用框宽。"""
+    points = _pose_points(kps)
+    if points is not None:
+        shoulders = _midpoint(points, L_SHOULDER, R_SHOULDER)
+        if shoulders is not None:
+            left = _kp(points, L_SHOULDER)
+            right = _kp(points, R_SHOULDER)
+            width = max(math.hypot(left[0] - right[0], left[1] - right[1]), 1.0)
+            return shoulders, width, True
+        hips = _midpoint(points, L_HIP, R_HIP)
+        if hips is not None:
+            _center, width = _box_center_width(box)
+            if width is None:
+                left = _kp(points, L_HIP)
+                right = _kp(points, R_HIP)
+                width = max(math.hypot(left[0] - right[0], left[1] - right[1]), 1.0)
+            return hips, width, False
+    center, width = _box_center_width(box)
+    if center is not None:
+        return center, width, False
+    return (0.0, 0.0), None, False
+
+
+def _person_key(box, kps):
+    if box is not None:
+        return ('box', id(box))
+    return ('kps', id(kps))
+
+
+def _match_gate(track_scale, track_shoulder, det_scale, det_shoulder):
+    if track_shoulder or det_shoulder:
+        scales = []
+        if track_shoulder and track_scale:
+            scales.append(track_scale)
+        if det_shoulder and det_scale:
+            scales.append(det_scale)
+        if scales:
+            return _SHOULDER_GATE * max(scales)
+    scales = [scale for scale in (track_scale, det_scale) if scale]
+    if not scales:
+        return 1.0
+    return _BOX_GATE * max(scales)
+
+
+class _Track:
+    def __init__(self, track_id, anchor, scale, use_shoulder, seen):
+        self.id = track_id
+        self.anchor = anchor
+        self.scale = scale
+        self.use_shoulder = use_shoulder
+        self.seen = seen
+        self.misses = 0
+        self.since = {}
+        self.last_alert = {}
+        self.touch = {}
+
+
+class PersonTracker:
+    """用肩中点把相邻推理结果里的同一个人接起来。不加载跟踪模型。"""
+
+    def __init__(self):
+        self.tracks = []
+        self._next_id = 1
+        self._by_key = {}
+
+    def track_for(self, box, kps):
+        return self._by_key.get(_person_key(box, kps))
+
+    def clear_behavior(self, behavior_id):
+        for track in self.tracks:
+            track.since.pop(behavior_id, None)
+            track.touch.pop(behavior_id, None)
+
+    def update(self, persons, now):
+        detections = []
+        for box, kps in persons or []:
+            anchor, scale, use_shoulder = _person_anchor(box, kps)
+            detections.append((box, kps, anchor, scale, use_shoulder))
+
+        # 上一帧还在的人直接按位置接上，不看两次推理隔了多久。
+        # 中间没检出时按帧数留宽限，推理大约 1 次/秒时一帧漏检也不会清掉计时。
+        pairs = []
+        for det_index, det in enumerate(detections):
+            anchor = det[2]
+            for track_index, track in enumerate(self.tracks):
+                dist = math.hypot(anchor[0] - track.anchor[0], anchor[1] - track.anchor[1])
+                gate = _match_gate(track.scale, track.use_shoulder, det[3], det[4])
+                if dist < gate:
+                    pairs.append((dist, det_index, track_index))
+        pairs.sort()
+        used_dets = set()
+        used_tracks = set()
+        assigned = {}
+        for _dist, det_index, track_index in pairs:
+            if det_index in used_dets or track_index in used_tracks:
+                continue
+            used_dets.add(det_index)
+            used_tracks.add(track_index)
+            assigned[det_index] = self.tracks[track_index]
+
+        current = []
+        for det_index, det in enumerate(detections):
+            _box, _kps, anchor, scale, use_shoulder = det
+            track = assigned.get(det_index)
+            if track is None:
+                track = _Track(self._next_id, anchor, scale, use_shoulder, now)
+                self._next_id += 1
+            else:
+                track.anchor = anchor
+                track.scale = scale
+                track.use_shoulder = use_shoulder
+                track.seen = now
+                track.misses = 0
+            current.append(track)
+
+        matched_ids = {track.id for track in current}
+        unmatched = []
+        for track in self.tracks:
+            if track.id in matched_ids:
+                continue
+            track.misses += 1
+            if track.misses <= TRACK_GRACE_MISSES:
+                unmatched.append(track)
+        self.tracks = unmatched + current
+        self._by_key = {
+            _person_key(box, kps): track
+            for (box, kps, _anchor, _scale, _shoulder), track in zip(detections, current)
+        }
+        return current
+
 
 class PoseBehaviorAlgorithm(BaseAlgorithm):
     """一次姿态推理，多条行为规则计时告警。"""
+
+    def __init__(self):
+        self._person_tracker = PersonTracker()
 
     def _extract_persons(self, result, logger):
         """从 DetectionResult 提取 (box, keypoints[17][3]) 列表。"""
@@ -95,60 +268,49 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
             persons.append((box, None))
         return persons
 
-    def _eval_smart_glasses(self, persons, spec, state, now):
-        """
-        手腕靠近耳朵计为一次接触；离开后再靠近累加次数。
-        在 seconds 窗口内达到 min_touches 则触发。
-        """
-        near = False
-        hit_box = None
-        hit_kps = None
-        for box, kps in persons:
-            if kps is None:
+    def _rising_hits(
+        self, people, bid, now, active_fn, min_touches, window_seconds,
+        hold_contact=False, logger=None,
+    ):
+        """按轨迹累计从无到有的次数。每个人各自计数，达到次数的都返回。"""
+        hits = []
+        for box, kps in people or []:
+            track = self._person_tracker.track_for(box, kps)
+            if track is None:
                 continue
-            if is_wrist_near_ear(kps, spec.get('ear_dist_ratio', 0.28)):
-                near = True
-                hit_box = box
-                hit_kps = kps
-                break
-        triggered = accumulate_rising_count(
-            state,
-            near,
-            now,
+            state = track.touch.setdefault(bid, {})
+            try:
+                active = bool(active_fn(box, kps))
+            except Exception as e:
+                if logger is not None:
+                    logger.debug(f"touch eval error: {e}")
+                active = False
+            if accumulate_rising_count(
+                state, active, now, min_touches, window_seconds, hold_contact=hold_contact,
+            ):
+                hits.append((box, kps, track))
+        return hits
+
+    def _glasses_hits(self, people, spec, bid, now, logger=None):
+        ratio = spec.get('ear_dist_ratio', 0.28)
+        return self._rising_hits(
+            people, bid, now,
+            lambda _box, kps: kps is not None and is_wrist_near_ear(kps, ratio),
             spec.get('min_touches', 3),
             spec.get('seconds', 30),
+            logger=logger,
         )
-        if triggered:
-            return True, hit_box, hit_kps
-        return False, None, None
 
-    def _eval_smart_watch(self, persons, watch_boxes, spec, state, now):
-        """
-        另一只手进入手表附近计为一次点击；离开后再进入累加。
-        默认 1 次即触发。没有手表框时不计点击。
-        """
-        clicking = False
-        hit_box = None
-        hit_kps = None
-        for box, kps in persons:
-            if kps is None:
-                continue
-            if is_finger_click_watch(kps, watch_boxes, spec.get('watch_dist_ratio', 0.50)):
-                clicking = True
-                hit_box = box
-                hit_kps = kps
-                break
-        triggered = accumulate_rising_count(
-            state,
-            clicking,
-            now,
+    def _watch_hits(self, people, watch_boxes, spec, bid, now, logger=None):
+        ratio = spec.get('watch_dist_ratio', 0.50)
+        return self._rising_hits(
+            people, bid, now,
+            lambda _box, kps: is_finger_click_watch(kps, watch_boxes, ratio),
             spec.get('min_touches', 1),
             spec.get('seconds', 30),
             hold_contact=True,
+            logger=logger,
         )
-        if triggered:
-            return True, hit_box, hit_kps
-        return False, None, None
 
     def _eval_invigilator_absent(self, persons, spec, state, now, view):
         """站立人数持续少于 min_standing 达到 seconds（默认 120s）则告警。"""
@@ -189,16 +351,18 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         """
         姿态场景判定，供姿态任务和混合任务共用。
 
-        按区域过滤后：人数场景交给计数规则；其余姿态取第一个命中的人计时，
-        达到持续时长后告警一次，再按整场冷却间隔抑制。
-        pose_only 时才处理单独姿态任务里的眼镜、并忽略跌倒和手表。
+        先把本帧每个人接到自己的轨迹上。点状场景按这条轨迹计时，
+        每人达标各报一次，冷却也只挡住这个人。人数场景仍交给区域计数。
+        pose_only 时才处理单独姿态任务里的眼镜，并忽略跌倒和手表。
         """
+        self._person_tracker.update(persons, now)
         for spec in behaviors:
             bid = spec.get('id') or spec.get('type')
             btype = spec.get('type')
             if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
                 state_since[bid] = None
                 extra_state[bid] = {}
+                self._person_tracker.clear_behavior(bid)
                 paused = person_rules.get(bid)
                 if paused is not None:
                     paused._state_since = None
@@ -228,15 +392,18 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
             message = None
 
             if pose_only and btype == 'smart_glasses':
-                ok, box, kps = self._eval_smart_glasses(
-                    persons_for_spec, spec, extra_state[bid], now
+                hits = self._glasses_hits(persons_for_spec, spec, bid, now, logger)
+                message = (
+                    f"行为[{spec.get('name') or btype}] "
+                    f"镜脚触碰达 {spec.get('min_touches', 3)} 次"
                 )
-                if ok:
-                    hit_person = (box, kps)
-                    message = (
-                        f"行为[{spec.get('name') or btype}] "
-                        f"镜脚触碰达 {spec.get('min_touches', 3)} 次"
+                for box, kps, track in hits:
+                    self.emit_pose_alert(
+                        spec, btype, bid, (box, kps), message, persons_for_spec, processed,
+                        now, alert_threshold, task_name, algorithm_id, track.last_alert, track.since,
+                        on_alert, logger, roi_points=roi_points,
                     )
+                continue
             elif btype == 'invigilator_absent':
                 ok, box, standing_n = self._eval_invigilator_absent(
                     persons_for_spec, spec, extra_state[bid], now, view
@@ -276,25 +443,45 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 continue
             elif btype in POINTWISE_TYPES:
                 seconds = float(spec.get('seconds', 3))
+                in_scene = set()
+                ready = []
                 for box, kps in persons_for_spec:
+                    track = self._person_tracker.track_for(box, kps)
+                    if track is None:
+                        continue
+                    in_scene.add(track.id)
                     if kps is None:
+                        track.since.pop(bid, None)
                         continue
                     try:
-                        if _eval_behavior(btype, kps, box, spec, view):
-                            hit_person = (box, kps)
-                            break
+                        matched = _eval_behavior(btype, kps, box, spec, view)
                     except Exception as e:
                         logger.debug(f"behavior {btype} eval error: {e}")
-                if hit_person is None:
-                    state_since[bid] = None
-                    continue
-                if state_since[bid] is None:
-                    state_since[bid] = now
-                    continue
-                elapsed = (now - state_since[bid]).total_seconds()
-                if elapsed < seconds:
-                    continue
-                message = f"行为[{spec.get('name') or btype}] 持续 {elapsed:.1f}s"
+                        matched = False
+                    if not matched:
+                        track.since.pop(bid, None)
+                        continue
+                    started = track.since.get(bid)
+                    if started is None:
+                        track.since[bid] = now
+                        continue
+                    elapsed = (now - started).total_seconds()
+                    if elapsed < seconds:
+                        continue
+                    ready.append((track, box, kps, elapsed))
+                for track in self._person_tracker.tracks:
+                    if track.seen == now and track.id not in in_scene:
+                        track.since.pop(bid, None)
+                for track, box, kps, elapsed in ready:
+                    self.emit_pose_alert(
+                        spec, btype, bid, (box, kps),
+                        f"行为[{spec.get('name') or btype}] 持续 {elapsed:.1f}s",
+                        persons_for_spec, processed,
+                        now, alert_threshold, task_name, algorithm_id,
+                        track.last_alert, track.since,
+                        on_alert, logger, roi_points=roi_points,
+                    )
+                continue
             else:
                 continue
 
@@ -309,7 +496,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         now, alert_threshold, task_name, algorithm_id, last_alert, state_since,
         on_alert, logger, extra_boxes=None, roi_points=None,
     ):
-        """命中后按整场冷却画框并告警。点状行为告警后重新计时，有状态场景不重置。"""
+        """命中后按传入的冷却画框并告警。点状行为告警后重新计时，有状态场景不重置。"""
         if hit_person is None:
             return
         la = last_alert.get(bid)

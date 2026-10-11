@@ -343,7 +343,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
     def _eval_fusions(
         self, fusions, boxes, persons, now, processed, task_confidence,
         task_sched_start, task_sched_end, alert_threshold, task_name,
-        algorithm_id, last_alert, extra_state, pose_helper, on_alert, logger,
+        algorithm_id, _last_alert, extra_state, pose_helper, on_alert, logger,
     ):
         for spec in fusions:
             btype = spec.get('type')
@@ -353,6 +353,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
             bid = spec.get('id') or btype
             if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
                 extra_state[bid] = {}
+                pose_helper._person_tracker.clear_behavior(bid)
                 continue
             scene_conf = effective_confidence(spec, task_confidence)
             target_boxes = _boxes_of_classes(boxes, _class_ids(spec), scene_conf)
@@ -365,30 +366,25 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                     (box, kps) for box, kps in persons_for_spec
                     if person_has_glasses(box, kps, target_boxes)
                 ]
-                ok, box, kps = pose_helper._eval_smart_glasses(
-                    wearing, spec, extra_state[bid], now
-                )
-                if not ok:
-                    continue
+                hits = pose_helper._glasses_hits(wearing, spec, bid, now, logger)
                 message = (
                     f"行为[{spec.get('name') or 'smart_glasses'}] "
                     f"检出眼镜且镜脚触碰达 {spec.get('min_touches', 3)} 次"
                 )
                 matched = wearing
             else:
-                ok, box, kps = pose_helper._eval_smart_watch(
-                    persons_for_spec, target_boxes, spec, extra_state[bid], now
+                hits = pose_helper._watch_hits(
+                    persons_for_spec, target_boxes, spec, bid, now, logger
                 )
-                if not ok:
-                    continue
                 clicks = spec.get('min_touches', 1)
                 message = (
                     f"行为[{spec.get('name') or 'smart_watch'}] "
                     f"检出手表且手指点击达 {clicks} 次"
                 )
                 matched = persons_for_spec
-            pose_helper.emit_pose_alert(
-                spec, btype, bid, (box, kps), message, matched, processed,
-                now, alert_threshold, task_name, algorithm_id, last_alert, {},
-                on_alert, logger, extra_boxes=target_boxes,
-            )
+            for box, kps, track in hits:
+                pose_helper.emit_pose_alert(
+                    spec, btype, bid, (box, kps), message, matched, processed,
+                    now, alert_threshold, task_name, algorithm_id, track.last_alert, track.since,
+                    on_alert, logger, extra_boxes=target_boxes,
+                )
