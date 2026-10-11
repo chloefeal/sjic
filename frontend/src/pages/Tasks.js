@@ -479,10 +479,15 @@ function Tasks() {
               <Typography variant="subtitle2" gutterBottom>姿态行为：</Typography>
               {behaviors.map((b, idx) => (
                 <Typography key={b.id || idx}>
-                  {b.name || b.type} · {b.seconds ?? '-'} 秒
+                  {b.name || b.type}
+                  {b.type === 'absence' ? ` · 缺席 ${b.absent_seconds ?? 600} 秒` : ''}
+                  {b.type === 'linger' ? ` · 滞留 ${b.linger_seconds ?? 300} 秒` : ''}
+                  {b.type === 'crowd_count' ? ` · ≥${b.min_count ?? 5}人 / ${b.seconds ?? 10}秒` : ''}
+                  {b.type !== 'absence' && b.type !== 'linger' && b.type !== 'crowd_count' ? ` · ${b.seconds ?? '-'} 秒` : ''}
                   {b.type === 'smart_glasses' ? ` · ≥${b.min_touches ?? 3}次触碰 · 耳距 ${b.ear_dist_ratio ?? 0.28}` : ''}
                   {b.confidence != null && b.confidence !== '' ? ` · 置信度 ${b.confidence}` : ''}
                   {b.type === 'invigilator_absent' ? ` · 站立≥${b.min_standing ?? 2}` : ''}
+                  {b.detection_region?.points?.length ? ` · ROI ${b.detection_region.points.length} 点` : ''}
                   {b.schedule_start && b.schedule_end ? ` · 时段 ${b.schedule_start}–${b.schedule_end}` : ''}
                   {b.enabled === false ? '（已关闭）' : ''}
                 </Typography>
@@ -672,6 +677,7 @@ function Tasks() {
               algorithmParameters={formData.algorithm_parameters}
               catalogPresets={catalog?.pose_scene_presets}
               taskConfidence={formData.confidence}
+              cameraId={formData.cameraId}
               excludePresetIds={['smart_glasses', 'smart_watch', 'chin_rest']}
               onChange={patchParams}
             />
@@ -731,6 +737,7 @@ function Tasks() {
           algorithmParameters={formData.algorithm_parameters}
           catalogPresets={catalog?.pose_scene_presets}
           taskConfidence={formData.confidence}
+          cameraId={formData.cameraId}
           onChange={(nextParams) => setFormData((prev) => ({
             ...prev,
             algorithm_parameters: nextParams,
@@ -1230,9 +1237,9 @@ function Tasks() {
                 }
                 const engine = selectedAlg.engine || selectedAlg.type;
                 const tip = engine === 'object_detection'
-                  ? '可在下方添加多条检测规则/场景（缺席、手机、帽子、人员倒地等），同一任务只推理一次。倒地用目标检测，不用姿态。'
+                  ? '可在下方添加多条检测规则/场景（手机、帽子、火情、人员倒地等），同一任务只推理一次。倒地用目标检测。人员缺席、滞留、聚集请用姿态检测。'
                   : engine === 'pose_behavior'
-                    ? '可在下方添加多个姿态行为/场景（张望、低头、捂嘴等），同一任务只推理一次。智能眼镜、智能手表请用混合任务。'
+                    ? '可在下方添加多个姿态行为/场景（张望、低头、捂嘴、人员缺席、滞留、聚集等），同一任务只推理一次。缺席、滞留、聚集只看有没有人。智能眼镜、智能手表请用混合任务。'
                     : null;
                 if (!tip) return null;
                 return <Alert severity="info" sx={{ mt: 1 }}>{tip}</Alert>;

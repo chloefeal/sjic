@@ -4,11 +4,14 @@ import {
   Switch, TextField, Typography, IconButton, Chip
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
+import RegionSelectionTool from './RegionSelectionTool';
 
 /**
  * 姿态行为：从场景预设添加多条行为，同一 pose task 一次推理。
+ * 缺席 / 滞留 / 聚集只统计姿态检出的人数，不判断具体姿态。
  */
 const DROPPED_POSE_TYPES = new Set(['chin_rest']);
+const PERSON_COUNT_TYPES = new Set(['absence', 'linger', 'crowd_count']);
 
 function isDroppedPoseBehavior(item) {
   return DROPPED_POSE_TYPES.has(item?.type)
@@ -16,7 +19,7 @@ function isDroppedPoseBehavior(item) {
     || DROPPED_POSE_TYPES.has(item?.alert_type);
 }
 
-function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, excludePresetIds }) {
+function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, excludePresetIds, cameraId }) {
   const [addPreset, setAddPreset] = useState('');
 
   const behaviors = Array.isArray(algorithmParameters?.behaviors)
@@ -70,6 +73,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
       scene_preset_id: preset.id,
       ...(preset.defaults || {}),
       enabled: true,
+      detection_region: null,
       schedule_start: '',
       schedule_end: '',
     };
@@ -91,7 +95,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>姿态行为 / 场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          同一任务只跑一次姿态推理；可叠加多个行为。场景时段、置信度优先于任务。人员倒地请用目标检测场景。手指点击手表请在混合任务的融合场景里添加「智能手表作弊检测」。
+          同一任务只跑一次姿态推理；可叠加多个行为。人员缺席、滞留、聚集只统计姿态检出的人数，不判断具体姿态。场景时段、置信度优先于任务。人员倒地请用目标检测场景。手指点击手表请在混合任务的融合场景里添加「智能手表作弊检测」。
           张望/不看屏幕等几何判断取决于视频源的安装位置（前上方/后上方/侧上方/正上方），请在「视频源」页配置。
         </Typography>
       </Grid>
@@ -133,17 +137,58 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
               </IconButton>
             </Box>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  type="number"
-                  label={durationLabel(b)}
-                  value={b.seconds ?? (b.type === 'invigilator_absent' ? 120 : 3)}
-                  onChange={(e) => patchBehavior(index, { seconds: parseFloat(e.target.value) })}
-                  inputProps={{ min: 0.5, step: b.type === 'invigilator_absent' ? 10 : 0.5 }}
-                />
-              </Grid>
+              {b.type !== 'absence' && b.type !== 'linger' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label={durationLabel(b)}
+                    value={b.seconds ?? (b.type === 'invigilator_absent' ? 120 : b.type === 'crowd_count' ? 10 : 3)}
+                    onChange={(e) => patchBehavior(index, { seconds: parseFloat(e.target.value) })}
+                    inputProps={{ min: 0.5, step: b.type === 'invigilator_absent' || b.type === 'crowd_count' ? 1 : 0.5 }}
+                  />
+                </Grid>
+              )}
+              {b.type === 'absence' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="缺席时长(秒)"
+                    value={b.absent_seconds ?? 600}
+                    onChange={(e) => patchBehavior(index, { absent_seconds: parseFloat(e.target.value) })}
+                    inputProps={{ min: 1, step: 1 }}
+                  />
+                </Grid>
+              )}
+              {b.type === 'linger' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="滞留时长(秒)"
+                    value={b.linger_seconds ?? 300}
+                    onChange={(e) => patchBehavior(index, { linger_seconds: parseFloat(e.target.value) })}
+                    inputProps={{ min: 1, step: 1 }}
+                  />
+                </Grid>
+              )}
+              {b.type === 'crowd_count' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="人数阈值"
+                    value={b.min_count ?? 5}
+                    onChange={(e) => patchBehavior(index, { min_count: parseInt(e.target.value, 10) })}
+                    inputProps={{ min: 1, step: 1 }}
+                  />
+                </Grid>
+              )}
               {(b.type === 'look_aside' || b.type === 'gaze_away') && (
                 <Grid item xs={12} md={3}>
                   <TextField
@@ -260,6 +305,29 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                   inputProps={{ step: 60 }}
                 />
               </Grid>
+              {PERSON_COUNT_TYPES.has(b.type) && (
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <RegionSelectionTool
+                      cameraId={cameraId}
+                      buttonLabel={b.detection_region?.points?.length ? '重新选择区域' : '选择检测区域'}
+                      existingRegion={{
+                        detection_region: b.detection_region,
+                        calibration: b.calibration,
+                      }}
+                      onSelect={(regionData) => patchBehavior(index, {
+                        detection_region: regionData.detection_region,
+                        calibration: regionData.calibration,
+                      })}
+                    />
+                    <Typography variant="body2" color={b.detection_region?.points?.length ? 'success.main' : 'text.secondary'}>
+                      {b.detection_region?.points?.length
+                        ? `已标注 ${b.detection_region.points.length} 个顶点`
+                        : '未标注区域（整帧有效）'}
+                    </Typography>
+                  </Box>
+                </Grid>
+              )}
             </Grid>
           </Paper>
         </Grid>

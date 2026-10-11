@@ -15,7 +15,7 @@ ENGINES = {
     'pose_behavior': {
         'label': '姿态行为检测',
         'needs_model': True,
-        'description': '人体姿态：一次推理，任务内可挂多个行为（张望/低头/捂嘴等）',
+        'description': '人体姿态：一次推理，任务内可挂多个行为（张望/低头/捂嘴等）；也可只按检出人数做缺席、滞留、聚集',
     },
     'camera_health': {
         'label': '画面健康检测',
@@ -67,31 +67,8 @@ CAMERA_MOUNT_POSITIONS = [
 ]
 
 # 目标检测任务内可添加的场景/规则预设。类别在创建任务时按模型 labelmap 选择。
+# 人员缺席/滞留/聚集不在这里：目标检测已没有人这个类别，改由姿态按检出人数统计。
 OD_SCENE_PRESETS = [
-    {
-        'id': 'person_absence',
-        'type': 'absence',
-        'name': '人员缺席',
-        'description': '区域内持续无人超过设定时长',
-        'defaults': {
-            'absent_seconds': 600,
-            'alert_type': 'person_absence',
-            'class_ids': [],
-            'enabled': True,
-        },
-    },
-    {
-        'id': 'person_linger',
-        'type': 'linger',
-        'name': '人员滞留',
-        'description': '区域内持续有人超过设定时长（如考试区违规滞留）',
-        'defaults': {
-            'linger_seconds': 300,
-            'alert_type': 'exam_area_linger',
-            'class_ids': [],
-            'enabled': True,
-        },
-    },
     {
         'id': 'phone_detect',
         'type': 'presence',
@@ -121,19 +98,6 @@ OD_SCENE_PRESETS = [
         'description': '出现火情或烟雾（需模型含 fire/smoke 类）',
         'defaults': {
             'alert_type': 'fire_smoke',
-            'class_ids': [],
-            'enabled': True,
-        },
-    },
-    {
-        'id': 'aisle_crowd',
-        'type': 'crowd_count',
-        'name': '通道人员聚集',
-        'description': '区域内人数持续超限',
-        'defaults': {
-            'min_count': 5,
-            'seconds': 10,
-            'alert_type': 'aisle_crowd',
             'class_ids': [],
             'enabled': True,
         },
@@ -235,6 +199,40 @@ POSE_SCENE_PRESETS = [
             'enabled': True,
         },
     },
+    {
+        'id': 'person_absence',
+        'type': 'absence',
+        'name': '人员缺席',
+        'description': '姿态能检出人。区域内持续无人超过设定时长，不判断具体姿态',
+        'defaults': {
+            'absent_seconds': 600,
+            'alert_type': 'person_absence',
+            'enabled': True,
+        },
+    },
+    {
+        'id': 'person_linger',
+        'type': 'linger',
+        'name': '人员滞留',
+        'description': '姿态能检出人。区域内持续有人超过设定时长，不判断具体姿态',
+        'defaults': {
+            'linger_seconds': 300,
+            'alert_type': 'exam_area_linger',
+            'enabled': True,
+        },
+    },
+    {
+        'id': 'aisle_crowd',
+        'type': 'crowd_count',
+        'name': '通道人员聚集',
+        'description': '姿态能检出人。区域内人数持续超限，不判断具体姿态',
+        'defaults': {
+            'min_count': 5,
+            'seconds': 10,
+            'alert_type': 'aisle_crowd',
+            'enabled': True,
+        },
+    },
 ]
 
 
@@ -295,7 +293,7 @@ PRODUCT_ALGORITHMS = [
         'type': 'object_detection',
         'engine': 'object_detection',
         'name': '目标检测',
-        'description': '一次推理挂多条规则：缺席、手机、帽子、火情、聚集、滞留、人员倒地等',
+        'description': '一次推理挂多条规则：手机、帽子、火情、人员倒地等',
         'category': 'exam',
         'parameter_schema': _od_schema(),
     },
@@ -303,7 +301,7 @@ PRODUCT_ALGORITHMS = [
         'type': 'pose_behavior',
         'engine': 'pose_behavior',
         'name': '姿态行为检测',
-        'description': '一次推理挂多个行为：不看屏幕、张望、捂嘴报题、巡场等',
+        'description': '一次推理挂多个行为：不看屏幕、张望、捂嘴报题、巡场、人员缺席/滞留/聚集等',
         'category': 'exam',
         'parameter_schema': _pose_schema(),
     },
@@ -460,6 +458,8 @@ def _merge_scene_presets(existing, catalog):
 # 合并时从姿态 schema 去掉：跌倒改由目标检测；眼镜/手表改由混合任务的融合场景；手托下巴已下线
 _POSE_DROPPED_PRESET_IDS = frozenset({'person_fall', 'smart_glasses', 'smart_watch', 'chin_rest'})
 _POSE_DROPPED_TYPES = frozenset({'fall', 'smart_glasses', 'smart_watch', 'chin_rest'})
+# 人员缺席/滞留/聚集改由姿态按检出人数统计，旧的目标检测 schema 里不再保留
+_OD_MOVED_TO_POSE_IDS = frozenset({'person_absence', 'person_linger', 'aisle_crowd'})
 
 # 已下线场景的历史告警仍显示中文名
 _LEGACY_ALERT_LABELS = {
@@ -479,6 +479,11 @@ def merge_catalog_schema(existing_schema, engine: str, *, origin=None) -> dict:
             merged_presets = [
                 p for p in merged_presets
                 if p.get('id') not in _POSE_DROPPED_PRESET_IDS and p.get('type') not in _POSE_DROPPED_TYPES
+            ]
+        if engine == 'object_detection':
+            merged_presets = [
+                p for p in merged_presets
+                if p.get('id') not in _OD_MOVED_TO_POSE_IDS
             ]
         schema['scene_presets'] = merged_presets
     if not schema.get('ui') and base.get('ui'):

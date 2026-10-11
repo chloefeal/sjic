@@ -167,6 +167,7 @@ function OperationLogs() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
+                <TableCell sx={{ width: 64 }}>序号</TableCell>
                 <TableCell>时间</TableCell>
                 <TableCell>用户</TableCell>
                 <TableCell>操作</TableCell>
@@ -177,8 +178,9 @@ function OperationLogs() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {items.map((row) => (
+              {items.map((row, index) => (
                 <TableRow key={row.id}>
+                  <TableCell>{page * rowsPerPage + index + 1}</TableCell>
                   <TableCell>{formatTime(row.created_at)}</TableCell>
                   <TableCell>
                     <Box>{row.username || '-'}</Box>
@@ -201,7 +203,7 @@ function OperationLogs() {
               ))}
               {!items.length && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">暂无操作日志</TableCell>
+                  <TableCell colSpan={8} align="center">暂无操作日志</TableCell>
                 </TableRow>
               )}
             </TableBody>

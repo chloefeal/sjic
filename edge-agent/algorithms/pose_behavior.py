@@ -1,13 +1,16 @@
 """
 姿态行为引擎：张望 / 低头 / 不看屏幕 / 手指屏幕 /
-捂嘴报题 / AI 智能眼镜 / 手指点击手表 / 考试员不巡场。
+捂嘴报题 / AI 智能眼镜 / 手指点击手表 / 考试员不巡场 /
+人员缺席 / 人员滞留 / 通道聚集。
 智能眼镜和智能手表是融合场景，混合任务里才和目标检测一起判定。
+缺席、滞留、聚集只统计姿态检出的人数，不判断具体姿态。
 
 依赖姿态模型（YOLO-Pose 等）经 runtime.infer 返回 keypoints。
 几何判断按摄像头 mount_position（前/后/侧/正上方）切换，避免把俯视看屏判成违规。
-若当前 runtime 仅返回 boxes，则跳过关键点行为，并在日志中提示。
+若当前 runtime 仅返回 boxes，则跳过关键点行为；人数统计仍可用这些框。
 """
 from .base import BaseAlgorithm, effective_confidence
+from .object_detection import ObjectDetectionAlgorithm
 from .pose_geometry import (
     accumulate_rising_count,
     is_cover_mouth,
@@ -22,6 +25,7 @@ from .pose_geometry import (
 )
 import time
 from datetime import datetime
+from .rules import PERSON_COUNT_TYPES, build_rules, person_count_message, person_count_specs
 from utils.calc import get_letterbox_params, preprocess
 from utils.rtsp import FramePump, is_valid_frame
 from utils.schedule import is_item_active_now
@@ -227,6 +231,21 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 state_since = {b.get('id') or b.get('type'): None for b in behaviors}
                 last_alert = {b.get('id') or b.get('type'): None for b in behaviors}
                 extra_state = {b.get('id') or b.get('type'): {} for b in behaviors}
+                od_helper = ObjectDetectionAlgorithm()
+
+                def transform_roi(region):
+                    return od_helper._transform_roi(region, new_h, new_w, top, left, logger)
+
+                count_rules = {
+                    rule.id: rule
+                    for rule in build_rules(
+                        person_count_specs(behaviors),
+                        transform_roi,
+                        alert_threshold,
+                        None,
+                        logger,
+                    )
+                }
                 next_infer_t = 0.0
                 frame_idx = 0
                 last_log = time.time()
@@ -277,6 +296,9 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                         if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
                             state_since[bid] = None
                             extra_state[bid] = {}
+                            paused = count_rules.get(bid)
+                            if paused is not None:
+                                paused._state_since = None
                             continue
 
                         alert_type = spec.get('alert_type') or btype
@@ -320,6 +342,34 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                                     f"行为[{spec.get('name') or btype}] "
                                     f"站立仅 {standing_n} 人（需≥{spec.get('min_standing', 2)}）"
                                 )
+                        elif btype in PERSON_COUNT_TYPES:
+                            rule = count_rules.get(bid)
+                            if rule is None:
+                                continue
+                            person_boxes = [
+                                box for box, _kps in persons_for_spec if box is not None
+                            ]
+                            hit = rule.evaluate(person_boxes, now, logger)
+                            if not hit:
+                                continue
+                            message = person_count_message(spec, btype, hit)
+                            alert_frame = self.draw_alert_overlay(
+                                processed,
+                                boxes=hit['boxes'] or None,
+                                roi_points=rule.roi_points,
+                                caption=message,
+                            )
+                            logger.info(f"Triggering {alert_type} for {task_name}")
+                            if on_alert:
+                                on_alert(
+                                    alert_type=alert_type,
+                                    confidence=hit['confidence'],
+                                    image_frame=alert_frame,
+                                    message=message,
+                                    raw_frame=processed,
+                                )
+                            last_alert[bid] = now
+                            continue
                         elif btype in POINTWISE_TYPES:
                             seconds = float(spec.get('seconds', 3))
                             for box, kps in persons_for_spec:

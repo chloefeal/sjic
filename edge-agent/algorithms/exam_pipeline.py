@@ -18,7 +18,12 @@ from .pose_behavior import (
     _eval_behavior,
 )
 from .pose_geometry import normalize_mount_position, person_has_glasses
-from .rules import build_rules
+from .rules import (
+    PERSON_COUNT_TYPES,
+    build_rules,
+    person_count_message,
+    person_count_specs,
+)
 from runtime import create_runtime
 from utils.calc import get_letterbox_params, preprocess
 from utils.rtsp import FramePump, is_valid_frame
@@ -152,6 +157,16 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                 od_helper.is_point_in_roi,
                 logger,
             ) if need_od else []
+            person_rules = {
+                rule.id: rule
+                for rule in build_rules(
+                    person_count_specs(behaviors),
+                    transform_roi,
+                    alert_threshold,
+                    None,
+                    logger,
+                )
+            } if need_pose else {}
 
             infer_classes = []
             for rule in rules:
@@ -257,7 +272,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                         behaviors, persons, now, processed, view, task_confidence,
                         task_sched_start, task_sched_end, alert_threshold, task_name,
                         pose_algorithm_id, state_since, last_alert, extra_state,
-                        pose_helper, on_alert, logger,
+                        pose_helper, person_rules, on_alert, logger,
                     )
                 if od_ok and pose_ok and fusions:
                     self._eval_fusions(
@@ -323,7 +338,8 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
     def _eval_behaviors(
         self, behaviors, persons, now, processed, view, task_confidence,
         task_sched_start, task_sched_end, alert_threshold, task_name,
-        algorithm_id, state_since, last_alert, extra_state, pose_helper, on_alert, logger,
+        algorithm_id, state_since, last_alert, extra_state, pose_helper,
+        person_rules, on_alert, logger,
     ):
         for spec in behaviors:
             bid = spec.get('id') or spec.get('type')
@@ -331,6 +347,9 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
             if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
                 state_since[bid] = None
                 extra_state[bid] = {}
+                paused = person_rules.get(bid)
+                if paused is not None:
+                    paused._state_since = None
                 continue
 
             scene_conf = effective_confidence(spec, task_confidence)
@@ -340,6 +359,33 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
             ]
             hit_person = None
             message = None
+
+            if btype in PERSON_COUNT_TYPES:
+                rule = person_rules.get(bid)
+                if rule is None:
+                    continue
+                person_boxes = [box for box, _kps in persons_for_spec if box is not None]
+                hit = rule.evaluate(person_boxes, now, logger)
+                if not hit or not on_alert:
+                    continue
+                message = person_count_message(spec, btype, hit)
+                alert_frame = self.draw_alert_overlay(
+                    processed,
+                    boxes=hit['boxes'] or None,
+                    roi_points=rule.roi_points,
+                    caption=message,
+                )
+                logger.info(f"Triggering {spec.get('alert_type') or btype} for {task_name}")
+                on_alert(
+                    alert_type=spec.get('alert_type') or btype,
+                    confidence=hit['confidence'],
+                    image_frame=alert_frame,
+                    message=message,
+                    raw_frame=processed,
+                    algorithm_id=algorithm_id,
+                )
+                last_alert[bid] = now
+                continue
 
             if btype == 'invigilator_absent':
                 ok, box, standing_n = pose_helper._eval_invigilator_absent(

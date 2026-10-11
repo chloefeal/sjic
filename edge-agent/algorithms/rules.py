@@ -158,6 +158,30 @@ RULE_CLASS_MAP = {
     'crowd_count': CrowdCountRule,
 }
 
+# 只统计姿态检出的人，不看关键点姿态。class_ids 清空后，每条姿态框都算一个人。
+PERSON_COUNT_TYPES = frozenset({'absence', 'linger', 'crowd_count'})
+
+
+def person_count_specs(behaviors):
+    specs = []
+    for spec in behaviors or []:
+        if not isinstance(spec, dict) or spec.get('type') not in PERSON_COUNT_TYPES:
+            continue
+        copied = dict(spec)
+        copied['class_ids'] = []
+        specs.append(copied)
+    return specs
+
+
+def person_count_message(spec, btype, hit):
+    name = (spec or {}).get('name') or btype
+    count = len((hit or {}).get('boxes') or [])
+    if btype == 'absence':
+        return f"行为[{name}] 持续无人"
+    if btype == 'linger':
+        return f"行为[{name}] 持续有人 {count} 人"
+    return f"行为[{name}] 人数 {count} ≥ {(spec or {}).get('min_count', 5)}"
+
 
 def build_rules(raw_rules, transform_roi, alert_cooldown_sec, is_point_in_roi, logger):
     rules = []

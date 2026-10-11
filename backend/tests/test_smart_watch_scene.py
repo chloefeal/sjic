@@ -134,6 +134,40 @@ class DetectionSceneClassTest(unittest.TestCase):
             {'name': '人员缺席', 'class_ids': [0], 'enabled': True},
         ]))
 
+    def test_person_scenes_moved_to_pose(self):
+        od_ids = [item['id'] for item in catalog.OD_SCENE_PRESETS]
+        pose_ids = [item['id'] for item in catalog.POSE_SCENE_PRESETS]
+        for preset_id in ('person_absence', 'person_linger', 'aisle_crowd'):
+            self.assertNotIn(preset_id, od_ids)
+            self.assertIn(preset_id, pose_ids)
+        labels = catalog.alert_type_labels()
+        self.assertEqual(labels['person_absence'], '人员缺席')
+        self.assertEqual(labels['exam_area_linger'], '人员滞留')
+        self.assertEqual(labels['aisle_crowd'], '通道人员聚集')
+        merged_od = catalog.merge_catalog_schema(
+            {'scene_presets': [
+                {'id': 'person_absence', 'type': 'absence', 'name': '人员缺席'},
+                {'id': 'phone_detect', 'type': 'presence', 'name': '识别手机'},
+            ]},
+            'object_detection',
+        )
+        merged_od_ids = [item['id'] for item in merged_od['scene_presets']]
+        self.assertNotIn('person_absence', merged_od_ids)
+        self.assertNotIn('person_linger', merged_od_ids)
+        self.assertNotIn('aisle_crowd', merged_od_ids)
+        self.assertIn('phone_detect', merged_od_ids)
+        merged_pose = catalog.merge_catalog_schema(
+            {'scene_presets': [
+                {'id': 'look_aside', 'type': 'look_aside', 'name': '左右张望'},
+            ]},
+            'pose_behavior',
+        )
+        merged_pose_ids = [item['id'] for item in merged_pose['scene_presets']]
+        self.assertIn('person_absence', merged_pose_ids)
+        self.assertIn('person_linger', merged_pose_ids)
+        self.assertIn('aisle_crowd', merged_pose_ids)
+        self.assertIn('look_aside', merged_pose_ids)
+
     def test_scene_class_must_stay_inside_algorithm_labels(self):
         params = {'rules': [{'name': '识别手机', 'enabled': True, 'class_ids': [1]}]}
         self.assertEqual(

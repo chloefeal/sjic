@@ -91,7 +91,7 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>检测场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          从预设添加场景（如人员缺席、识别手机、人员倒地）。每个场景都要选择检测类别。同一任务只推理一次。场景时段、置信度优先于任务。
+          从预设添加场景（如识别手机、火情、人员倒地）。每个场景都要选择检测类别。同一任务只推理一次。场景时段、置信度优先于任务。人员缺席、滞留、聚集请用姿态检测。
         </Typography>
       </Grid>
 
