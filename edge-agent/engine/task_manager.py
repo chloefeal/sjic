@@ -18,6 +18,8 @@ class TaskManager:
         self.stop_events = {}     # task_id -> threading.Event()
         self.mqtt_client = None   # 将被注入
         self.api_base_url = self.config['platform']['api_base_url']
+        from algorithms.detection_preview import configure_preview
+        configure_preview(self.api_base_url)
         self.persistence_file = os.path.join(self.config['paths']['models_dir'], 'tasks.json')
         os.makedirs(self.config['paths']['models_dir'], exist_ok=True)
         self.active_configs = {}  # task_id -> config dictionary for persistence

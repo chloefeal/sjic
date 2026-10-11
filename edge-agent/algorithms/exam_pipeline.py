@@ -11,6 +11,7 @@ from datetime import datetime
 import cv2
 
 from .base import BaseAlgorithm, effective_confidence
+from .detection_preview import offer_detection_preview
 from .object_detection import ObjectDetectionAlgorithm
 from .pose_behavior import (
     POINTWISE_TYPES,
@@ -263,6 +264,18 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                     last_log = time.time()
                     fps_window_t = last_log
                     fps_window_n = 0
+
+                offer_detection_preview(
+                    config_dict.get('task_id'),
+                    processed,
+                    boxes=boxes if need_od and od_ok else None,
+                    persons=persons if need_pose and pose_ok else None,
+                    object_threshold=od_confidence if need_od else None,
+                    pose_threshold=pose_confidence if need_pose else None,
+                    infer_ms=infer_ms,
+                    object_error=need_od and not od_ok,
+                    pose_error=need_pose and not pose_ok,
+                )
 
                 now = datetime.now()
                 if od_ok:

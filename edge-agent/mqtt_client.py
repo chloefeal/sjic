@@ -63,6 +63,7 @@ class EdgeMqttClient:
             # 订阅与自己相关的指令
             client.subscribe(f"{self.topic_prefix}/task/start")
             client.subscribe(f"{self.topic_prefix}/task/stop")
+            client.subscribe(f"{self.topic_prefix}/task/preview")
             client.subscribe(f"{self.topic_prefix}/agent/restart")
             client.subscribe(f"{self.topic_prefix}/agent/power")
             client.subscribe(f"{self.topic_prefix}/agent/upgrade")
@@ -90,6 +91,13 @@ class EdgeMqttClient:
                 task_id = data.get("task_id")
                 if task_id:
                     self.task_manager.stop_task(task_id)
+            elif msg.topic.endswith("/task/preview"):
+                from algorithms.detection_preview import set_preview
+                set_preview(
+                    data.get("task_id"),
+                    enabled=bool(data.get("enabled")),
+                    labelmap=data.get("labelmap"),
+                )
             elif msg.topic.endswith("/agent/restart"):
                 self._handle_agent_restart(data)
             elif msg.topic.endswith("/agent/power"):

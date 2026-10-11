@@ -384,3 +384,64 @@ def get_task_detail(task_id):
                 calibration['image_data'] = image_data
 
     return jsonify(task_data)
+
+
+@task_bp.route('/api/tasks/<int:task_id>/preview', methods=['POST'])
+@token_required
+def set_task_preview(task_id):
+    """打开或关闭检测预览。页面每几秒续一次，关掉窗口后边缘停止回传。"""
+    from app.models import EdgeNode
+    from app.services.detection_preview import object_labelmap, preview_engines, preview_hub
+    from app.services.mqtt_service import mqtt_service
+
+    task = Task.query.get_or_404(task_id)
+    body = request.get_json(silent=True) or {}
+    enabled = bool(body.get('enabled', True))
+    view = body.get('view')
+    if not isinstance(view, str) or not view.strip():
+        return jsonify({'error': '缺少预览窗口标识'}), 400
+
+    engine = None
+    if not task.is_exam_pipeline() and task.algorithm_id:
+        algo = Algorithm.query.get(task.algorithm_id)
+        engine = algo.resolved_engine() if algo else ''
+    engines = preview_engines(task, engine)
+    if enabled and not engines:
+        return jsonify({'error': '这个任务没有目标检测或姿态检测，不能预览'}), 400
+
+    node = EdgeNode.query.get(task.edge_node_id) if task.edge_node_id else None
+    if enabled and node is None:
+        return jsonify({'error': '任务没有绑定算力节点'}), 400
+
+    state = preview_hub.set_view(task.id, view, enabled, body.get('issued_at'))
+    if state != 'ignored' and node is not None:
+        live = preview_hub.is_live(task.id)
+        try:
+            mqtt_service.publish_task_preview(node.mac_address, {
+                'task_id': task.id,
+                'enabled': live,
+                'labelmap': object_labelmap(task, engine) if live else {},
+            })
+        except Exception as exc:
+            current_app.logger.warning(f'preview publish failed: {exc}')
+    if state in ('on', 'off'):
+        current_app.logger.info(f'Detection preview {state} task={task.id}')
+
+    return jsonify({
+        'enabled': preview_hub.is_live(task.id),
+        'engines': engines,
+        'task_status': task.status,
+        'node_status': node.status if node else None,
+    })
+
+
+@task_bp.route('/api/tasks/<int:task_id>/preview', methods=['GET'])
+@token_required
+def get_task_preview(task_id):
+    """最新一帧检测画面。没有打开预览、或边缘还没回传时 waiting 为 true。"""
+    from app.services.detection_preview import preview_hub
+
+    Task.query.get_or_404(task_id)
+    resp = jsonify(preview_hub.snapshot(task_id))
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp

@@ -10,6 +10,7 @@
 若当前 runtime 仅返回 boxes，则跳过关键点行为；人数统计仍可用这些框。
 """
 from .base import BaseAlgorithm, effective_confidence
+from .detection_preview import offer_detection_preview
 from .object_detection import ObjectDetectionAlgorithm
 from .pose_geometry import (
     accumulate_rising_count,
@@ -296,6 +297,13 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                         fps_window_n = 0
 
                     persons = self._extract_persons(result, logger)
+                    offer_detection_preview(
+                        config_dict.get('task_id'),
+                        processed,
+                        persons=persons,
+                        pose_threshold=confidence,
+                        infer_ms=infer_ms,
+                    )
                     now = datetime.now()
 
                     for spec in behaviors:

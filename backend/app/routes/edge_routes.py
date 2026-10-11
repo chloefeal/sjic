@@ -92,6 +92,34 @@ def get_display_config():
         return jsonify({'show_skeleton': False})
 
 
+@edge_bp.route('/api/edge/tasks/<int:task_id>/preview', methods=['POST'])
+def receive_task_preview(task_id):
+    """边缘回传正在推理的那一帧。没人看预览时直接丢掉。"""
+    import json
+    from app.services.detection_preview import preview_hub
+
+    image = request.files.get('image')
+    if image is None:
+        return jsonify({'error': 'image required'}), 400
+    blob = image.read()
+    if not blob:
+        return jsonify({'error': 'empty image'}), 400
+    if len(blob) > 1_500_000:
+        return jsonify({'error': 'image too large'}), 413
+    raw_stats = request.form.get('stats') or '{}'
+    if len(raw_stats) > 32000:
+        stats = {}
+    else:
+        try:
+            stats = json.loads(raw_stats)
+        except json.JSONDecodeError:
+            stats = {}
+    if not isinstance(stats, dict):
+        stats = {}
+    preview_hub.ingest(task_id, blob, stats)
+    return '', 204
+
+
 @edge_bp.route('/api/edge/alerts', methods=['POST'])
 def receive_alert():
     """

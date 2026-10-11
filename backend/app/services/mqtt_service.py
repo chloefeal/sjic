@@ -239,6 +239,17 @@ class MqttService:
         self.client.publish(topic, json.dumps({"task_id": task_id}), qos=1)
         logger.info(f"Published task stop {task_id} to {mac_address}")
 
+    def publish_task_preview(self, mac_address, payload):
+        """让边缘把当前推理帧（带检测框或骨骼）回传平台。"""
+        topic = f"sjic/edge/{mac_address}/task/preview"
+        body = dict(payload or {})
+        body['timestamp'] = int(datetime.now().timestamp())
+        self.client.publish(topic, json.dumps(body, ensure_ascii=False), qos=1)
+        logger.debug(
+            f"Published task preview to {mac_address}: "
+            f"task={body.get('task_id')} enabled={body.get('enabled')}"
+        )
+
     def publish_agent_restart(self, mac_address, reason='admin'):
         """下发边缘 Agent 进程重启指令（需本机 systemd/supervisor 自动拉起）"""
         topic = f"sjic/edge/{mac_address}/agent/restart"

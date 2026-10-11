@@ -12,6 +12,7 @@ import BeltDeviationCalibrationTool from '../components/BeltDeviationCalibration
 import DetectionRulesEditor from '../components/DetectionRulesEditor';
 import PoseBehaviorEditor from '../components/PoseBehaviorEditor';
 import FusionScenesEditor from '../components/FusionScenesEditor';
+import DetectionPreviewDialog, { taskPreviewEngines } from '../components/DetectionPreviewDialog';
 import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 function mergeAlgoDefaults(algorithm, prevParams = {}) {
@@ -137,6 +138,7 @@ function Tasks() {
     }
   });
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
+  const [previewTask, setPreviewTask] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [formError, setFormError] = useState('');
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -831,6 +833,10 @@ function Tasks() {
   };
 
 
+  const previewingTask = previewTask
+    ? (tasks.find((item) => item.id === previewTask.id) || previewTask)
+    : null;
+
   const filteredTasks = tasks.filter(t => {
     // 1. By Node
     if (filterNodeId === 'unassigned' && t.edge_node_id) return false;
@@ -864,7 +870,7 @@ function Tasks() {
           </Button>
         </div>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          驾考可以建一个混合任务，同一路视频里同时配置检测场景和姿态场景。皮带、画面健康等仍是单独任务。
+          驾考可以建一个混合任务，同一路视频里同时配置检测场景和姿态场景。画面健康等仍是单独任务。
         </Typography>
 
         {/* 高级过滤栏 */}
@@ -987,6 +993,11 @@ function Tasks() {
                       <IconButton onClick={() => handleStartDetection(task)}>
                         <PlayArrow />
                       </IconButton>
+                    )}
+                    {taskPreviewEngines(task).length > 0 && (
+                      <Button size="small" variant="outlined" onClick={() => setPreviewTask(task)} sx={{ mx: 0.5 }}>
+                        预览
+                      </Button>
                     )}
                     <IconButton onClick={() => handleViewDetail(task)}>
                       <Info />
@@ -1231,7 +1242,7 @@ function Tasks() {
                 ) {
                   return (
                     <Alert severity="error" sx={{ mt: 1 }}>
-                      该算法未绑定模型。请先绑定模型后再发布。
+                      该算法未绑定模型。姿态任务请先绑定 Pose 模型后再发布。
                     </Alert>
                   );
                 }
@@ -1370,6 +1381,8 @@ function Tasks() {
           <Button onClick={() => setOpenDetailDialog(false)}>关闭</Button>
         </DialogActions>
       </Dialog>
+
+      <DetectionPreviewDialog task={previewingTask} onClose={() => setPreviewTask(null)} />
     </>
   );
 }

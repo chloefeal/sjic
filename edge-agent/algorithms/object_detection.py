@@ -1,4 +1,5 @@
 from .base import BaseAlgorithm, effective_confidence
+from .detection_preview import offer_detection_preview
 from .rules import build_rules
 import cv2
 import time
@@ -202,6 +203,14 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                         last_log = time.time()
                         fps_window_t = last_log
                         fps_window_n = 0
+
+                    offer_detection_preview(
+                        config_dict.get('task_id'),
+                        processed,
+                        boxes=boxes,
+                        object_threshold=confidence,
+                        infer_ms=infer_ms,
+                    )
 
                     for rule in rules:
                         if not is_item_active_now(now, rule.spec, task_sched_start, task_sched_end):
