@@ -18,13 +18,25 @@ from .base import BaseAlgorithm, effective_confidence
 from .detection_preview import offer_detection_preview
 from .object_detection import ObjectDetectionAlgorithm
 from .pose_geometry import (
+    L_EAR,
+    L_EYE,
     L_HIP,
     L_SHOULDER,
+    NOSE,
+    R_EAR,
+    R_EYE,
     R_HIP,
     R_SHOULDER,
+    _conf,
+    _head_axis_ratios,
+    _head_hip_ratio,
     _kp,
     _midpoint,
+    _neck_ratio,
     accumulate_rising_count,
+    ear_asymmetry,
+    estimate_yaw_pitch,
+    face_visible,
     is_cover_mouth,
     is_finger_click_watch,
     is_finger_point,
@@ -46,6 +58,60 @@ from .rules import (
 from utils.calc import get_letterbox_params, preprocess
 from utils.rtsp import FramePump, is_valid_frame
 from utils.schedule import is_item_active_now
+
+
+def _debug_pose_decision(btype, kps, box, spec, view, matched, elapsed, track_id, seconds, scene_conf):
+    # #region agent log
+    try:
+        import json
+        from pathlib import Path
+        yaw_ref = float(spec.get('yaw_degrees', 45 if btype == 'look_aside' else 25) or 0)
+        pitch_ref = float(spec.get('pitch_degrees', 25) or 0)
+        scale = max(yaw_ref, 1.0) / 45.0
+        along, perp = _head_axis_ratios(kps)
+        yaw, pitch = estimate_yaw_pitch(kps)
+        neck = _neck_ratio(kps)
+        head_hip = _head_hip_ratio(kps)
+
+        def r(v):
+            return None if v is None else round(float(v), 3)
+
+        box_xy = None
+        conf = None
+        if box is not None:
+            box_xy = [r(getattr(box, 'x1', None)), r(getattr(box, 'y1', None)),
+                      r(getattr(box, 'x2', None)), r(getattr(box, 'y2', None))]
+            conf = r(getattr(box, 'confidence', None))
+        kp = {}
+        for name, idx in (('nose', NOSE), ('leye', L_EYE), ('reye', R_EYE), ('lear', L_EAR), ('rear', R_EAR),
+                          ('lsh', L_SHOULDER), ('rsh', R_SHOULDER)):
+            if kps is not None and idx < len(kps):
+                kp[name] = [r(kps[idx][0]), r(kps[idx][1]), r(kps[idx][2])]
+        row = {
+            'sessionId': '1e610f', 'runId': 'pre-fix', 'hypothesisId': 'ABCDE',
+            'location': 'pose_behavior.py:pointwise', 'message': 'pose decision',
+            'timestamp': int(time.time() * 1000),
+            'data': {
+                'btype': btype, 'view': view, 'track': track_id, 'matched': bool(matched),
+                'elapsed': r(elapsed), 'need_s': r(seconds), 'scene_conf': r(scene_conf),
+                'box': box_xy, 'conf': conf, 'yaw_ref': r(yaw_ref), 'pitch_ref': r(pitch_ref),
+                'face': bool(face_visible(kps)), 'along': r(along), 'perp': r(perp),
+                'shift_gate': r(0.28 * scale), 'strong_gate': r(0.42 * scale),
+                'ear_gate': r(0.40 * scale),
+                'ear_sum': r(_conf(kps, L_EAR) + _conf(kps, R_EAR)),
+                'ear_asym': r(ear_asymmetry(kps)), 'neck': r(neck), 'head_hip': r(head_hip),
+                'yaw': r(yaw), 'pitch': r(pitch),
+                'aside': bool(is_looking_aside(kps, yaw_ref, view)),
+                'head_down': bool(is_head_down(kps, pitch_ref, view)),
+                'kp': kp,
+            },
+        }
+        path = Path(__file__).resolve().parents[2] / 'debug-1e610f.log'
+        with path.open('a', encoding='utf-8') as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+    # #endregion
 
 
 def _eval_behavior(btype, kps, box, spec, view):
@@ -445,6 +511,37 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 seconds = float(spec.get('seconds', 3))
                 in_scene = set()
                 ready = []
+                # #region agent log
+                if btype in ('gaze_away', 'look_aside'):
+                    _kept = {id(box) for box, _kps in persons_for_spec if box is not None}
+                    _dropped = []
+                    for _box, _kps in persons or []:
+                        if _box is None or id(_box) in _kept:
+                            continue
+                        _dropped.append([
+                            round(float(_box.x1), 1), round(float(_box.y1), 1),
+                            round(float(_box.x2), 1), round(float(_box.y2), 1),
+                            round(float(getattr(_box, 'confidence', 0) or 0), 3),
+                        ])
+                    if _dropped:
+                        try:
+                            import json
+                            from pathlib import Path
+                            _row = {
+                                'sessionId': '1e610f', 'runId': 'pre-fix', 'hypothesisId': 'G',
+                                'location': 'pose_behavior.py:filter', 'message': 'dropped persons',
+                                'timestamp': int(time.time() * 1000),
+                                'data': {
+                                    'btype': btype, 'view': view, 'scene_conf': scene_conf,
+                                    'dropped': _dropped,
+                                },
+                            }
+                            _path = Path(__file__).resolve().parents[2] / 'debug-1e610f.log'
+                            with _path.open('a', encoding='utf-8') as _fh:
+                                _fh.write(json.dumps(_row, ensure_ascii=False) + '\n')
+                        except Exception:
+                            pass
+                # #endregion
                 for box, kps in persons_for_spec:
                     track = self._person_tracker.track_for(box, kps)
                     if track is None:
@@ -458,6 +555,14 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                     except Exception as e:
                         logger.debug(f"behavior {btype} eval error: {e}")
                         matched = False
+                    # #region agent log
+                    if btype in ('gaze_away', 'look_aside'):
+                        _started = track.since.get(bid) if matched else None
+                        _elapsed = (now - _started).total_seconds() if _started is not None else None
+                        _debug_pose_decision(
+                            btype, kps, box, spec, view, matched, _elapsed, track.id, seconds, scene_conf,
+                        )
+                    # #endregion
                     if not matched:
                         track.since.pop(bid, None)
                         continue
