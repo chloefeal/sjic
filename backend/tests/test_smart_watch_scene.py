@@ -167,6 +167,9 @@ class DetectionSceneClassTest(unittest.TestCase):
         self.assertIn('person_linger', merged_pose_ids)
         self.assertIn('aisle_crowd', merged_pose_ids)
         self.assertIn('look_aside', merged_pose_ids)
+        self.assertIn('desk_stand', merged_pose_ids)
+        self.assertEqual(labels['desk_stand'], '考台旁站人')
+        self.assertNotIn('desk_stand', od_ids)
 
     def test_scene_class_must_stay_inside_algorithm_labels(self):
         params = {'rules': [{'name': '识别手机', 'enabled': True, 'class_ids': [1]}]}

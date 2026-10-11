@@ -1,9 +1,9 @@
 """
 姿态行为引擎：张望 / 低头 / 不看屏幕 / 手指屏幕 /
-捂嘴报题 / AI 智能眼镜 / 手指点击手表 / 考试员不巡场 /
+捂嘴报题 / 考台旁站人 / AI 智能眼镜 / 手指点击手表 / 考试员不巡场 /
 人员缺席 / 人员滞留 / 通道聚集。
 智能眼镜和智能手表是融合场景，混合任务里才和目标检测一起判定。
-点状违规和眼镜、手表按人计时：同一次推理里每人一个轨迹 id。
+点状违规、考台旁站人和眼镜、手表按人计时：同一次推理里每人一个轨迹 id。
 缺席、滞留、聚集、考试员不巡场仍按区域计数，不按人跟踪。
 
 依赖姿态模型（YOLO-Pose 等）经 runtime.infer 返回 keypoints。
@@ -18,25 +18,13 @@ from .base import BaseAlgorithm, effective_confidence
 from .detection_preview import offer_detection_preview
 from .object_detection import ObjectDetectionAlgorithm
 from .pose_geometry import (
-    L_EAR,
-    L_EYE,
     L_HIP,
     L_SHOULDER,
-    NOSE,
-    R_EAR,
-    R_EYE,
     R_HIP,
     R_SHOULDER,
-    _conf,
-    _head_axis_ratios,
-    _head_hip_ratio,
     _kp,
     _midpoint,
-    _neck_ratio,
     accumulate_rising_count,
-    ear_asymmetry,
-    estimate_yaw_pitch,
-    face_visible,
     is_cover_mouth,
     is_finger_click_watch,
     is_finger_point,
@@ -44,6 +32,7 @@ from .pose_geometry import (
     is_head_down,
     is_looking_aside,
     is_standing,
+    is_standing_by_box,
     is_wrist_near_ear,
     normalize_mount_position,
 )
@@ -60,65 +49,9 @@ from utils.rtsp import FramePump, is_valid_frame
 from utils.schedule import is_item_active_now
 
 
-def _debug_pose_decision(btype, kps, box, spec, view, matched, elapsed, track_id, seconds, scene_conf):
-    # #region agent log
-    try:
-        import json
-        from pathlib import Path
-        yaw_ref = float(spec.get('yaw_degrees', 45 if btype == 'look_aside' else 25) or 0)
-        pitch_ref = float(spec.get('pitch_degrees', 25) or 0)
-        scale = max(yaw_ref, 1.0) / 45.0
-        along, perp = _head_axis_ratios(kps)
-        yaw, pitch = estimate_yaw_pitch(kps)
-        neck = _neck_ratio(kps)
-        head_hip = _head_hip_ratio(kps)
-
-        def r(v):
-            return None if v is None else round(float(v), 3)
-
-        box_xy = None
-        conf = None
-        if box is not None:
-            box_xy = [r(getattr(box, 'x1', None)), r(getattr(box, 'y1', None)),
-                      r(getattr(box, 'x2', None)), r(getattr(box, 'y2', None))]
-            conf = r(getattr(box, 'confidence', None))
-        kp = {}
-        for name, idx in (('nose', NOSE), ('leye', L_EYE), ('reye', R_EYE), ('lear', L_EAR), ('rear', R_EAR),
-                          ('lsh', L_SHOULDER), ('rsh', R_SHOULDER)):
-            if kps is not None and idx < len(kps):
-                kp[name] = [r(kps[idx][0]), r(kps[idx][1]), r(kps[idx][2])]
-        row = {
-            'sessionId': '1e610f', 'runId': 'pre-fix', 'hypothesisId': 'ABCDE',
-            'location': 'pose_behavior.py:pointwise', 'message': 'pose decision',
-            'timestamp': int(time.time() * 1000),
-            'data': {
-                'btype': btype, 'view': view, 'track': track_id, 'matched': bool(matched),
-                'elapsed': r(elapsed), 'need_s': r(seconds), 'scene_conf': r(scene_conf),
-                'box': box_xy, 'conf': conf, 'yaw_ref': r(yaw_ref), 'pitch_ref': r(pitch_ref),
-                'face': bool(face_visible(kps)), 'along': r(along), 'perp': r(perp),
-                'shift_gate': r(0.28 * scale), 'strong_gate': r(0.42 * scale),
-                'ear_gate': r(0.40 * scale),
-                'ear_sum': r(_conf(kps, L_EAR) + _conf(kps, R_EAR)),
-                'ear_asym': r(ear_asymmetry(kps)), 'neck': r(neck), 'head_hip': r(head_hip),
-                'yaw': r(yaw), 'pitch': r(pitch),
-                'aside': bool(is_looking_aside(kps, yaw_ref, view)),
-                'head_down': bool(is_head_down(kps, pitch_ref, view)),
-                'kp': kp,
-            },
-        }
-        path = Path(__file__).resolve().parents[2] / 'debug-1e610f.log'
-        with path.open('a', encoding='utf-8') as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + '\n')
-    except Exception:
-        pass
-    # #endregion
-
-
 def _eval_behavior(btype, kps, box, spec, view):
     if btype == 'gaze_away':
-        return is_gaze_away(
-            kps, spec.get('yaw_degrees', 25), spec.get('pitch_degrees', 25), view
-        )
+        return is_gaze_away(kps, spec.get('yaw_degrees', 25), view=view)
     if btype == 'look_aside':
         return is_looking_aside(kps, spec.get('yaw_degrees', 45), view)
     if btype == 'head_down':
@@ -212,6 +145,14 @@ def _match_gate(track_scale, track_shoulder, det_scale, det_shoulder):
     return _BOX_GATE * max(scales)
 
 
+def _positive_float(spec, key, default):
+    try:
+        value = float(spec.get(key, default))
+    except (TypeError, ValueError):
+        return float(default)
+    return value if value > 0 else float(default)
+
+
 class _Track:
     def __init__(self, track_id, anchor, scale, use_shoulder, seen):
         self.id = track_id
@@ -223,6 +164,7 @@ class _Track:
         self.since = {}
         self.last_alert = {}
         self.touch = {}
+        self.place = {}
 
 
 class PersonTracker:
@@ -240,6 +182,7 @@ class PersonTracker:
         for track in self.tracks:
             track.since.pop(behavior_id, None)
             track.touch.pop(behavior_id, None)
+            track.place.pop(behavior_id, None)
 
     def update(self, persons, now):
         detections = []
@@ -408,6 +351,48 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         state['since'] = now
         return True, sample_box, standing_n
 
+    def _desk_stand_ready(self, persons, spec, bid, now):
+        """人框高宽比达到阈值视为站立。同一轨迹停在原地达到 seconds 才返回。"""
+        seconds = _positive_float(spec, 'seconds', 10)
+        min_ratio = _positive_float(spec, 'min_height_width', 1.6)
+        move_ratio = _positive_float(spec, 'max_move_ratio', 1.0)
+        in_scene = set()
+        ready = []
+        for box, kps in persons or []:
+            track = self._person_tracker.track_for(box, kps)
+            if track is None:
+                continue
+            in_scene.add(track.id)
+            center, width = _box_center_width(box)
+            if center is None or not is_standing_by_box(box, min_ratio):
+                track.since.pop(bid, None)
+                track.place.pop(bid, None)
+                continue
+            ref = track.place.get(bid)
+            if ref is None:
+                track.place[bid] = center
+                track.since[bid] = now
+                continue
+            dist = math.hypot(center[0] - ref[0], center[1] - ref[1])
+            if dist > move_ratio * width:
+                track.place[bid] = center
+                track.since[bid] = now
+                continue
+            started = track.since.get(bid)
+            if started is None:
+                track.place[bid] = center
+                track.since[bid] = now
+                continue
+            elapsed = (now - started).total_seconds()
+            if elapsed < seconds:
+                continue
+            ready.append((track, box, kps, elapsed))
+        for track in self._person_tracker.tracks:
+            if track.seen == now and track.id not in in_scene:
+                track.since.pop(bid, None)
+                track.place.pop(bid, None)
+        return ready
+
     def evaluate_behaviors(
         self, behaviors, persons, now, processed, view, task_confidence,
         task_sched_start, task_sched_end, alert_threshold, task_name,
@@ -417,7 +402,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         """
         姿态场景判定，供姿态任务和混合任务共用。
 
-        先把本帧每个人接到自己的轨迹上。点状场景按这条轨迹计时，
+        先把本帧每个人接到自己的轨迹上。点状场景和考台旁站人按这条轨迹计时，
         每人达标各报一次，冷却也只挡住这个人。人数场景仍交给区域计数。
         pose_only 时才处理单独姿态任务里的眼镜，并忽略跌倒和手表。
         """
@@ -507,41 +492,26 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                     )
                 last_alert[bid] = now
                 continue
+            elif btype == 'desk_stand':
+                for track, box, kps, elapsed in self._desk_stand_ready(
+                    persons_for_spec, spec, bid, now,
+                ):
+                    self.emit_pose_alert(
+                        spec, btype, bid, (box, kps),
+                        (
+                            f"行为[{spec.get('name') or btype}] "
+                            f"站立不动 {elapsed:.1f}s，辅助作弊"
+                        ),
+                        persons_for_spec, processed,
+                        now, alert_threshold, task_name, algorithm_id,
+                        track.last_alert, track.since,
+                        on_alert, logger, roi_points=roi_points,
+                    )
+                continue
             elif btype in POINTWISE_TYPES:
                 seconds = float(spec.get('seconds', 3))
                 in_scene = set()
                 ready = []
-                # #region agent log
-                if btype in ('gaze_away', 'look_aside'):
-                    _kept = {id(box) for box, _kps in persons_for_spec if box is not None}
-                    _dropped = []
-                    for _box, _kps in persons or []:
-                        if _box is None or id(_box) in _kept:
-                            continue
-                        _dropped.append([
-                            round(float(_box.x1), 1), round(float(_box.y1), 1),
-                            round(float(_box.x2), 1), round(float(_box.y2), 1),
-                            round(float(getattr(_box, 'confidence', 0) or 0), 3),
-                        ])
-                    if _dropped:
-                        try:
-                            import json
-                            from pathlib import Path
-                            _row = {
-                                'sessionId': '1e610f', 'runId': 'pre-fix', 'hypothesisId': 'G',
-                                'location': 'pose_behavior.py:filter', 'message': 'dropped persons',
-                                'timestamp': int(time.time() * 1000),
-                                'data': {
-                                    'btype': btype, 'view': view, 'scene_conf': scene_conf,
-                                    'dropped': _dropped,
-                                },
-                            }
-                            _path = Path(__file__).resolve().parents[2] / 'debug-1e610f.log'
-                            with _path.open('a', encoding='utf-8') as _fh:
-                                _fh.write(json.dumps(_row, ensure_ascii=False) + '\n')
-                        except Exception:
-                            pass
-                # #endregion
                 for box, kps in persons_for_spec:
                     track = self._person_tracker.track_for(box, kps)
                     if track is None:
@@ -555,14 +525,6 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                     except Exception as e:
                         logger.debug(f"behavior {btype} eval error: {e}")
                         matched = False
-                    # #region agent log
-                    if btype in ('gaze_away', 'look_aside'):
-                        _started = track.since.get(bid) if matched else None
-                        _elapsed = (now - _started).total_seconds() if _started is not None else None
-                        _debug_pose_decision(
-                            btype, kps, box, spec, view, matched, _elapsed, track.id, seconds, scene_conf,
-                        )
-                    # #endregion
                     if not matched:
                         track.since.pop(bid, None)
                         continue

@@ -95,7 +95,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>姿态行为 / 场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          可添加多个场景。每个场景可单独画检测区域，不画则使用整个画面。场景时段、置信度优先于任务。人员倒地请用目标检测。智能手表请在混合任务的融合场景里添加。
+          可添加多个场景。每个场景可单独画检测区域，不画则使用整个画面。场景时段、置信度优先于任务。人员倒地请用目标检测。智能手表请在混合任务的融合场景里添加。考台旁站人只看人框高宽比，同一人站着几乎不动达到持续时长记为辅助作弊。
         </Typography>
       </Grid>
 
@@ -143,9 +143,9 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                     size="small"
                     type="number"
                     label={durationLabel(b)}
-                    value={b.seconds ?? (b.type === 'invigilator_absent' ? 120 : b.type === 'crowd_count' ? 10 : 3)}
+                    value={b.seconds ?? (b.type === 'invigilator_absent' ? 120 : (b.type === 'crowd_count' || b.type === 'desk_stand') ? 10 : 3)}
                     onChange={(e) => patchBehavior(index, { seconds: parseFloat(e.target.value) })}
-                    inputProps={{ min: 0.5, step: b.type === 'invigilator_absent' || b.type === 'crowd_count' ? 1 : 0.5 }}
+                    inputProps={{ min: 0.5, step: (b.type === 'invigilator_absent' || b.type === 'crowd_count' || b.type === 'desk_stand') ? 1 : 0.5 }}
                   />
                 </Grid>
               )}
@@ -201,7 +201,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                   />
                 </Grid>
               )}
-              {(b.type === 'head_down' || b.type === 'gaze_away') && (
+              {b.type === 'head_down' && (
                 <Grid item xs={12} md={3}>
                   <TextField
                     fullWidth
@@ -251,6 +251,34 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                     value={b.min_standing ?? 2}
                     onChange={(e) => patchBehavior(index, { min_standing: parseInt(e.target.value, 10) })}
                     inputProps={{ min: 1, step: 1 }}
+                  />
+                </Grid>
+              )}
+              {b.type === 'desk_stand' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="站立长高比"
+                    value={b.min_height_width ?? 1.6}
+                    onChange={(e) => patchBehavior(index, { min_height_width: parseFloat(e.target.value) })}
+                    inputProps={{ min: 0.5, step: 0.05 }}
+                    helperText="框高/框宽，坐着更矮，超过视为站着"
+                  />
+                </Grid>
+              )}
+              {b.type === 'desk_stand' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="静止范围"
+                    value={b.max_move_ratio ?? 1}
+                    onChange={(e) => patchBehavior(index, { max_move_ratio: parseFloat(e.target.value) })}
+                    inputProps={{ min: 0.1, step: 0.1 }}
+                    helperText="相对框宽，人走远超过这个倍数就重新计时"
                   />
                 </Grid>
               )}

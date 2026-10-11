@@ -207,33 +207,43 @@ def is_head_down(kps, pitch_degrees=30, view=DEFAULT_MOUNT_POSITION):
     return hh is not None and hh < 0.55
 
 
+def is_head_up(kps, view=DEFAULT_MOUNT_POSITION):
+    """明显抬头。俯视下正常看屏幕（头在肩前、鼻在肩下）不算。"""
+    view = normalize_mount_position(view)
+    if kps is None:
+        return False
+
+    if view == 'front_top':
+        _, pitch = estimate_yaw_pitch(kps)
+        return pitch is not None and pitch <= -15.0
+
+    if view == 'side_top':
+        if not (_kp_ok(kps, NOSE) and (_kp_ok(kps, L_EAR) or _kp_ok(kps, R_EAR))):
+            return False
+        nose_y = _kp(kps, NOSE)[1]
+        ear_ys = [_kp(kps, i)[1] for i in (L_EAR, R_EAR) if _kp_ok(kps, i)]
+        if not ear_ys:
+            return False
+        return nose_y < (sum(ear_ys) / len(ear_ys)) - 0.18 * _scale(kps)
+
+    if not face_visible(kps):
+        return False
+    if not (_kp_ok(kps, NOSE) and _kp_ok(kps, L_SHOULDER) and _kp_ok(kps, R_SHOULDER)):
+        return False
+    nose_y = _kp(kps, NOSE)[1]
+    shoulder_y = (_kp(kps, L_SHOULDER)[1] + _kp(kps, R_SHOULDER)[1]) / 2.0
+    return (shoulder_y - nose_y) >= 0.22 * _scale(kps)
+
+
 def is_gaze_away(kps, yaw_degrees=25, pitch_degrees=25, view=DEFAULT_MOUNT_POSITION):
-    """不看屏幕：张望、回头、抬头看人，或过度埋头。正常看题不算。"""
+    """不看屏幕：明显抬头，或左右观望。俯视看屏幕的低头不算。pitch_degrees 只保留兼容。"""
+    _ = pitch_degrees
     view = normalize_mount_position(view)
     if kps is None:
         return False
     if is_looking_aside(kps, yaw_degrees, view):
         return True
-    if is_head_down(kps, pitch_degrees, view):
-        return True
-
-    if view == 'front_top':
-        _, pitch = estimate_yaw_pitch(kps)
-        return pitch is not None and pitch < 8.0
-
-    if view == 'back_top':
-        return face_visible(kps)
-
-    if view == 'side_top':
-        if not _kp_ok(kps, NOSE):
-            return False
-        ear_ys = [_kp(kps, i)[1] for i in (L_EAR, R_EAR) if _kp_ok(kps, i)]
-        if not ear_ys:
-            return False
-        # 抬头：鼻高于耳
-        return _kp(kps, NOSE)[1] < (sum(ear_ys) / len(ear_ys)) - 0.12 * _scale(kps)
-
-    return False
+    return is_head_up(kps, view)
 
 
 def is_cover_mouth(kps, view=DEFAULT_MOUNT_POSITION):
@@ -401,6 +411,34 @@ def is_standing(kps, box=None, view=DEFAULT_MOUNT_POSITION):
         if h / w >= 1.45:
             return True
     return False
+
+
+def box_height_width_ratio(box):
+    """人框高/宽。站着的人框更瘦高，坐着的考生更矮。"""
+    if box is None:
+        return None
+    try:
+        width = float(box.x2) - float(box.x1)
+        height = float(box.y2) - float(box.y1)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if width <= 1.0 or height <= 1.0:
+        return None
+    return height / width
+
+
+def is_standing_by_box(box, min_ratio=1.6):
+    """只看人框高宽比。坐姿关键点里脚踝也在髋下方，不能用来区分考台旁的站立。"""
+    ratio = box_height_width_ratio(box)
+    if ratio is None:
+        return False
+    try:
+        gate = float(min_ratio)
+    except (TypeError, ValueError):
+        gate = 1.6
+    if gate <= 0:
+        gate = 1.6
+    return ratio >= gate
 
 
 def _head_above_torso(kps, min_ratio=0.16):

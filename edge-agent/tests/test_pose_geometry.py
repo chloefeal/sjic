@@ -13,8 +13,10 @@ from pose_geometry import (
     is_finger_click_watch,
     is_gaze_away,
     is_head_down,
+    is_head_up,
     is_looking_aside,
     is_standing,
+    is_standing_by_box,
     normalize_mount_position,
 )
 
@@ -91,7 +93,22 @@ class BackTopExamSittingTest(unittest.TestCase):
             r_ear=(170, 168, 0.6),
         )
         self.assertFalse(is_looking_aside(face, view='back_top'))
+        self.assertTrue(is_head_up(face, view='back_top'))
         self.assertTrue(is_gaze_away(face, view='back_top'))
+
+    def test_hunched_at_screen_is_head_down_not_gaze_away(self):
+        """伏案看屏会把头顶压近肩膀。这是低头，不是不看屏幕。"""
+        hunched = sitting_torso(
+            l_ear=(115, 195, 0.85),
+            r_ear=(165, 195, 0.85),
+            nose=(140, 192, 0.7),
+            l_eye=(128, 190, 0.6),
+            r_eye=(152, 190, 0.6),
+        )
+        self.assertTrue(is_head_down(hunched, view='back_top'))
+        self.assertFalse(is_head_up(hunched, view='back_top'))
+        self.assertFalse(is_looking_aside(hunched, view='back_top'))
+        self.assertFalse(is_gaze_away(hunched, view='back_top'))
 
 
 class FrontTopTest(unittest.TestCase):
@@ -116,7 +133,21 @@ class FrontTopTest(unittest.TestCase):
             l_ear=(110, 155, 0.8),
             r_ear=(170, 155, 0.8),
         )
+        self.assertTrue(is_head_up(cam, view='front_top'))
         self.assertTrue(is_gaze_away(cam, view='front_top'))
+
+    def test_level_gaze_is_not_gaze_away(self):
+        """平视还没到明显抬头。鼻与肩中线几乎齐平。"""
+        level = sitting_torso(
+            nose=(140, 200, 0.9),
+            l_eye=(125, 190, 0.85),
+            r_eye=(155, 190, 0.85),
+            l_ear=(110, 185, 0.8),
+            r_ear=(170, 185, 0.8),
+        )
+        self.assertFalse(is_head_up(level, view='front_top'))
+        self.assertFalse(is_looking_aside(level, view='front_top'))
+        self.assertFalse(is_gaze_away(level, view='front_top'))
 
     def test_turn_right_is_look_aside(self):
         aside = sitting_torso(
@@ -150,6 +181,18 @@ class SideTopTest(unittest.TestCase):
             r_ear=(170, 165, 0.7),
         )
         self.assertTrue(is_looking_aside(frontal, view='side_top'))
+
+    def test_nose_above_ear_is_head_up(self):
+        raised = sitting_torso(
+            l_shoulder=(120, 200, 0.9),
+            r_shoulder=(150, 205, 0.45),
+            nose=(175, 140, 0.85),
+            l_eye=(160, 150, 0.8),
+            l_ear=(125, 165, 0.85),
+        )
+        self.assertTrue(is_head_up(raised, view='side_top'))
+        self.assertFalse(is_looking_aside(raised, view='side_top'))
+        self.assertTrue(is_gaze_away(raised, view='side_top'))
 
 
 class TopViewTest(unittest.TestCase):
@@ -268,6 +311,19 @@ class RisingCountTest(unittest.TestCase):
         self.assertFalse(accumulate_rising_count(
             state, True, now + timedelta(seconds=32), 2, 30, hold_contact=True
         ))
+
+
+class StandingByBoxTest(unittest.TestCase):
+    def test_tall_box_is_standing(self):
+        self.assertTrue(is_standing_by_box(_Box(10, 10, 50, 130), 1.6))
+
+    def test_short_box_is_sitting(self):
+        self.assertFalse(is_standing_by_box(_Box(10, 10, 110, 90), 1.6))
+
+    def test_threshold_is_configurable(self):
+        box = _Box(0, 0, 100, 150)
+        self.assertFalse(is_standing_by_box(box, 1.6))
+        self.assertTrue(is_standing_by_box(box, 1.5))
 
 
 if __name__ == '__main__':

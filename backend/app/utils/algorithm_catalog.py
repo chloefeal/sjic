@@ -15,7 +15,7 @@ ENGINES = {
     'pose_behavior': {
         'label': '姿态行为检测',
         'needs_model': True,
-        'description': '张望、低头、捂嘴、巡场、人员缺席、滞留、聚集等',
+        'description': '张望、低头、捂嘴、巡场、考台旁站人、人员缺席、滞留、聚集等',
     },
     'camera_health': {
         'label': '画面健康检测',
@@ -131,11 +131,10 @@ POSE_SCENE_PRESETS = [
         'id': 'not_looking_screen',
         'type': 'gaze_away',
         'name': '长时间不看屏幕',
-        'description': '长时间不看屏幕',
+        'description': '明显抬头或左右观望，低头看屏幕不算',
         'defaults': {
             'seconds': 15,
             'yaw_degrees': 25,
-            'pitch_degrees': 25,
             'alert_type': 'gaze_away',
             'enabled': True,
         },
@@ -168,7 +167,7 @@ POSE_SCENE_PRESETS = [
         'id': 'finger_screen',
         'type': 'finger_point',
         'name': '手指屏幕',
-        'description': '手指屏幕',
+        'description': '站立人员伸臂指向/触摸屏幕',
         'defaults': {
             'seconds': 2,
             'require_standing': True,
@@ -188,10 +187,23 @@ POSE_SCENE_PRESETS = [
         },
     },
     {
+        'id': 'desk_stand',
+        'type': 'desk_stand',
+        'name': '考台旁站人',
+        'description': '考场考生坐着。用人框高宽比判断站立，同一人站着且几乎不动达到设定时长，记为辅助作弊',
+        'defaults': {
+            'seconds': 10,
+            'min_height_width': 1.6,
+            'max_move_ratio': 1.0,
+            'alert_type': 'desk_stand',
+            'enabled': True,
+        },
+    },
+    {
         'id': 'invigilator_absent',
         'type': 'invigilator_absent',
         'name': '考试员不巡场',
-        'description': '考试员不巡场',
+        'description': '考场需 2 名考官站立巡场；站立人数持续少于阈值则告警（默认每 2 分钟判定）',
         'defaults': {
             'seconds': 120,
             'min_standing': 2,
@@ -242,7 +254,7 @@ FUSION_SCENE_PRESETS = [
         'id': 'smart_glasses',
         'type': 'smart_glasses',
         'name': 'AI智能眼镜拍摄题目',
-        'description': 'AI智能眼镜拍摄题目',
+        'description': '先检出眼镜，再统计戴镜人员手指触碰镜脚（耳朵附近）的次数',
         'requires': ['object_detection', 'pose_behavior'],
         'defaults': {
             'seconds': 30,
@@ -257,7 +269,7 @@ FUSION_SCENE_PRESETS = [
         'id': 'smart_watch',
         'type': 'smart_watch',
         'name': '智能手表作弊检测',
-        'description': '智能手表作弊检测',
+        'description': '先检出手表，再看另一只手是否点击这块表。点击 1 次即有作弊嫌疑',
         'requires': ['object_detection', 'pose_behavior'],
         'defaults': {
             'seconds': 30,
@@ -301,7 +313,7 @@ PRODUCT_ALGORITHMS = [
         'type': 'pose_behavior',
         'engine': 'pose_behavior',
         'name': '姿态行为检测',
-        'description': '不看屏幕、张望、捂嘴报题、巡场、人员缺席、滞留、聚集等',
+        'description': '不看屏幕、张望、捂嘴报题、巡场、考台旁站人、人员缺席、滞留、聚集等',
         'category': 'exam',
         'parameter_schema': _pose_schema(),
     },

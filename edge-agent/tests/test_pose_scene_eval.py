@@ -405,3 +405,79 @@ class PerPersonTimingTest(unittest.TestCase):
         frame([seated_a, seated_b], 0, [seated_a])
         frame([seated_a, seated_b], 1, [seated_b])
         self.assertEqual(len(self.alerts), 2)
+
+
+class DeskStandTest(unittest.TestCase):
+    def setUp(self):
+        self.algo = PoseBehaviorAlgorithm()
+        self.algo.draw_alert_overlay = lambda *args, **kwargs: 'overlay'
+        self.spec = {
+            'id': 'stand',
+            'type': 'desk_stand',
+            'name': '考台旁站人',
+            'seconds': 5,
+            'min_height_width': 1.6,
+            'max_move_ratio': 1.0,
+            'alert_type': 'desk_stand',
+        }
+        self.start = datetime(2026, 1, 1, 8, 0, 0)
+        self.state = {
+            'since': {'stand': None},
+            'last': {'stand': None},
+            'extra': {'stand': {}},
+        }
+        self.alerts = []
+
+    def _run(self, persons, second):
+        _eval(
+            self.algo, [self.spec], persons,
+            self.start + timedelta(seconds=second),
+            self.state, self.alerts,
+        )
+
+    def test_still_tall_box_is_assist_cheat(self):
+        still = _Box(x1=100, y1=20, x2=140, y2=180)
+        nudged = _Box(x1=108, y1=24, x2=148, y2=184)
+        self._run([(still, None)], 0)
+        self.assertEqual(self.alerts, [])
+        self._run([(nudged, None)], 5)
+        self.assertEqual(len(self.alerts), 1)
+        self.assertEqual(self.alerts[0]['alert_type'], 'desk_stand')
+        self.assertIn('辅助作弊', self.alerts[0]['message'])
+        self.assertIn('站立不动 5.0s', self.alerts[0]['message'])
+
+    def test_short_box_stays_quiet_even_when_ankles_are_below_hips(self):
+        kps = _blank_kps()
+        kps[5] = [100, 100, 0.9]
+        kps[6] = [160, 100, 0.9]
+        kps[11] = [120, 140, 0.9]
+        kps[15] = [120, 200, 0.9]
+        sitting = _Box(x1=80, y1=80, x2=180, y2=160)
+        self._run([(sitting, kps)], 0)
+        self._run([(sitting, kps)], 8)
+        self.assertEqual(self.alerts, [])
+
+    def test_walking_restarts_until_the_person_stays(self):
+        first = _Box(x1=100, y1=20, x2=140, y2=180)
+        walked = _Box(x1=180, y1=20, x2=220, y2=180)
+        self._run([(first, None)], 0)
+        self._run([(walked, None)], 2)
+        self._run([(walked, None)], 6)
+        self.assertEqual(self.alerts, [])
+        self._run([(walked, None)], 7)
+        self.assertEqual(len(self.alerts), 1)
+
+    def test_a_sitter_does_not_take_the_standers_alert(self):
+        stand = (_Box(x1=100, y1=20, x2=140, y2=180), None)
+        sit = (_Box(x1=400, y1=80, x2=500, y2=160), None)
+        self._run([stand, sit], 0)
+        self._run([stand, sit], 5)
+        self.assertEqual(len(self.alerts), 1)
+        self.assertEqual(len(self.algo._person_tracker.tracks), 2)
+
+    def test_each_still_stander_alerts_on_their_own_track(self):
+        left = (_Box(x1=100, y1=20, x2=140, y2=180), None)
+        right = (_Box(x1=400, y1=30, x2=450, y2=210), None)
+        self._run([left, right], 0)
+        self._run([left, right], 5)
+        self.assertEqual(len(self.alerts), 2)
