@@ -864,7 +864,7 @@ function Tasks() {
           </Button>
         </div>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          驾考可以建一个混合任务，同一路视频里同时挂检测场景和姿态场景。只有检测时不跑姿态，只有姿态时不跑检测；两者都有，或包含智能眼镜、智能手表时，同一帧先检测再姿态。皮带、画面健康等仍是单算法任务。
+          驾考可以建一个混合任务，同一路视频里同时配置检测场景和姿态场景。皮带、画面健康等仍是单独任务。
         </Typography>
 
         {/* 高级过滤栏 */}
@@ -1165,7 +1165,7 @@ function Tasks() {
                 </Grid>
                 <Grid item xs={12}>
                   <Alert severity="info">
-                    只选检测时，这一帧不跑姿态；只选姿态时，不跑检测。两个都选并且场景同时需要时，同一帧先检测再姿态。智能眼镜需要两个都选并指定眼镜类别；智能手表同样需要两个都选并指定手表类别，默认点击 1 次即有作弊嫌疑。
+                    智能眼镜、智能手表需要同时选择目标检测和姿态算法，并指定类别。智能手表默认点击 1 次即有作弊嫌疑。
                   </Alert>
                   {cameraShareWarning(tasks, formData, editingTask) && (
                     <Alert severity="warning" sx={{ mt: 1 }}>
@@ -1211,7 +1211,7 @@ function Tasks() {
                   if (algorithms.length > 0 && taskAlgorithms.length === 0) {
                     return (
                       <Alert severity="warning" sx={{ mt: 1 }}>
-                        当前没有已发布的算法。请先到「算法」页绑定模型并发布（姿态算法需 YOLO-Pose 模型）。
+                        当前没有已发布的算法。请先到「算法」页绑定模型并发布。
                       </Alert>
                     );
                   }
@@ -1231,15 +1231,15 @@ function Tasks() {
                 ) {
                   return (
                     <Alert severity="error" sx={{ mt: 1 }}>
-                      该算法未绑定模型。姿态任务请先绑定 Pose 模型后再发布。
+                      该算法未绑定模型。请先绑定模型后再发布。
                     </Alert>
                   );
                 }
                 const engine = selectedAlg.engine || selectedAlg.type;
                 const tip = engine === 'object_detection'
-                  ? '可在下方添加多条检测规则/场景（手机、帽子、火情、人员倒地等），同一任务只推理一次。倒地用目标检测。人员缺席、滞留、聚集请用姿态检测。'
+                  ? '可在下方添加多条检测场景。倒地用目标检测。人员缺席、滞留、聚集请在姿态场景里添加。'
                   : engine === 'pose_behavior'
-                    ? '可在下方添加多个姿态行为/场景（张望、低头、捂嘴、人员缺席、滞留、聚集等），同一任务只推理一次。缺席、滞留、聚集只看有没有人。智能眼镜、智能手表请用混合任务。'
+                    ? '可在下方添加多个姿态场景。智能眼镜、智能手表请用混合任务。'
                     : null;
                 if (!tip) return null;
                 return <Alert severity="info" sx={{ mt: 1 }}>{tip}</Alert>;

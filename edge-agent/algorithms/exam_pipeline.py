@@ -20,7 +20,9 @@ from .pose_behavior import (
 from .pose_geometry import normalize_mount_position, person_has_glasses
 from .rules import (
     PERSON_COUNT_TYPES,
+    behavior_rois,
     build_rules,
+    filter_persons_roi,
     person_count_message,
     person_count_specs,
 )
@@ -167,6 +169,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                     logger,
                 )
             } if need_pose else {}
+            scene_rois = behavior_rois(behaviors, transform_roi) if need_pose else {}
 
             infer_classes = []
             for rule in rules:
@@ -272,7 +275,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                         behaviors, persons, now, processed, view, task_confidence,
                         task_sched_start, task_sched_end, alert_threshold, task_name,
                         pose_algorithm_id, state_since, last_alert, extra_state,
-                        pose_helper, person_rules, on_alert, logger,
+                        pose_helper, person_rules, scene_rois, on_alert, logger,
                     )
                 if od_ok and pose_ok and fusions:
                     self._eval_fusions(
@@ -338,8 +341,8 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
     def _eval_behaviors(
         self, behaviors, persons, now, processed, view, task_confidence,
         task_sched_start, task_sched_end, alert_threshold, task_name,
-        algorithm_id, state_since, last_alert, extra_state, pose_helper,
-        person_rules, on_alert, logger,
+        algorithm_id, state_since, last_alert, extra_state,         pose_helper,
+        person_rules, scene_rois, on_alert, logger,
     ):
         for spec in behaviors:
             bid = spec.get('id') or spec.get('type')
@@ -353,10 +356,14 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                 continue
 
             scene_conf = effective_confidence(spec, task_confidence)
-            persons_for_spec = [
-                (box, kps) for box, kps in persons
-                if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
-            ]
+            roi_polygon, roi_points = scene_rois.get(bid, (None, None))
+            persons_for_spec = filter_persons_roi(
+                [
+                    (box, kps) for box, kps in persons
+                    if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
+                ],
+                roi_polygon,
+            )
             hit_person = None
             message = None
 
@@ -424,7 +431,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
             self._emit_pose_alert(
                 spec, btype, bid, hit_person, message, persons_for_spec, processed,
                 now, alert_threshold, task_name, algorithm_id, last_alert, state_since,
-                on_alert, logger,
+                on_alert, logger, roi_points=roi_points,
             )
 
     def _eval_fusions(
@@ -483,7 +490,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
     def _emit_pose_alert(
         self, spec, btype, bid, hit_person, message, persons_for_spec, processed,
         now, alert_threshold, task_name, algorithm_id, last_alert, state_since,
-        on_alert, logger, extra_boxes=None,
+        on_alert, logger, extra_boxes=None, roi_points=None,
     ):
         if hit_person is None or not on_alert:
             return
@@ -506,6 +513,7 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
         alert_frame = self.draw_alert_overlay(
             processed,
             boxes=draw_boxes or None,
+            roi_points=roi_points,
             caption=message or f"行为[{spec.get('name') or btype}]",
             skeletons=skeletons,
         )

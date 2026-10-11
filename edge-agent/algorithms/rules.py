@@ -173,6 +173,35 @@ def person_count_specs(behaviors):
     return specs
 
 
+def filter_persons_roi(persons, roi_polygon):
+    """推理后过滤。没有多边形时保留全部检出的人。"""
+    if roi_polygon is None:
+        return list(persons or [])
+    kept = []
+    for box, kps in persons or []:
+        if box is None:
+            continue
+        foot = getattr(box, 'foot_center', None)
+        if foot is None:
+            continue
+        if roi_polygon.contains(Point(foot)):
+            kept.append((box, kps))
+    return kept
+
+
+def behavior_rois(behaviors, transform_roi):
+    """每个姿态场景一块区域。未标注时多边形为空，表示整帧。"""
+    rois = {}
+    for spec in behaviors or []:
+        if not isinstance(spec, dict):
+            continue
+        bid = spec.get('id') or spec.get('type')
+        points = transform_roi(spec.get('detection_region'))
+        polygon = Polygon(points) if points and len(points) >= 3 else None
+        rois[bid] = (polygon, points if polygon is not None else None)
+    return rois
+
+
 def person_count_message(spec, btype, hit):
     name = (spec or {}).get('name') or btype
     count = len((hit or {}).get('boxes') or [])

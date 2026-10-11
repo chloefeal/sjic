@@ -237,7 +237,7 @@ function VideoStreams() {
             </Select>
             <FormHelperText>
               {CAMERA_MOUNT_POSITIONS.find((p) => p.value === (newStream.mount_position || 'back_top'))?.hint}
-              。姿态检测会按此位置使用不同判断逻辑。改完后请重新启动相关姿态任务。
+              。改完后请重新启动相关任务。
             </FormHelperText>
           </FormControl>
           <TextField

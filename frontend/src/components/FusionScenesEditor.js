@@ -69,7 +69,7 @@ function FusionScenesEditor({ algorithmParameters, onChange, catalogPresets, tas
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>融合场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          融合场景在同一帧上先做目标检测、再做姿态。智能眼镜要眼镜框落在头部，且手腕靠近耳朵，才计一次触碰。智能手表要先检出手表，另一只手再点击这块表；默认点击 1 次即有作弊嫌疑，只戴表不算。
+          请选择对应类别。智能手表默认点击 1 次即有作弊嫌疑。
         </Typography>
       </Grid>
 

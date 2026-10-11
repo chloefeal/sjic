@@ -10,12 +10,12 @@ ENGINES = {
     'object_detection': {
         'label': '目标检测',
         'needs_model': True,
-        'description': 'YOLO 目标检测：一次推理，任务内可挂多条规则（出现/驻留/缺席/聚集等）',
+        'description': '识别手机、帽子、火情、人员倒地等',
     },
     'pose_behavior': {
         'label': '姿态行为检测',
         'needs_model': True,
-        'description': '人体姿态：一次推理，任务内可挂多个行为（张望/低头/捂嘴等）；也可只按检出人数做缺席、滞留、聚集',
+        'description': '张望、低头、捂嘴、巡场、人员缺席、滞留、聚集等',
     },
     'camera_health': {
         'label': '画面健康检测',
@@ -117,7 +117,7 @@ OD_SCENE_PRESETS = [
         'id': 'person_fall',
         'type': 'presence',
         'name': '人员倒地',
-        'description': '用目标检测模型识别倒地人员（模型需含跌倒类别），不使用姿态关键点',
+        'description': '人员倒地',
         'defaults': {
             'alert_type': 'person_fall',
             'class_ids': [],
@@ -131,7 +131,7 @@ POSE_SCENE_PRESETS = [
         'id': 'not_looking_screen',
         'type': 'gaze_away',
         'name': '长时间不看屏幕',
-        'description': '不看屏幕：左右转头、回头或过度埋头。正常低头看题不算。几何随摄像头安装位置变化。',
+        'description': '长时间不看屏幕',
         'defaults': {
             'seconds': 15,
             'yaw_degrees': 25,
@@ -144,7 +144,7 @@ POSE_SCENE_PRESETS = [
         'id': 'look_aside',
         'type': 'look_aside',
         'name': '左右张望',
-        'description': '头部相对肩线明显转向一侧（偷看邻座）。正常看屏幕不算。',
+        'description': '左右张望',
         'defaults': {
             'seconds': 3,
             'yaw_degrees': 45,
@@ -156,7 +156,7 @@ POSE_SCENE_PRESETS = [
         'id': 'head_down',
         'type': 'head_down',
         'name': '长时间低头',
-        'description': '相对看屏幕的正常坐姿，头部进一步埋下（看腿上/桌下）',
+        'description': '长时间低头',
         'defaults': {
             'seconds': 15,
             'pitch_degrees': 30,
@@ -168,7 +168,7 @@ POSE_SCENE_PRESETS = [
         'id': 'finger_screen',
         'type': 'finger_point',
         'name': '手指屏幕',
-        'description': '站立人员伸臂指向/触摸屏幕',
+        'description': '手指屏幕',
         'defaults': {
             'seconds': 2,
             'require_standing': True,
@@ -180,7 +180,7 @@ POSE_SCENE_PRESETS = [
         'id': 'cover_mouth',
         'type': 'cover_mouth',
         'name': '捂嘴报题',
-        'description': '考生捂嘴说话，可能在向场外念题',
+        'description': '捂嘴报题',
         'defaults': {
             'seconds': 3,
             'alert_type': 'cover_mouth',
@@ -191,7 +191,7 @@ POSE_SCENE_PRESETS = [
         'id': 'invigilator_absent',
         'type': 'invigilator_absent',
         'name': '考试员不巡场',
-        'description': '考场需 2 名考官站立巡场；站立人数持续少于阈值则告警（默认每 2 分钟判定）',
+        'description': '考试员不巡场',
         'defaults': {
             'seconds': 120,
             'min_standing': 2,
@@ -203,7 +203,7 @@ POSE_SCENE_PRESETS = [
         'id': 'person_absence',
         'type': 'absence',
         'name': '人员缺席',
-        'description': '姿态能检出人。区域内持续无人超过设定时长，不判断具体姿态',
+        'description': '区域内持续无人',
         'defaults': {
             'absent_seconds': 600,
             'alert_type': 'person_absence',
@@ -214,7 +214,7 @@ POSE_SCENE_PRESETS = [
         'id': 'person_linger',
         'type': 'linger',
         'name': '人员滞留',
-        'description': '姿态能检出人。区域内持续有人超过设定时长，不判断具体姿态',
+        'description': '区域内持续有人',
         'defaults': {
             'linger_seconds': 300,
             'alert_type': 'exam_area_linger',
@@ -225,7 +225,7 @@ POSE_SCENE_PRESETS = [
         'id': 'aisle_crowd',
         'type': 'crowd_count',
         'name': '通道人员聚集',
-        'description': '姿态能检出人。区域内人数持续超限，不判断具体姿态',
+        'description': '区域内人数持续超限',
         'defaults': {
             'min_count': 5,
             'seconds': 10,
@@ -242,7 +242,7 @@ FUSION_SCENE_PRESETS = [
         'id': 'smart_glasses',
         'type': 'smart_glasses',
         'name': 'AI智能眼镜拍摄题目',
-        'description': '先检出眼镜，再统计戴镜人员手指触碰镜脚（耳朵附近）的次数',
+        'description': 'AI智能眼镜拍摄题目',
         'requires': ['object_detection', 'pose_behavior'],
         'defaults': {
             'seconds': 30,
@@ -257,7 +257,7 @@ FUSION_SCENE_PRESETS = [
         'id': 'smart_watch',
         'type': 'smart_watch',
         'name': '智能手表作弊检测',
-        'description': '先检出手表，再看另一只手是否点击这块表。点击 1 次即有作弊嫌疑',
+        'description': '智能手表作弊检测',
         'requires': ['object_detection', 'pose_behavior'],
         'defaults': {
             'seconds': 30,
@@ -293,7 +293,7 @@ PRODUCT_ALGORITHMS = [
         'type': 'object_detection',
         'engine': 'object_detection',
         'name': '目标检测',
-        'description': '一次推理挂多条规则：手机、帽子、火情、人员倒地等',
+        'description': '手机、帽子、火情、人员倒地等',
         'category': 'exam',
         'parameter_schema': _od_schema(),
     },
@@ -301,7 +301,7 @@ PRODUCT_ALGORITHMS = [
         'type': 'pose_behavior',
         'engine': 'pose_behavior',
         'name': '姿态行为检测',
-        'description': '一次推理挂多个行为：不看屏幕、张望、捂嘴报题、巡场、人员缺席/滞留/聚集等',
+        'description': '不看屏幕、张望、捂嘴报题、巡场、人员缺席、滞留、聚集等',
         'category': 'exam',
         'parameter_schema': _pose_schema(),
     },

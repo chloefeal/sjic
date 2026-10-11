@@ -25,7 +25,14 @@ from .pose_geometry import (
 )
 import time
 from datetime import datetime
-from .rules import PERSON_COUNT_TYPES, build_rules, person_count_message, person_count_specs
+from .rules import (
+    PERSON_COUNT_TYPES,
+    behavior_rois,
+    build_rules,
+    filter_persons_roi,
+    person_count_message,
+    person_count_specs,
+)
 from utils.calc import get_letterbox_params, preprocess
 from utils.rtsp import FramePump, is_valid_frame
 from utils.schedule import is_item_active_now
@@ -246,6 +253,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                         logger,
                     )
                 }
+                scene_rois = behavior_rois(behaviors, transform_roi)
                 next_infer_t = 0.0
                 frame_idx = 0
                 last_log = time.time()
@@ -317,10 +325,14 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                             continue
 
                         scene_conf = effective_confidence(spec, task_confidence)
-                        persons_for_spec = [
-                            (box, kps) for box, kps in persons
-                            if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
-                        ]
+                        roi_polygon, roi_points = scene_rois.get(bid, (None, None))
+                        persons_for_spec = filter_persons_roi(
+                            [
+                                (box, kps) for box, kps in persons
+                                if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
+                            ],
+                            roi_polygon,
+                        )
 
                         if btype == 'smart_glasses':
                             ok, box, kps = self._eval_smart_glasses(
@@ -409,6 +421,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                         alert_frame = self.draw_alert_overlay(
                             processed,
                             boxes=[box] if box is not None else None,
+                            roi_points=roi_points,
                             caption=message or f"行为[{spec.get('name') or btype}]",
                             skeletons=skeletons,
                         )

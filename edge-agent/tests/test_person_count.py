@@ -33,6 +33,8 @@ from rules import (  # noqa: E402
     AbsenceRule,
     CrowdCountRule,
     LingerRule,
+    behavior_rois,
+    filter_persons_roi,
     person_count_message,
     person_count_specs,
 )
@@ -97,6 +99,29 @@ class PersonCountSpecTest(unittest.TestCase):
         hit = crowd.evaluate(boxes, start + timedelta(seconds=3), log)
         self.assertEqual(len(hit['boxes']), 2)
         self.assertIn('人数 2', person_count_message({'name': '通道人员聚集', 'min_count': 2}, 'crowd_count', hit))
+
+    def test_each_pose_scene_roi_defaults_to_full_frame(self):
+        persons = [(_Box(foot=(1, 1)), 'kps'), (_Box(foot=(50, 50)), None)]
+        self.assertEqual(filter_persons_roi(persons, None), persons)
+
+        class _OnlyNearOrigin:
+            def contains(self, point):
+                return point.xy[0] < 10
+
+        kept = filter_persons_roi(persons, _OnlyNearOrigin())
+        self.assertEqual(kept, [persons[0]])
+
+        rois = behavior_rois(
+            [
+                {'id': 'gaze', 'type': 'gaze_away'},
+                {'id': 'aside', 'type': 'look_aside', 'detection_region': {'points': [{}, {}, {}]}},
+            ],
+            lambda region: [(0, 0), (10, 0), (0, 10)] if region else None,
+        )
+        self.assertEqual(rois['gaze'], (None, None))
+        polygon, points = rois['aside']
+        self.assertIsNotNone(polygon)
+        self.assertEqual(len(points), 3)
 
 
 if __name__ == '__main__':

@@ -95,8 +95,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>姿态行为 / 场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          同一任务只跑一次姿态推理；可叠加多个行为。人员缺席、滞留、聚集只统计姿态检出的人数，不判断具体姿态。场景时段、置信度优先于任务。人员倒地请用目标检测场景。手指点击手表请在混合任务的融合场景里添加「智能手表作弊检测」。
-          张望/不看屏幕等几何判断取决于视频源的安装位置（前上方/后上方/侧上方/正上方），请在「视频源」页配置。
+          可添加多个场景。每个场景可单独画检测区域，不画则使用整个画面。场景时段、置信度优先于任务。人员倒地请用目标检测。智能手表请在混合任务的融合场景里添加。
         </Typography>
       </Grid>
 
@@ -305,29 +304,27 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                   inputProps={{ step: 60 }}
                 />
               </Grid>
-              {PERSON_COUNT_TYPES.has(b.type) && (
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <RegionSelectionTool
-                      cameraId={cameraId}
-                      buttonLabel={b.detection_region?.points?.length ? '重新选择区域' : '选择检测区域'}
-                      existingRegion={{
-                        detection_region: b.detection_region,
-                        calibration: b.calibration,
-                      }}
-                      onSelect={(regionData) => patchBehavior(index, {
-                        detection_region: regionData.detection_region,
-                        calibration: regionData.calibration,
-                      })}
-                    />
-                    <Typography variant="body2" color={b.detection_region?.points?.length ? 'success.main' : 'text.secondary'}>
-                      {b.detection_region?.points?.length
-                        ? `已标注 ${b.detection_region.points.length} 个顶点`
-                        : '未标注区域（整帧有效）'}
-                    </Typography>
-                  </Box>
-                </Grid>
-              )}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <RegionSelectionTool
+                    cameraId={cameraId}
+                    buttonLabel={b.detection_region?.points?.length ? '重新选择区域' : '选择检测区域'}
+                    existingRegion={{
+                      detection_region: b.detection_region,
+                      calibration: b.calibration,
+                    }}
+                    onSelect={(regionData) => patchBehavior(index, {
+                      detection_region: regionData.detection_region,
+                      calibration: regionData.calibration,
+                    })}
+                  />
+                  <Typography variant="body2" color={b.detection_region?.points?.length ? 'success.main' : 'text.secondary'}>
+                    {b.detection_region?.points?.length
+                      ? `本场景已标注 ${b.detection_region.points.length} 个顶点`
+                      : '本场景未标注区域（整帧有效）'}
+                  </Typography>
+                </Box>
+              </Grid>
             </Grid>
           </Paper>
         </Grid>
