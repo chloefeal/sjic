@@ -90,7 +90,10 @@ def estimate_yaw_pitch(kps):
     ls, rs, nose = _kp(kps, L_SHOULDER), _kp(kps, R_SHOULDER), _kp(kps, NOSE)
     mid_x = (ls[0] + rs[0]) / 2.0
     mid_y = (ls[1] + rs[1]) / 2.0
-    sw = max(abs(rs[0] - ls[0]), 1.0)
+    sw = math.hypot(rs[0] - ls[0], rs[1] - ls[1])
+    # 肩线几乎叠在一起时，用水平间距会把角度放大到 ±90。
+    if sw < 8.0:
+        return None, None
     yaw = max(-90.0, min(90.0, ((nose[0] - mid_x) / sw) * 90.0))
     pitch = max(-90.0, min(90.0, ((nose[1] - mid_y) / sw) * 90.0))
     return yaw, pitch
