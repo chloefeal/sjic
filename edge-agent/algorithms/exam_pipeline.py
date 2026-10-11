@@ -13,20 +13,9 @@ import cv2
 from .base import BaseAlgorithm, effective_confidence
 from .detection_preview import offer_detection_preview
 from .object_detection import ObjectDetectionAlgorithm
-from .pose_behavior import (
-    POINTWISE_TYPES,
-    PoseBehaviorAlgorithm,
-    _eval_behavior,
-)
+from .pose_behavior import PoseBehaviorAlgorithm
 from .pose_geometry import normalize_mount_position, person_has_glasses
-from .rules import (
-    PERSON_COUNT_TYPES,
-    behavior_rois,
-    build_rules,
-    filter_persons_roi,
-    person_count_message,
-    person_count_specs,
-)
+from .rules import behavior_rois, build_rules, person_count_specs
 from runtime import create_runtime
 from utils.calc import get_letterbox_params, preprocess
 from utils.rtsp import FramePump, is_valid_frame
@@ -284,11 +273,11 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                         task_name, od_algorithm_id, on_alert, logger,
                     )
                 if pose_ok:
-                    self._eval_behaviors(
+                    pose_helper.evaluate_behaviors(
                         behaviors, persons, now, processed, view, task_confidence,
                         task_sched_start, task_sched_end, alert_threshold, task_name,
-                        pose_algorithm_id, state_since, last_alert, extra_state,
-                        pose_helper, person_rules, scene_rois, on_alert, logger,
+                        state_since, last_alert, extra_state, person_rules, scene_rois,
+                        on_alert, logger, algorithm_id=pose_algorithm_id,
                     )
                 if od_ok and pose_ok and fusions:
                     self._eval_fusions(
@@ -351,102 +340,6 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                 algorithm_id=algorithm_id,
             )
 
-    def _eval_behaviors(
-        self, behaviors, persons, now, processed, view, task_confidence,
-        task_sched_start, task_sched_end, alert_threshold, task_name,
-        algorithm_id, state_since, last_alert, extra_state,         pose_helper,
-        person_rules, scene_rois, on_alert, logger,
-    ):
-        for spec in behaviors:
-            bid = spec.get('id') or spec.get('type')
-            btype = spec.get('type')
-            if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
-                state_since[bid] = None
-                extra_state[bid] = {}
-                paused = person_rules.get(bid)
-                if paused is not None:
-                    paused._state_since = None
-                continue
-
-            scene_conf = effective_confidence(spec, task_confidence)
-            roi_polygon, roi_points = scene_rois.get(bid, (None, None))
-            persons_for_spec = filter_persons_roi(
-                [
-                    (box, kps) for box, kps in persons
-                    if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
-                ],
-                roi_polygon,
-            )
-            hit_person = None
-            message = None
-
-            if btype in PERSON_COUNT_TYPES:
-                rule = person_rules.get(bid)
-                if rule is None:
-                    continue
-                person_boxes = [box for box, _kps in persons_for_spec if box is not None]
-                hit = rule.evaluate(person_boxes, now, logger)
-                if not hit or not on_alert:
-                    continue
-                message = person_count_message(spec, btype, hit)
-                alert_frame = self.draw_alert_overlay(
-                    processed,
-                    boxes=hit['boxes'] or None,
-                    roi_points=rule.roi_points,
-                    caption=message,
-                )
-                logger.info(f"Triggering {spec.get('alert_type') or btype} for {task_name}")
-                on_alert(
-                    alert_type=spec.get('alert_type') or btype,
-                    confidence=hit['confidence'],
-                    image_frame=alert_frame,
-                    message=message,
-                    raw_frame=processed,
-                    algorithm_id=algorithm_id,
-                )
-                last_alert[bid] = now
-                continue
-
-            if btype == 'invigilator_absent':
-                ok, box, standing_n = pose_helper._eval_invigilator_absent(
-                    persons_for_spec, spec, extra_state[bid], now, view
-                )
-                if ok:
-                    hit_person = (box, None)
-                    message = (
-                        f"行为[{spec.get('name') or btype}] "
-                        f"站立仅 {standing_n} 人（需≥{spec.get('min_standing', 2)}）"
-                    )
-            elif btype in POINTWISE_TYPES:
-                seconds = float(spec.get('seconds', 3))
-                for box, kps in persons_for_spec:
-                    if kps is None:
-                        continue
-                    try:
-                        if _eval_behavior(btype, kps, box, spec, view):
-                            hit_person = (box, kps)
-                            break
-                    except Exception as e:
-                        logger.debug(f"behavior {btype} eval error: {e}")
-                if hit_person is None:
-                    state_since[bid] = None
-                    continue
-                if state_since[bid] is None:
-                    state_since[bid] = now
-                    continue
-                elapsed = (now - state_since[bid]).total_seconds()
-                if elapsed < seconds:
-                    continue
-                message = f"行为[{spec.get('name') or btype}] 持续 {elapsed:.1f}s"
-            else:
-                continue
-
-            self._emit_pose_alert(
-                spec, btype, bid, hit_person, message, persons_for_spec, processed,
-                now, alert_threshold, task_name, algorithm_id, last_alert, state_since,
-                on_alert, logger, roi_points=roi_points,
-            )
-
     def _eval_fusions(
         self, fusions, boxes, persons, now, processed, task_confidence,
         task_sched_start, task_sched_end, alert_threshold, task_name,
@@ -494,51 +387,8 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                     f"检出手表且手指点击达 {clicks} 次"
                 )
                 matched = persons_for_spec
-            self._emit_pose_alert(
+            pose_helper.emit_pose_alert(
                 spec, btype, bid, (box, kps), message, matched, processed,
                 now, alert_threshold, task_name, algorithm_id, last_alert, {},
                 on_alert, logger, extra_boxes=target_boxes,
             )
-
-    def _emit_pose_alert(
-        self, spec, btype, bid, hit_person, message, persons_for_spec, processed,
-        now, alert_threshold, task_name, algorithm_id, last_alert, state_since,
-        on_alert, logger, extra_boxes=None, roi_points=None,
-    ):
-        if hit_person is None or not on_alert:
-            return
-        la = last_alert.get(bid)
-        if la and (now - la).total_seconds() < alert_threshold:
-            return
-        box, kps = hit_person
-        if btype == 'invigilator_absent':
-            skeletons = [pk for _, pk in persons_for_spec if pk is not None]
-        elif kps is not None:
-            skeletons = [kps]
-        else:
-            skeletons = None
-        draw_boxes = []
-        if box is not None:
-            draw_boxes.append(box)
-        for extra in extra_boxes or []:
-            if extra is not box:
-                draw_boxes.append(extra)
-        alert_frame = self.draw_alert_overlay(
-            processed,
-            boxes=draw_boxes or None,
-            roi_points=roi_points,
-            caption=message or f"行为[{spec.get('name') or btype}]",
-            skeletons=skeletons,
-        )
-        logger.info(f"Triggering {spec.get('alert_type') or btype} for {task_name}")
-        on_alert(
-            alert_type=spec.get('alert_type') or btype,
-            confidence=float(getattr(box, 'confidence', 1.0) or 1.0) if box else 1.0,
-            image_frame=alert_frame,
-            message=message,
-            raw_frame=processed,
-            algorithm_id=algorithm_id,
-        )
-        last_alert[bid] = now
-        if btype not in ('smart_glasses', 'smart_watch', 'invigilator_absent') and bid in state_since:
-            state_since[bid] = now

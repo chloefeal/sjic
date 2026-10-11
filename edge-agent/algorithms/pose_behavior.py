@@ -180,6 +180,175 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         state['since'] = now
         return True, sample_box, standing_n
 
+    def evaluate_behaviors(
+        self, behaviors, persons, now, processed, view, task_confidence,
+        task_sched_start, task_sched_end, alert_threshold, task_name,
+        state_since, last_alert, extra_state, person_rules, scene_rois,
+        on_alert, logger, algorithm_id=None, pose_only=False,
+    ):
+        """
+        姿态场景判定，供姿态任务和混合任务共用。
+
+        按区域过滤后：人数场景交给计数规则；其余姿态取第一个命中的人计时，
+        达到持续时长后告警一次，再按整场冷却间隔抑制。
+        pose_only 时才处理单独姿态任务里的眼镜、并忽略跌倒和手表。
+        """
+        for spec in behaviors:
+            bid = spec.get('id') or spec.get('type')
+            btype = spec.get('type')
+            if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
+                state_since[bid] = None
+                extra_state[bid] = {}
+                paused = person_rules.get(bid)
+                if paused is not None:
+                    paused._state_since = None
+                continue
+
+            if pose_only and btype == 'fall':
+                if not extra_state[bid].get('warned'):
+                    logger.warning("人员倒地已改为目标检测场景，姿态任务中的跌倒行为已忽略")
+                    extra_state[bid]['warned'] = True
+                continue
+            if pose_only and btype == 'smart_watch':
+                if not extra_state[bid].get('warned'):
+                    logger.warning("智能手表作弊检测是融合场景，请在混合任务里配置手表类别")
+                    extra_state[bid]['warned'] = True
+                continue
+
+            scene_conf = effective_confidence(spec, task_confidence)
+            roi_polygon, roi_points = scene_rois.get(bid, (None, None))
+            persons_for_spec = filter_persons_roi(
+                [
+                    (box, kps) for box, kps in persons
+                    if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
+                ],
+                roi_polygon,
+            )
+            hit_person = None
+            message = None
+
+            if pose_only and btype == 'smart_glasses':
+                ok, box, kps = self._eval_smart_glasses(
+                    persons_for_spec, spec, extra_state[bid], now
+                )
+                if ok:
+                    hit_person = (box, kps)
+                    message = (
+                        f"行为[{spec.get('name') or btype}] "
+                        f"镜脚触碰达 {spec.get('min_touches', 3)} 次"
+                    )
+            elif btype == 'invigilator_absent':
+                ok, box, standing_n = self._eval_invigilator_absent(
+                    persons_for_spec, spec, extra_state[bid], now, view
+                )
+                if ok:
+                    hit_person = (box, None)
+                    message = (
+                        f"行为[{spec.get('name') or btype}] "
+                        f"站立仅 {standing_n} 人（需≥{spec.get('min_standing', 2)}）"
+                    )
+            elif btype in PERSON_COUNT_TYPES:
+                rule = person_rules.get(bid)
+                if rule is None:
+                    continue
+                person_boxes = [box for box, _kps in persons_for_spec if box is not None]
+                hit = rule.evaluate(person_boxes, now, logger)
+                if not hit:
+                    continue
+                message = person_count_message(spec, btype, hit)
+                alert_frame = self.draw_alert_overlay(
+                    processed,
+                    boxes=hit['boxes'] or None,
+                    roi_points=rule.roi_points,
+                    caption=message,
+                )
+                logger.info(f"Triggering {spec.get('alert_type') or btype} for {task_name}")
+                if on_alert:
+                    on_alert(
+                        alert_type=spec.get('alert_type') or btype,
+                        confidence=hit['confidence'],
+                        image_frame=alert_frame,
+                        message=message,
+                        raw_frame=processed,
+                        algorithm_id=algorithm_id,
+                    )
+                last_alert[bid] = now
+                continue
+            elif btype in POINTWISE_TYPES:
+                seconds = float(spec.get('seconds', 3))
+                for box, kps in persons_for_spec:
+                    if kps is None:
+                        continue
+                    try:
+                        if _eval_behavior(btype, kps, box, spec, view):
+                            hit_person = (box, kps)
+                            break
+                    except Exception as e:
+                        logger.debug(f"behavior {btype} eval error: {e}")
+                if hit_person is None:
+                    state_since[bid] = None
+                    continue
+                if state_since[bid] is None:
+                    state_since[bid] = now
+                    continue
+                elapsed = (now - state_since[bid]).total_seconds()
+                if elapsed < seconds:
+                    continue
+                message = f"行为[{spec.get('name') or btype}] 持续 {elapsed:.1f}s"
+            else:
+                continue
+
+            self.emit_pose_alert(
+                spec, btype, bid, hit_person, message, persons_for_spec, processed,
+                now, alert_threshold, task_name, algorithm_id, last_alert, state_since,
+                on_alert, logger, roi_points=roi_points,
+            )
+
+    def emit_pose_alert(
+        self, spec, btype, bid, hit_person, message, persons_for_spec, processed,
+        now, alert_threshold, task_name, algorithm_id, last_alert, state_since,
+        on_alert, logger, extra_boxes=None, roi_points=None,
+    ):
+        """命中后按整场冷却画框并告警。点状行为告警后重新计时，有状态场景不重置。"""
+        if hit_person is None:
+            return
+        la = last_alert.get(bid)
+        if la and (now - la).total_seconds() < alert_threshold:
+            return
+        box, kps = hit_person
+        if btype == 'invigilator_absent':
+            skeletons = [pk for _, pk in persons_for_spec if pk is not None]
+        elif kps is not None:
+            skeletons = [kps]
+        else:
+            skeletons = None
+        draw_boxes = []
+        if box is not None:
+            draw_boxes.append(box)
+        for extra in extra_boxes or []:
+            if extra is not box:
+                draw_boxes.append(extra)
+        alert_frame = self.draw_alert_overlay(
+            processed,
+            boxes=draw_boxes or None,
+            roi_points=roi_points,
+            caption=message or f"行为[{spec.get('name') or btype}]",
+            skeletons=skeletons,
+        )
+        logger.info(f"Triggering {spec.get('alert_type') or btype} for {task_name}")
+        if on_alert:
+            on_alert(
+                alert_type=spec.get('alert_type') or btype,
+                confidence=float(getattr(box, 'confidence', 1.0) or 1.0) if box else 1.0,
+                image_frame=alert_frame,
+                message=message,
+                raw_frame=processed,
+                algorithm_id=algorithm_id,
+            )
+        last_alert[bid] = now
+        if btype not in STATEFUL_BEHAVIORS and bid in state_since:
+            state_since[bid] = now
+
     def process(self, camera_stream, config_dict, logger, stop_event, on_alert, runtime):
         try:
             parameters = config_dict.get('parameters', {})
@@ -305,146 +474,12 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                         infer_ms=infer_ms,
                     )
                     now = datetime.now()
-
-                    for spec in behaviors:
-                        bid = spec.get('id') or spec.get('type')
-                        btype = spec.get('type')
-                        if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
-                            state_since[bid] = None
-                            extra_state[bid] = {}
-                            paused = count_rules.get(bid)
-                            if paused is not None:
-                                paused._state_since = None
-                            continue
-
-                        alert_type = spec.get('alert_type') or btype
-                        hit_person = None
-                        message = None
-
-                        if btype == 'fall':
-                            if not extra_state[bid].get('warned'):
-                                logger.warning("人员倒地已改为目标检测场景，姿态任务中的跌倒行为已忽略")
-                                extra_state[bid]['warned'] = True
-                            continue
-                        if btype == 'smart_watch':
-                            if not extra_state[bid].get('warned'):
-                                logger.warning("智能手表作弊检测是融合场景，请在混合任务里配置手表类别")
-                                extra_state[bid]['warned'] = True
-                            continue
-
-                        scene_conf = effective_confidence(spec, task_confidence)
-                        roi_polygon, roi_points = scene_rois.get(bid, (None, None))
-                        persons_for_spec = filter_persons_roi(
-                            [
-                                (box, kps) for box, kps in persons
-                                if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
-                            ],
-                            roi_polygon,
-                        )
-
-                        if btype == 'smart_glasses':
-                            ok, box, kps = self._eval_smart_glasses(
-                                persons_for_spec, spec, extra_state[bid], now
-                            )
-                            if ok:
-                                hit_person = (box, kps)
-                                message = (
-                                    f"行为[{spec.get('name') or btype}] "
-                                    f"镜脚触碰达 {spec.get('min_touches', 3)} 次"
-                                )
-                        elif btype == 'invigilator_absent':
-                            ok, box, standing_n = self._eval_invigilator_absent(
-                                persons_for_spec, spec, extra_state[bid], now, view
-                            )
-                            if ok:
-                                hit_person = (box, None)
-                                message = (
-                                    f"行为[{spec.get('name') or btype}] "
-                                    f"站立仅 {standing_n} 人（需≥{spec.get('min_standing', 2)}）"
-                                )
-                        elif btype in PERSON_COUNT_TYPES:
-                            rule = count_rules.get(bid)
-                            if rule is None:
-                                continue
-                            person_boxes = [
-                                box for box, _kps in persons_for_spec if box is not None
-                            ]
-                            hit = rule.evaluate(person_boxes, now, logger)
-                            if not hit:
-                                continue
-                            message = person_count_message(spec, btype, hit)
-                            alert_frame = self.draw_alert_overlay(
-                                processed,
-                                boxes=hit['boxes'] or None,
-                                roi_points=rule.roi_points,
-                                caption=message,
-                            )
-                            logger.info(f"Triggering {alert_type} for {task_name}")
-                            if on_alert:
-                                on_alert(
-                                    alert_type=alert_type,
-                                    confidence=hit['confidence'],
-                                    image_frame=alert_frame,
-                                    message=message,
-                                    raw_frame=processed,
-                                )
-                            last_alert[bid] = now
-                            continue
-                        elif btype in POINTWISE_TYPES:
-                            seconds = float(spec.get('seconds', 3))
-                            for box, kps in persons_for_spec:
-                                if kps is None:
-                                    continue
-                                try:
-                                    if _eval_behavior(btype, kps, box, spec, view):
-                                        hit_person = (box, kps)
-                                        break
-                                except Exception as e:
-                                    logger.debug(f"behavior {btype} eval error: {e}")
-
-                            if hit_person is None:
-                                state_since[bid] = None
-                                continue
-                            if state_since[bid] is None:
-                                state_since[bid] = now
-                                continue
-                            elapsed = (now - state_since[bid]).total_seconds()
-                            if elapsed < seconds:
-                                continue
-                            message = f"行为[{spec.get('name') or btype}] 持续 {elapsed:.1f}s"
-
-                        if hit_person is None:
-                            continue
-                        la = last_alert[bid]
-                        if la and (now - la).total_seconds() < alert_threshold:
-                            continue
-
-                        box, kps = hit_person
-                        if btype == 'invigilator_absent':
-                            skeletons = [pk for _, pk in persons_for_spec if pk is not None]
-                        elif kps is not None:
-                            skeletons = [kps]
-                        else:
-                            skeletons = None
-                        alert_frame = self.draw_alert_overlay(
-                            processed,
-                            boxes=[box] if box is not None else None,
-                            roi_points=roi_points,
-                            caption=message or f"行为[{spec.get('name') or btype}]",
-                            skeletons=skeletons,
-                        )
-                        logger.info(f"Triggering {alert_type} for {task_name}")
-                        if on_alert:
-                            on_alert(
-                                alert_type=alert_type,
-                                confidence=float(getattr(box, 'confidence', 1.0) or 1.0) if box else 1.0,
-                                image_frame=alert_frame,
-                                message=message,
-                                raw_frame=processed,
-                            )
-                        last_alert[bid] = now
-                        if btype not in STATEFUL_BEHAVIORS:
-                            state_since[bid] = now
+                    self.evaluate_behaviors(
+                        behaviors, persons, now, processed, view, task_confidence,
+                        task_sched_start, task_sched_end, alert_threshold, task_name,
+                        state_since, last_alert, extra_state, count_rules, scene_rois,
+                        on_alert, logger, pose_only=True,
+                    )
             finally:
                 pump.release()
         except Exception as e:
