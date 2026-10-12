@@ -19,6 +19,7 @@ import License from './pages/License';
 import Nodes from './pages/Nodes';
 import OperationLogs from './pages/OperationLogs';
 import ClickHotspots from './pages/ClickHotspots';
+import ImageTest from './pages/ImageTest';
 
 function App() {
   const isSuperAdmin = localStorage.getItem('user_role') === 'vendor';
@@ -62,6 +63,13 @@ function App() {
             <PrivateRoute>
               <Layout>
                 <VideoStreams />
+              </Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/image-test" element={
+            <PrivateRoute>
+              <Layout>
+                <ImageTest />
               </Layout>
             </PrivateRoute>
           } />

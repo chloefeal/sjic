@@ -349,6 +349,31 @@ def mjpeg_stream(camera_id):
             'Content-Type': 'multipart/x-mixed-replace; boundary=frame'
         }
 
+        if isinstance(rtsp_url, str) and rtsp_url.startswith('image-set:'):
+            from app.services.image_set import ImageSetError, current_jpeg, parse_set_id
+            try:
+                set_id = parse_set_id(rtsp_url)
+            except ImageSetError as exc:
+                return jsonify({'error': str(exc)}), exc.status
+
+            def generate_still():
+                while True:
+                    try:
+                        jpeg = current_jpeg(set_id, max_width=640)
+                    except Exception as exc:
+                        current_app.logger.warning(f"image-set preview failed: {exc}")
+                        jpeg = None
+                    if jpeg:
+                        try:
+                            yield (b'--frame\r\n'
+                                   b'Content-Type: image/jpeg\r\n\r\n' +
+                                   jpeg + b'\r\n')
+                        except (GeneratorExit, ConnectionResetError):
+                            return
+                    time.sleep(0.2)
+
+            return Response(stream_with_context(generate_still()), headers=headers)
+
         def generate_frames():
             # 打开视频流
             cap = cv2.VideoCapture(rtsp_url)

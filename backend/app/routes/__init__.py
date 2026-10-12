@@ -22,6 +22,7 @@ from app.routes.dashboard_routes import dashboard_bp
 from app.routes.admin_routes import admin_bp
 from app.routes.analytics_routes import analytics_bp
 from app.routes.upgrade_routes import upgrade_bp
+from app.routes.image_set_routes import image_set_bp
 
 
 def register_blueprints(app):
@@ -44,6 +45,7 @@ def register_blueprints(app):
     app.register_blueprint(admin_bp)
     app.register_blueprint(analytics_bp)
     app.register_blueprint(upgrade_bp)
+    app.register_blueprint(image_set_bp)
 
     # 在应用启动时创建错误图像
     create_error_image()

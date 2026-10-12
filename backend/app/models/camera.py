@@ -48,6 +48,10 @@ class Camera(db.Model):
     def get_rtsp_url(self):
         file = str(self.url).strip()
         current_app.logger.info(f"Camera Source: {file}")
+
+        # 无斜杠，必须写在「当成 videos 目录文件名」之前，否则会被拼成本地路径。
+        if file.startswith('image-set:'):
+            return file
         
         if any(file.startswith(p) for p in ['rtsp://', 'rtmp://', 'http://', 'https://']):
             return file

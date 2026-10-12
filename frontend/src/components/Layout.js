@@ -8,7 +8,7 @@ import {
 import { alpha } from '@mui/material/styles';
 import {
   Videocam, ModelTraining, Settings, Build, NotificationsActive, Task, Code, Logout, Computer,
-  Dashboard as DashboardIcon, VpnKey, History, TouchApp, Lock
+  Dashboard as DashboardIcon, VpnKey, History, TouchApp, Lock, PhotoLibrary
 } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
 import { clearLocalSession, isUserIdle, markUserActivity } from '../utils/idleLogout';
@@ -20,6 +20,7 @@ const menuItems = [
   { text: '运行概览', icon: <DashboardIcon />, path: '/dashboard' },
   { text: '节点', icon: <Computer />, path: '/nodes' },
   { text: '视频源', icon: <Videocam />, path: '/streams' },
+  { text: '图片测试', icon: <PhotoLibrary />, path: '/image-test' },
   { text: '模型管理', icon: <ModelTraining />, path: '/models', role: 'vendor' },
   { text: '算法清单', icon: <Code />, path: '/algorithms' },
   { text: '任务', icon: <Task />, path: '/tasks' },
