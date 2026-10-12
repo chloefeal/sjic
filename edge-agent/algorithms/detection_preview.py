@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from .base import _POSE_EDGES, _load_cjk_font, _pose_points
+from .pose_geometry import keypoint_debug_rows
 
 logger = logging.getLogger('algorithms.preview')
 
@@ -92,6 +93,7 @@ def offer_detection_preview(
     infer_ms=None,
     object_error=False,
     pose_error=False,
+    scenes=None,
     _sink=None,
 ):
     """推理线程里调用。未开预览或距上次不足间隔时直接返回。"""
@@ -101,7 +103,7 @@ def offer_detection_preview(
             boxes=boxes, persons=persons,
             object_threshold=object_threshold, pose_threshold=pose_threshold,
             infer_ms=infer_ms, object_error=object_error, pose_error=pose_error,
-            _sink=_sink,
+            scenes=scenes, _sink=_sink,
         )
     except Exception as exc:
         _warn_upload(exc)
@@ -120,6 +122,7 @@ def _offer_detection_preview(
     infer_ms=None,
     object_error=False,
     pose_error=False,
+    scenes=None,
     _sink=None,
 ):
     task_key = _task_key(task_id)
@@ -150,6 +153,7 @@ def _offer_detection_preview(
         infer_ms=infer_ms,
         object_error=object_error,
         pose_error=pose_error,
+        scenes=scenes,
     )
     if vis is None:
         return
@@ -172,6 +176,7 @@ def compose_preview(
     infer_ms=None,
     object_error=False,
     pose_error=False,
+    scenes=None,
     draw_limit=_DRAW_LIMIT,
 ):
     """返回 (画好的 BGR 图, 统计)。boxes/persons 为 None 表示这一路本帧没跑。"""
@@ -216,6 +221,8 @@ def compose_preview(
                 f"人体 {pose_stats['count']} / 阈值 {_fmt_threshold(pose_threshold)} / 骨骼 {pose_stats['with_skeleton']}"
             )
 
+    if scenes:
+        stats['scenes'] = list(scenes)[:12]
     if captions:
         labels.insert(0, (8, 8, '  '.join(captions), (255, 255, 255)))
     _paint_labels(vis, labels)
@@ -258,6 +265,7 @@ def _draw_pose(vis, persons, threshold, failed, draw_limit):
         'with_skeleton': 0 if failed else len(usable),
         'shown': 0 if failed else min(len(ranked), draw_limit),
         'max_confidence': 0 if not confs else round(max(confs), 4),
+        'people': [] if failed else _people_debug(ranked[:min(3, draw_limit)]),
     }
     if failed:
         return stats, []
@@ -276,6 +284,20 @@ def _draw_pose(vis, persons, threshold, failed, draw_limit):
             labels.append((anchor[0], anchor[1], f"人 {_box_conf(box):.2f}", (0, 140, 255)))
     _draw_skeletons(vis, skeletons)
     return stats, labels
+
+
+def _people_debug(ranked):
+    people = []
+    for box, kps in ranked:
+        points = keypoint_debug_rows(kps)
+        missing = [item['name'] for item in points if not item.get('ok')]
+        people.append({
+            'confidence': round(_box_conf(box), 2),
+            'usable': len(points) - len(missing),
+            'missing': missing,
+            'points': points,
+        })
+    return people
 
 
 def _draw_skeletons(vis, skeletons):

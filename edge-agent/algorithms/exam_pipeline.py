@@ -254,19 +254,8 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                     fps_window_t = last_log
                     fps_window_n = 0
 
-                offer_detection_preview(
-                    config_dict.get('task_id'),
-                    processed,
-                    boxes=boxes if need_od and od_ok else None,
-                    persons=persons if need_pose and pose_ok else None,
-                    object_threshold=od_confidence if need_od else None,
-                    pose_threshold=pose_confidence if need_pose else None,
-                    infer_ms=infer_ms,
-                    object_error=need_od and not od_ok,
-                    pose_error=need_pose and not pose_ok,
-                )
-
                 now = datetime.now()
+                scenes = []
                 if od_ok:
                     self._eval_rules(
                         rules, boxes, now, processed, task_sched_start, task_sched_end,
@@ -279,6 +268,15 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                         state_since, last_alert, extra_state, person_rules, scene_rois,
                         on_alert, logger, algorithm_id=pose_algorithm_id,
                     )
+                    try:
+                        scenes = pose_helper.preview_debug(
+                            list(behaviors or []) + list(fusions or []),
+                            persons, now, view, task_confidence,
+                            task_sched_start, task_sched_end, scene_rois, boxes=boxes,
+                        )
+                    except Exception as e:
+                        logger.debug(f"preview debug skipped: {e}")
+                        scenes = []
                 if od_ok and pose_ok and fusions:
                     self._eval_fusions(
                         fusions, boxes, persons, now, processed, task_confidence,
@@ -286,6 +284,18 @@ class ExamPipelineAlgorithm(BaseAlgorithm):
                         pose_algorithm_id or od_algorithm_id, last_alert, extra_state,
                         pose_helper, on_alert, logger,
                     )
+                offer_detection_preview(
+                    config_dict.get('task_id'),
+                    processed,
+                    boxes=boxes if need_od and od_ok else None,
+                    persons=persons if need_pose and pose_ok else None,
+                    object_threshold=od_confidence if need_od else None,
+                    pose_threshold=pose_confidence if need_pose else None,
+                    infer_ms=infer_ms,
+                    object_error=need_od and not od_ok,
+                    pose_error=need_pose and not pose_ok,
+                    scenes=scenes,
+                )
         except Exception as e:
             logger.error(f"Error in exam_pipeline: {str(e)}", exc_info=True)
             raise

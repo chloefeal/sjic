@@ -70,6 +70,12 @@ class TestComposePreview(unittest.TestCase):
         self.assertEqual(stats['pose']['count'], 2)
         self.assertEqual(stats['pose']['with_skeleton'], 1)
         self.assertTrue(stats['pose']['ok'])
+        person = stats['pose']['people'][0]
+        self.assertEqual(len(person['points']), 17)
+        self.assertTrue(person['points'][5]['ok'])
+        self.assertEqual(person['points'][5]['name'], '左肩')
+        self.assertIn('鼻', person['missing'])
+        self.assertEqual(stats['pose']['people'][1]['usable'], 0)
 
     def test_infer_error_does_not_draw_stale_boxes(self):
         frame = np.zeros((40, 40, 3), dtype=np.uint8)

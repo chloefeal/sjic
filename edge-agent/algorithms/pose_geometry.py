@@ -511,3 +511,269 @@ def is_finger_point(kps, require_standing=True, view=DEFAULT_MOUNT_POSITION):
             if _kp(kps, wrist)[1] < _kp(kps, elbow)[1] - 15:
                 return True
     return False
+
+
+KP_DEBUG_NAMES = (
+    '鼻', '左眼', '右眼', '左耳', '右耳',
+    '左肩', '右肩', '左肘', '右肘', '左腕', '右腕',
+    '左髋', '右髋', '左膝', '右膝', '左踝', '右踝',
+)
+
+
+def keypoint_debug_rows(kps, min_conf=0.25):
+    """17 点的坐标和是否达到几何判断用的置信度。不改判定。"""
+    rows = []
+    for index, name in enumerate(KP_DEBUG_NAMES):
+        item = {'i': index, 'name': name, 'ok': False}
+        if kps is None or index >= len(kps):
+            rows.append(item)
+            continue
+        try:
+            x = float(kps[index][0])
+            y = float(kps[index][1])
+            conf = float(kps[index][2]) if len(kps[index]) > 2 else 1.0
+        except (TypeError, ValueError, IndexError):
+            rows.append(item)
+            continue
+        item['x'] = round(x, 1)
+        item['y'] = round(y, 1)
+        item['c'] = round(conf, 2)
+        item['ok'] = bool(conf >= min_conf and x > 0 and y > 0)
+        rows.append(item)
+    return rows
+
+
+def _missing_names(kps, indexes, min_conf=0.25):
+    names = []
+    for index in indexes:
+        if not _kp_ok(kps, index, min_conf):
+            names.append(KP_DEBUG_NAMES[index])
+    return names
+
+
+def explain_scene(btype, kps, box, spec, view):
+    """本帧几何结论。hit 与正式判断同一函数，reason 说明缺点和数值。"""
+    spec = spec or {}
+    view = normalize_mount_position(view)
+    if btype == 'look_aside':
+        return _explain_look_aside(kps, spec.get('yaw_degrees', 45), view)
+    if btype == 'head_down':
+        return _explain_head_down(kps, spec.get('pitch_degrees', 30), view)
+    if btype == 'gaze_away':
+        return _explain_gaze_away(kps, spec.get('yaw_degrees', 25), view)
+    if btype == 'cover_mouth':
+        return _explain_cover_mouth(kps, view)
+    if btype == 'finger_point':
+        return _explain_finger_point(kps, bool(spec.get('require_standing', True)), view)
+    if btype == 'desk_stand':
+        return _explain_desk_stand(box, spec)
+    if btype == 'smart_glasses':
+        return _explain_glasses_pose(kps, spec)
+    if btype == 'smart_watch':
+        return _explain_watch_pose(kps, spec)
+    return False, '预览没有这条场景的几何说明'
+
+
+def _explain_look_aside(kps, yaw_degrees, view):
+    hit = is_looking_aside(kps, yaw_degrees, view)
+    if kps is None:
+        return hit, '没有关键点'
+    yaw_ref = max(float(yaw_degrees or 45), 1.0)
+    scale = yaw_ref / 45.0
+    if view == 'front_top':
+        yaw, _pitch = estimate_yaw_pitch(kps)
+        if yaw is None:
+            missing = _missing_names(kps, (NOSE, L_SHOULDER, R_SHOULDER))
+            return hit, '转头角算不出来，缺 ' + '、'.join(missing or ['鼻或双肩'])
+        face = face_visible(kps)
+        return hit, (
+            f"转头角 {yaw:.1f}°，阈值 {yaw_ref:.0f}°；"
+            f"耳不对称 {ear_asymmetry(kps):.2f}（要 ≥ {0.55 * scale:.2f}）；"
+            f"正脸{'可见' if face else '不可见'}"
+        )
+    if view == 'back_top':
+        if face_visible(kps):
+            return hit, '鼻和至少一只眼清楚，后上方把这当成面向屏幕，不算张望'
+        along, _perp = _head_axis_ratios(kps)
+        if along is None:
+            missing = _missing_names(kps, (L_SHOULDER, R_SHOULDER, NOSE, L_EYE, R_EYE, L_EAR, R_EAR))
+            return hit, '沿肩偏移算不出来，缺 ' + '、'.join(missing[:4] or ['双肩或头部点'])
+        asym = ear_asymmetry(kps)
+        return hit, (
+            f"沿肩偏移 {along:.2f}（{0.28 * scale:.2f} 起算，{0.42 * scale:.2f} 单独即可）；"
+            f"耳不对称 {asym:.2f}，左耳 {_conf(kps, L_EAR):.2f} 右耳 {_conf(kps, R_EAR):.2f}"
+        )
+    if view == 'side_top':
+        both = _kp_ok(kps, L_EYE, 0.35) and _kp_ok(kps, R_EYE, 0.35)
+        if both:
+            return hit, '两只眼都清楚，侧上方视为转到正面'
+        missing = _missing_names(kps, (NOSE, L_EYE, R_EYE, L_EAR, R_EAR), 0.3)
+        return hit, '侧脸条件未同时满足。相关点：' + ('、'.join(missing) if missing else '耳或脸点置信度不够')
+    along, perp = _head_axis_ratios(kps)
+    if along is None or perp is None:
+        return hit, '正上方需要双肩和头部点，沿肩/垂直偏移算不出来'
+    return hit, (
+        f"沿肩 {along:.2f}，垂直 {perp:.2f}；"
+        f"要 |沿肩| ≥ {0.28 * scale:.2f} 且不小于垂直方向的 0.85 倍"
+    )
+
+
+def _explain_head_down(kps, pitch_degrees, view):
+    hit = is_head_down(kps, pitch_degrees, view)
+    if kps is None:
+        return hit, '没有关键点'
+    pitch_ref = float(pitch_degrees or 30)
+    if view == 'front_top':
+        _yaw, pitch = estimate_yaw_pitch(kps)
+        if pitch is None:
+            missing = _missing_names(kps, (NOSE, L_SHOULDER, R_SHOULDER))
+            return hit, '低头角算不出来，缺 ' + '、'.join(missing or ['鼻或双肩'])
+        return hit, f"低头角 {pitch:.1f}°，阈值 {pitch_ref + 28:.0f}°"
+    if view == 'side_top':
+        if not (_kp_ok(kps, NOSE) and (_kp_ok(kps, L_EAR) or _kp_ok(kps, R_EAR))):
+            missing = _missing_names(kps, (NOSE, L_EAR, R_EAR))
+            return hit, '缺 ' + '、'.join(missing or ['鼻或耳'])
+        nose_y = _kp(kps, NOSE)[1]
+        ear_ys = [_kp(kps, i)[1] for i in (L_EAR, R_EAR) if _kp_ok(kps, i)]
+        drop = (nose_y - (sum(ear_ys) / len(ear_ys))) / _scale(kps)
+        gate = 0.22 + pitch_ref / 200.0
+        return hit, f"鼻相对耳下移 {drop:.2f}，阈值 {gate:.2f}"
+    neck = _neck_ratio(kps)
+    head_hip = _head_hip_ratio(kps)
+    parts = []
+    if neck is None:
+        parts.append('颈长比算不出来（缺头或双肩）')
+    else:
+        parts.append(f"颈长比 {neck:.2f}（< 0.16 算埋头）")
+    if head_hip is None:
+        parts.append('头髋比算不出来（缺头或双髋）')
+    else:
+        parts.append(f"头髋比 {head_hip:.2f}（< 0.55 算埋头）")
+    return hit, '；'.join(parts)
+
+
+def _explain_head_up(kps, view):
+    hit = is_head_up(kps, view)
+    if kps is None:
+        return hit, '没有关键点'
+    if view == 'front_top':
+        _yaw, pitch = estimate_yaw_pitch(kps)
+        if pitch is None:
+            return hit, '抬头角算不出来，缺鼻或双肩'
+        return hit, f"俯仰 {pitch:.1f}°，≤ -15° 算抬头"
+    if view == 'side_top':
+        if not (_kp_ok(kps, NOSE) and (_kp_ok(kps, L_EAR) or _kp_ok(kps, R_EAR))):
+            return hit, '缺鼻或耳，侧上方无法比高低'
+        return hit, '鼻相对耳的高度没有达到抬头'
+    if not face_visible(kps):
+        return hit, '正脸不可见（要鼻置信度 ≥ 0.4 且至少一只眼 ≥ 0.35），俯视下不算抬头'
+    if not (_kp_ok(kps, NOSE) and _kp_ok(kps, L_SHOULDER) and _kp_ok(kps, R_SHOULDER)):
+        return hit, '缺鼻或双肩'
+    nose_y = _kp(kps, NOSE)[1]
+    shoulder_y = (_kp(kps, L_SHOULDER)[1] + _kp(kps, R_SHOULDER)[1]) / 2.0
+    gap = (shoulder_y - nose_y) / _scale(kps)
+    return hit, f"鼻高于肩 {gap:.2f} 个肩宽，阈值 0.22"
+
+
+def _explain_gaze_away(kps, yaw_degrees, view):
+    hit = is_gaze_away(kps, yaw_degrees, view=view)
+    _aside_hit, aside = _explain_look_aside(kps, yaw_degrees, view)
+    _up_hit, up = _explain_head_up(kps, view)
+    return hit, f"张望或抬头才算。张望：{aside}。抬头：{up}"
+
+
+def _explain_cover_mouth(kps, view):
+    hit = is_cover_mouth(kps, view)
+    if kps is None:
+        return hit, '没有关键点'
+    anchor = head_center(kps) if view in ('back_top', 'top') else None
+    anchor_name = '头部'
+    if anchor is None and _kp_ok(kps, NOSE):
+        anchor = _kp(kps, NOSE)
+        anchor_name = '鼻'
+    if anchor is None:
+        missing = _missing_names(kps, (NOSE, L_EYE, R_EYE, L_EAR, R_EAR))
+        return hit, '没有可用的头或鼻子，缺 ' + '、'.join(missing or ['头部点'])
+    sw = _scale(kps)
+    gate = 0.40 if view in ('back_top', 'top') else 0.42
+    parts = []
+    for index, name in ((L_WRIST, '左腕'), (R_WRIST, '右腕')):
+        if not _kp_ok(kps, index):
+            parts.append(f"{name}不可用")
+            continue
+        wx, wy = _kp(kps, index)
+        dist = math.hypot(wx - anchor[0], wy - anchor[1]) / sw
+        parts.append(f"{name}距{anchor_name} {dist:.2f}")
+    return hit, f"阈值 {gate:.2f} 个肩宽。" + '，'.join(parts)
+
+
+def _explain_finger_point(kps, require_standing, view):
+    hit = is_finger_point(kps, require_standing, view)
+    if kps is None:
+        return hit, '没有关键点'
+    parts = []
+    if require_standing:
+        standing = is_standing(kps, None, view)
+        if _kp_ok(kps, L_HIP) and _kp_ok(kps, L_ANKLE):
+            standing = _kp(kps, L_ANKLE)[1] > _kp(kps, L_HIP)[1] + 20
+        if not (_kp_ok(kps, L_HIP) and _kp_ok(kps, L_ANKLE)) and not (_kp_ok(kps, R_HIP) and _kp_ok(kps, R_ANKLE)):
+            parts.append('髋或踝不可用，站立只能看人框，这里要求脚踝低于髋')
+        elif not standing:
+            parts.append('脚踝没有低于髋，未判站立')
+        else:
+            parts.append('已判站立')
+    arms = []
+    for elbow, wrist, name in ((L_ELBOW, L_WRIST, '左'), (R_ELBOW, R_WRIST, '右')):
+        if not (_kp_ok(kps, elbow) and _kp_ok(kps, wrist)):
+            arms.append(f"{name}肘或{name}腕不可用")
+            continue
+        delta = _kp(kps, elbow)[1] - _kp(kps, wrist)[1]
+        arms.append(f"{name}腕高于{name}肘 {delta:.0f}px（要 > 15）")
+    parts.extend(arms)
+    return hit, '；'.join(parts)
+
+
+def _explain_desk_stand(box, spec):
+    ratio = box_height_width_ratio(box)
+    try:
+        gate = float((spec or {}).get('min_height_width', 1.6))
+    except (TypeError, ValueError):
+        gate = 1.6
+    if gate <= 0:
+        gate = 1.6
+    hit = is_standing_by_box(box, gate)
+    if ratio is None:
+        return hit, '没有人框，高宽比算不出来'
+    return hit, f"人框高/宽 {ratio:.2f}，站立阈值 {gate:.2f}。坐姿的脚踝也会在髋下，这条不看脚踝"
+
+
+def _explain_glasses_pose(kps, spec):
+    try:
+        ratio = float((spec or {}).get('ear_dist_ratio', 0.28))
+    except (TypeError, ValueError):
+        ratio = 0.28
+    hit = kps is not None and is_wrist_near_ear(kps, ratio)
+    if kps is None:
+        return False, '没有关键点'
+    if not (_kp_ok(kps, L_EAR) or _kp_ok(kps, R_EAR)):
+        return hit, '两耳都不可用，无法判断手腕是否靠近耳朵'
+    parts = []
+    for index, name in ((L_WRIST, '左腕'), (R_WRIST, '右腕')):
+        if not _kp_ok(kps, index):
+            parts.append(f"{name}不可用")
+    if not parts:
+        parts.append('双腕都有')
+    return hit, f"镜脚触碰看手腕到耳的距离，阈值 {ratio:.2f} 个肩宽。" + '，'.join(parts)
+
+
+def _explain_watch_pose(kps, spec):
+    if kps is None:
+        return False, '没有关键点'
+    missing = _missing_names(kps, (L_WRIST, R_WRIST))
+    if missing:
+        return False, '点击手表需要双手腕，缺 ' + '、'.join(missing)
+    try:
+        ratio = float((spec or {}).get('watch_dist_ratio', 0.50))
+    except (TypeError, ValueError):
+        ratio = 0.50
+    return False, f"双手腕都有。还要有手表检测框，另一只手腕进入表附近（{ratio:.2f} 个肩宽）才算点击"

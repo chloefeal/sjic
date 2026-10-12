@@ -25,6 +25,7 @@ from .pose_geometry import (
     _kp,
     _midpoint,
     accumulate_rising_count,
+    explain_scene,
     is_cover_mouth,
     is_finger_click_watch,
     is_finger_point,
@@ -35,6 +36,7 @@ from .pose_geometry import (
     is_standing_by_box,
     is_wrist_near_ear,
     normalize_mount_position,
+    person_has_glasses,
 )
 from .rules import (
     PERSON_COUNT_TYPES,
@@ -143,6 +145,58 @@ def _match_gate(track_scale, track_shoulder, det_scale, det_shoulder):
     if not scales:
         return 1.0
     return _BOX_GATE * max(scales)
+
+
+def _preview_seconds(spec, btype):
+    if btype in POINTWISE_TYPES:
+        return _positive_float(spec, 'seconds', 3)
+    if btype == 'desk_stand':
+        return _positive_float(spec, 'seconds', 10)
+    if btype == 'invigilator_absent':
+        return _positive_float(spec, 'seconds', 120)
+    if btype in ('smart_glasses', 'smart_watch'):
+        return _positive_float(spec, 'seconds', 30)
+    return None
+
+
+def _preview_class_boxes(boxes, spec, min_confidence):
+    wanted = set()
+    for raw in (spec or {}).get('class_ids') or []:
+        try:
+            wanted.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not wanted:
+        return []
+    matched = []
+    for box in boxes or []:
+        try:
+            if int(getattr(box, 'class_id', -1)) not in wanted:
+                continue
+            if float(getattr(box, 'confidence', 0) or 0) < float(min_confidence):
+                continue
+        except (TypeError, ValueError):
+            continue
+        matched.append(box)
+    return matched
+
+
+def _preview_watch(kps, boxes, spec):
+    if kps is None:
+        return False, '没有关键点'
+    _hit, missing_reason = explain_scene('smart_watch', kps, None, spec, 'back_top')
+    if '缺' in missing_reason or missing_reason == '没有关键点':
+        return False, missing_reason
+    if not boxes:
+        return False, missing_reason
+    try:
+        ratio = float((spec or {}).get('watch_dist_ratio', 0.50))
+    except (TypeError, ValueError):
+        ratio = 0.50
+    hit = is_finger_click_watch(kps, boxes, ratio)
+    if hit:
+        return True, f"手表框 {len(boxes)} 个，另一只手腕已进入表附近"
+    return False, f"手表框 {len(boxes)} 个，另一只手腕还没进入表附近（{ratio:.2f} 个肩宽）"
 
 
 def _positive_float(spec, key, default):
@@ -392,6 +446,124 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 track.since.pop(bid, None)
                 track.place.pop(bid, None)
         return ready
+
+    def preview_debug(
+        self, behaviors, persons, now, view, task_confidence,
+        task_sched_start, task_sched_end, scene_rois, boxes=None,
+    ):
+        """本帧场景说明。只读轨迹计时，不改判定。evaluate 之后调用，计时才对得上这个人。"""
+        rows = []
+        try:
+            ranked = sorted(
+                persons or [],
+                key=lambda item: float(getattr(item[0], 'confidence', 0) or 0) if item and item[0] is not None else 0.0,
+                reverse=True,
+            )
+        except Exception:
+            ranked = list(persons or [])
+        for spec in behaviors or []:
+            if not isinstance(spec, dict) or spec.get('enabled') is False:
+                continue
+            btype = spec.get('type')
+            if btype in _DROPPED_BEHAVIOR_TYPES:
+                continue
+            bid = spec.get('id') or btype
+            name = spec.get('name') or btype or '场景'
+            if not is_item_active_now(now, spec, task_sched_start, task_sched_end):
+                rows.append({
+                    'name': name,
+                    'type': btype,
+                    'reason': '当前不在该场景的生效时段',
+                    'people': [],
+                })
+                continue
+            scene_conf = effective_confidence(spec, task_confidence)
+            roi_polygon, _roi_points = (scene_rois or {}).get(bid, (None, None))
+            chosen = filter_persons_roi(
+                [
+                    (box, kps) for box, kps in ranked
+                    if box is None or float(getattr(box, 'confidence', 0) or 0) >= scene_conf
+                ],
+                roi_polygon,
+            )
+            row = {
+                'name': name,
+                'type': btype,
+                'view': normalize_mount_position(view),
+                'seconds': _preview_seconds(spec, btype),
+                'people': [],
+            }
+            if not chosen:
+                row['reason'] = f"没有达到置信度 {scene_conf:.2f} 或落在区域内的人"
+                rows.append(row)
+                continue
+            if btype in PERSON_COUNT_TYPES:
+                row['people'] = [{
+                    'hit': False,
+                    'held': None,
+                    'reason': f"区域内 {len(chosen)} 人。这条看人数和停留，不看骨骼姿态",
+                }]
+                rows.append(row)
+                continue
+            if btype == 'invigilator_absent':
+                standing_n = sum(1 for box, kps in chosen if is_standing(kps, box, view))
+                need = spec.get('min_standing', 2)
+                row['people'] = [{
+                    'hit': standing_n < int(need or 0),
+                    'held': None,
+                    'reason': f"站立 {standing_n} 人，少于 {need} 才开始计时",
+                }]
+                rows.append(row)
+                continue
+            target_boxes = _preview_class_boxes(boxes, spec, scene_conf)
+            for box, kps in chosen[:2]:
+                row['people'].append(self._preview_person(
+                    spec, btype, bid, box, kps, now, view, target_boxes,
+                ))
+            rows.append(row)
+            if len(rows) >= 12:
+                break
+        return rows
+
+    def _preview_person(self, spec, btype, bid, box, kps, now, view, target_boxes):
+        confidence = 0.0
+        try:
+            confidence = round(float(getattr(box, 'confidence', 0) or 0), 2)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if btype == 'smart_watch':
+            hit, reason = _preview_watch(kps, target_boxes, spec)
+        elif btype == 'smart_glasses':
+            wearing = person_has_glasses(box, kps, target_boxes) if target_boxes else False
+            pose_hit, pose_reason = explain_scene(btype, kps, box, spec, view)
+            if not target_boxes:
+                hit, reason = False, '没有眼镜检测框。' + pose_reason
+            elif not wearing:
+                hit, reason = False, '眼镜框不在头部区域。' + pose_reason
+            else:
+                hit, reason = pose_hit, '眼镜在头部。' + pose_reason
+        elif btype in PERSON_COUNT_TYPES:
+            hit, reason = False, '人数场景看区域内有多少人，不看单个骨骼姿态'
+        elif btype == 'invigilator_absent':
+            standing = is_standing(kps, box, view)
+            hit, reason = standing, '这个人' + ('判为站立' if standing else '未判站立')
+        else:
+            try:
+                hit, reason = explain_scene(btype, kps, box, spec, view)
+            except Exception as exc:
+                hit, reason = False, f'说明失败: {exc}'
+        held = None
+        track = self._person_tracker.track_for(box, kps)
+        if track is not None:
+            started = track.since.get(bid)
+            if started is not None:
+                held = round((now - started).total_seconds(), 1)
+        return {
+            'confidence': confidence,
+            'hit': bool(hit),
+            'held': held,
+            'reason': reason,
+        }
 
     def evaluate_behaviors(
         self, behaviors, persons, now, processed, view, task_confidence,
@@ -720,19 +892,28 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                         fps_window_n = 0
 
                     persons = self._extract_persons(result, logger)
-                    offer_detection_preview(
-                        config_dict.get('task_id'),
-                        processed,
-                        persons=persons,
-                        pose_threshold=confidence,
-                        infer_ms=infer_ms,
-                    )
                     now = datetime.now()
                     self.evaluate_behaviors(
                         behaviors, persons, now, processed, view, task_confidence,
                         task_sched_start, task_sched_end, alert_threshold, task_name,
                         state_since, last_alert, extra_state, count_rules, scene_rois,
                         on_alert, logger, pose_only=True,
+                    )
+                    try:
+                        scenes = self.preview_debug(
+                            behaviors, persons, now, view, task_confidence,
+                            task_sched_start, task_sched_end, scene_rois,
+                        )
+                    except Exception as e:
+                        logger.debug(f"preview debug skipped: {e}")
+                        scenes = []
+                    offer_detection_preview(
+                        config_dict.get('task_id'),
+                        processed,
+                        persons=persons,
+                        pose_threshold=confidence,
+                        infer_ms=infer_ms,
+                        scenes=scenes,
                     )
             finally:
                 pump.release()

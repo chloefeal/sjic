@@ -98,6 +98,79 @@ function CountBlock({ title, data, emptyText, noun, hint }) {
   );
 }
 
+const MOUNT_LABEL = {
+  front_top: '前上方',
+  back_top: '后上方',
+  side_top: '侧上方',
+  top: '正上方',
+};
+
+function PoseDebug({ pose, scenes }) {
+  const people = Array.isArray(pose?.people) ? pose.people : [];
+  const sceneRows = Array.isArray(scenes) ? scenes : [];
+  if (!people.length && !sceneRows.length) return null;
+  return (
+    <Box sx={{ mt: 2 }}>
+      {people.map((person, index) => (
+        <Box key={`person-${index}`} sx={{ mb: 2 }}>
+          <Typography variant="subtitle2">
+            人 {index + 1} 骨骼点
+            {person.confidence != null ? ` · 置信度 ${formatScore(person.confidence)}` : ''}
+            {person.usable != null ? ` · 可用 ${person.usable}/17` : ''}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            坐标是上面这张推理图的像素。不可用表示置信度不够或坐标为 0，几何判断会当这个点不存在。
+            {Array.isArray(person.missing) && person.missing.length ? ` 不可用：${person.missing.join('、')}` : ''}
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 0.25, mt: 0.75 }}>
+            {(person.points || []).map((point) => (
+              <Typography
+                key={point.i}
+                variant="caption"
+                sx={{ fontFamily: 'monospace', color: point.ok ? 'text.primary' : 'text.disabled' }}
+              >
+                {point.ok
+                  ? `${point.name} ${point.x},${point.y} c${formatScore(point.c)}`
+                  : `${point.name} 不可用${point.c != null ? ` c${formatScore(point.c)}` : ''}`}
+              </Typography>
+            ))}
+          </Box>
+        </Box>
+      ))}
+      {sceneRows.length > 0 && (
+        <Box>
+          <Typography variant="subtitle2">本帧场景</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+            「成立」只说明这一帧的几何条件过了。告警还要凑够停留时间，并且不在冷却时间内。
+          </Typography>
+          {sceneRows.map((scene, index) => (
+            <Box key={`${scene.type || 'scene'}-${index}`} sx={{ mb: 1 }}>
+              <Typography variant="body2">
+                {scene.name || scene.type || '场景'}
+                {scene.view ? ` · ${MOUNT_LABEL[scene.view] || scene.view}` : ''}
+                {scene.seconds ? ` · 需持续 ${scene.seconds}s` : ''}
+              </Typography>
+              {scene.reason && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {scene.reason}
+                </Typography>
+              )}
+              {(scene.people || []).map((person, personIndex) => (
+                <Typography key={personIndex} variant="caption" sx={{ display: 'block' }}>
+                  {person.hit ? '本帧成立' : '本帧不成立'}
+                  {person.confidence != null ? ` · 人 ${formatScore(person.confidence)}` : ''}
+                  {person.held != null ? ` · 已持续 ${person.held}s` : ''}
+                  {person.reason ? ` · ${person.reason}` : ''}
+                </Typography>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function DetectionPreviewDialog({ task, onClose }) {
   const [image, setImage] = useState(null);
   const [stats, setStats] = useState(null);
@@ -184,7 +257,8 @@ function DetectionPreviewDialog({ task, onClose }) {
       <DialogContent>
         <Alert severity="info" sx={{ mb: 1.5 }}>
           画面是边缘正在推理的那一帧。目标检测画框并标出类别，姿态检测画骨骼点。
-          下面的数量是达到推理阈值的候选，场景告警还会再按区域和停留时间过滤，所以这里有框不一定已经告警。
+          骨骼点坐标和本帧场景结论在画面下面，用来区分是点没检全，还是几何判断没过。
+          这里成立不等于已经告警，告警还要等停留时间，并且不在冷却时间内。
         </Alert>
         {armError && <Alert severity="error" sx={{ mb: 1.5 }}>{armError}</Alert>}
         {!armError && session && session.node_status && session.node_status !== 'online' && (
@@ -249,6 +323,7 @@ function DetectionPreviewDialog({ task, onClose }) {
             )}
           </Box>
         )}
+        {image && <PoseDebug pose={stats?.pose} scenes={stats?.scenes} />}
         {(inferMs != null || ageMs != null) && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
             {inferMs != null ? `推理 ${inferMs} ms` : ''}

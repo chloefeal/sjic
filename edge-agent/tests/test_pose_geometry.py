@@ -8,7 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'algorithms'))
 
 from pose_geometry import (
     accumulate_rising_count,
+    explain_scene,
     is_cover_mouth,
+    keypoint_debug_rows,
     is_fall,
     is_finger_click_watch,
     is_gaze_away,
@@ -324,6 +326,24 @@ class StandingByBoxTest(unittest.TestCase):
         box = _Box(0, 0, 100, 150)
         self.assertFalse(is_standing_by_box(box, 1.6))
         self.assertTrue(is_standing_by_box(box, 1.5))
+
+
+class ExplainSceneTest(unittest.TestCase):
+    def test_missing_shoulders_says_points_are_incomplete(self):
+        points = kps(nose=(140, 160, 0.9))
+        hit, reason = explain_scene('head_down', points, None, {'pitch_degrees': 30}, 'front_top')
+        self.assertFalse(hit)
+        self.assertIn('缺', reason)
+        self.assertFalse(is_head_down(points, 30, 'front_top'))
+
+    def test_keypoint_rows_mark_low_confidence_unusable(self):
+        points = kps(nose=(10, 20, 0.1), l_shoulder=(8, 40, 1), r_shoulder=(56, 40, 1))
+        rows = keypoint_debug_rows(points)
+        self.assertEqual(len(rows), 17)
+        self.assertFalse(rows[0]['ok'])
+        self.assertEqual(rows[0]['c'], 0.1)
+        self.assertTrue(rows[5]['ok'])
+        self.assertEqual(rows[5]['x'], 8.0)
 
 
 if __name__ == '__main__':
