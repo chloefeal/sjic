@@ -175,7 +175,7 @@ function ImageTest() {
             />
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            用正常和异常样本冒充一路视频。算法、告警和任务都走原来的流程，不会为每张图开一路流。
+            用正常和异常样本冒充一路视频。上传后的图片保存在服务器 data/image-sets，重启不会丢。算法、告警和任务都走原来的流程，不会为每张图开一路流。
           </Typography>
           <Alert severity="info" sx={{ mt: 2 }}>{cameraHint}</Alert>
           {cameraError && <Alert severity="warning" sx={{ mt: 1 }}>{cameraError}</Alert>}

@@ -271,7 +271,7 @@ def _draw_pose(vis, persons, threshold, failed, draw_limit):
         return stats, []
     labels = []
     skeletons = []
-    for box, kps in ranked[:draw_limit]:
+    for index, (box, kps) in enumerate(ranked[:draw_limit]):
         if _skeleton_usable(kps):
             skeletons.append(kps)
             anchor = _label_anchor(kps, box)
@@ -281,17 +281,18 @@ def _draw_pose(vis, persons, threshold, failed, draw_limit):
                 cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 140, 255), 2)
             anchor = (x1, max(y1 - 18, 2))
         if anchor is not None:
-            labels.append((anchor[0], anchor[1], f"人 {_box_conf(box):.2f}", (0, 140, 255)))
+            labels.append((anchor[0], anchor[1], f"人{index + 1}", (0, 255, 255)))
     _draw_skeletons(vis, skeletons)
     return stats, labels
 
 
 def _people_debug(ranked):
     people = []
-    for box, kps in ranked:
+    for index, (box, kps) in enumerate(ranked):
         points = keypoint_debug_rows(kps)
         missing = [item['name'] for item in points if not item.get('ok')]
         people.append({
+            'index': index + 1,
             'confidence': round(_box_conf(box), 2),
             'usable': len(points) - len(missing),
             'missing': missing,

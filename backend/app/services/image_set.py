@@ -5,6 +5,7 @@
 import json
 import os
 import re
+import shutil
 import threading
 import uuid
 
@@ -273,8 +274,31 @@ def _mime(name):
     return _EXT_MIME.get(os.path.splitext(name)[1].lower(), 'application/octet-stream')
 
 
+def _image_set_base():
+    folder = current_app.config.get('IMAGE_SET_FOLDER')
+    if folder:
+        return folder
+    return os.path.join(current_app.config['IMAGE_FOLDER'], 'image-sets')
+
+
 def _set_root(set_id):
-    return os.path.join(current_app.config['IMAGE_FOLDER'], 'image-sets', set_id)
+    root = os.path.join(_image_set_base(), set_id)
+    _migrate_legacy(set_id, root)
+    return root
+
+
+def _migrate_legacy(set_id, root):
+    """旧文件在 images/image-sets，容器重建会丢。有清单且新目录还没有时拷过去。"""
+    if os.path.isfile(os.path.join(root, 'manifest.json')):
+        return
+    image_folder = current_app.config.get('IMAGE_FOLDER') or ''
+    legacy = os.path.join(image_folder, 'image-sets', set_id)
+    if os.path.abspath(legacy) == os.path.abspath(root):
+        return
+    if not os.path.isfile(os.path.join(legacy, 'manifest.json')):
+        return
+    os.makedirs(os.path.dirname(root), exist_ok=True)
+    shutil.copytree(legacy, root, dirs_exist_ok=True)
 
 
 def _files_dir(set_id):

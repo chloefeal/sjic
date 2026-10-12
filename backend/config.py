@@ -94,6 +94,8 @@ class Config:
     VIDEO_FOLDER = os.path.join(base_dir, 'videos')
     # 前端标定后的图像
     IMAGE_FOLDER = os.path.join(base_dir, 'images')
+    # 图片测试样本。data 已被 Docker 挂到宿主机，重启和重建容器不会丢。
+    IMAGE_SET_FOLDER = os.environ.get('IMAGE_SET_FOLDER') or os.path.join(base_dir, 'data', 'image-sets')
 
     # 优先读取 YAML 中的自定义告警存储路径，为空则回落到默认的 `alerts` 文件夹
     custom_alert_path = get_cfg('fs', 'alert_storage_path')

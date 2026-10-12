@@ -114,12 +114,12 @@ function PoseDebug({ pose, scenes }) {
       {people.map((person, index) => (
         <Box key={`person-${index}`} sx={{ mb: 2 }}>
           <Typography variant="subtitle2">
-            人 {index + 1} 骨骼点
+            人{person.index || index + 1} 骨骼点
             {person.confidence != null ? ` · 置信度 ${formatScore(person.confidence)}` : ''}
             {person.usable != null ? ` · 可用 ${person.usable}/17` : ''}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            坐标是上面这张推理图的像素。不可用表示置信度不够或坐标为 0，几何判断会当这个点不存在。
+            编号和画面上的「人1」是同一个人。坐标是这张推理图的像素。不可用表示置信度不够或坐标为 0，几何判断会当这个点不存在。
             {Array.isArray(person.missing) && person.missing.length ? ` 不可用：${person.missing.join('、')}` : ''}
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 0.25, mt: 0.75 }}>
@@ -157,8 +157,9 @@ function PoseDebug({ pose, scenes }) {
               )}
               {(scene.people || []).map((person, personIndex) => (
                 <Typography key={personIndex} variant="caption" sx={{ display: 'block' }}>
+                  {person.index ? `人${person.index} · ` : ''}
                   {person.hit ? '本帧成立' : '本帧不成立'}
-                  {person.confidence != null ? ` · 人 ${formatScore(person.confidence)}` : ''}
+                  {person.confidence != null ? ` · 置信度 ${formatScore(person.confidence)}` : ''}
                   {person.held != null ? ` · 已持续 ${person.held}s` : ''}
                   {person.reason ? ` · ${person.reason}` : ''}
                 </Typography>

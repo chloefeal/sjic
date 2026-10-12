@@ -516,10 +516,21 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 rows.append(row)
                 continue
             target_boxes = _preview_class_boxes(boxes, spec, scene_conf)
+            rank = {}
+            for index, (box, kps) in enumerate(ranked):
+                if box is not None:
+                    rank[id(box)] = index + 1
+                elif kps is not None:
+                    rank[id(kps)] = index + 1
             for box, kps in chosen[:2]:
-                row['people'].append(self._preview_person(
+                person = self._preview_person(
                     spec, btype, bid, box, kps, now, view, target_boxes,
-                ))
+                )
+                if box is not None:
+                    person['index'] = rank.get(id(box))
+                elif kps is not None:
+                    person['index'] = rank.get(id(kps))
+                row['people'].append(person)
             rows.append(row)
             if len(rows) >= 12:
                 break
