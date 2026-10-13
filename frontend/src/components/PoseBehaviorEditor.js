@@ -95,7 +95,7 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>姿态行为 / 场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          可添加多个场景。每个场景可单独画检测区域，不画则使用整个画面。场景时段、置信度优先于任务。人员倒地请用目标检测。智能手表请在混合任务的融合场景里添加。考台旁站人只看人框高宽比，同一人站着几乎不动达到持续时长记为辅助作弊。
+          可添加多个场景。每个场景可单独画检测区域，不画则使用整个画面。场景时段、置信度优先于任务。人员倒地请用目标检测。智能手表请在混合任务的融合场景里添加。考台旁站人要有骨骼点，人框高宽比达标且至少一条腿伸直，同一人几乎不动达到持续时长记为辅助作弊。
         </Typography>
       </Grid>
 
@@ -264,7 +264,21 @@ function PoseBehaviorEditor({ algorithm, algorithmParameters, onChange, catalogP
                     value={b.min_height_width ?? 1.6}
                     onChange={(e) => patchBehavior(index, { min_height_width: parseFloat(e.target.value) })}
                     inputProps={{ min: 0.5, step: 0.05 }}
-                    helperText="框高/框宽，坐着更矮，超过视为站着"
+                    helperText="框高/框宽。先过这道线，再看腿是否伸直"
+                  />
+                </Grid>
+              )}
+              {b.type === 'desk_stand' && (
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="伸直夹角(°)"
+                    value={b.min_knee_degrees ?? 150}
+                    onChange={(e) => patchBehavior(index, { min_knee_degrees: parseFloat(e.target.value) })}
+                    inputProps={{ min: 90, max: 179, step: 1 }}
+                    helperText="大腿与小腿的夹角，至少一条腿达到才算站着"
                   />
                 </Grid>
               )}

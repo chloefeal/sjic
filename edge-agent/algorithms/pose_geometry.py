@@ -12,10 +12,19 @@ L_SHOULDER, R_SHOULDER = 5, 6
 L_ELBOW, R_ELBOW = 7, 8
 L_WRIST, R_WRIST = 9, 10
 L_HIP, R_HIP = 11, 12
+L_KNEE, R_KNEE = 13, 14
 L_ANKLE, R_ANKLE = 15, 16
 
 MOUNT_POSITIONS = ('front_top', 'back_top', 'side_top', 'top')
 DEFAULT_MOUNT_POSITION = 'back_top'
+
+# 髋-膝-踝夹角接近 180° 才算这条腿伸直。坐着多半弯到 120° 以下。
+DESK_KNEE_STRAIGHT_DEGREES = 150.0
+# 腕相对肩中点，沿躯干前下方的投影 / 肩宽。
+FINGER_REACH_RATIO = 0.60
+# 伸臂点屏幕时肘要张开。折回肩旁的小角度不算。
+FINGER_ELBOW_MIN_DEGREES = 100.0
+FINGER_ELBOW_MAX_DEGREES = 180.0
 
 
 def normalize_mount_position(value):
@@ -428,7 +437,7 @@ def box_height_width_ratio(box):
 
 
 def is_standing_by_box(box, min_ratio=1.6):
-    """只看人框高宽比。坐姿关键点里脚踝也在髋下方，不能用来区分考台旁的站立。"""
+    """人框高/宽是否达到阈值。这只是考台边站立的前提，本身不算站着。"""
     ratio = box_height_width_ratio(box)
     if ratio is None:
         return False
@@ -439,6 +448,116 @@ def is_standing_by_box(box, min_ratio=1.6):
     if gate <= 0:
         gate = 1.6
     return ratio >= gate
+
+
+def _bounded_float(value, default, low, high):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if number < low or number > high:
+        return float(default)
+    return number
+
+
+def _knee_gate(min_knee_degrees):
+    return _bounded_float(min_knee_degrees, DESK_KNEE_STRAIGHT_DEGREES, 1.0, 179.0)
+
+
+def _finger_gates(min_reach_ratio, elbow_min_degrees, elbow_max_degrees):
+    reach = _bounded_float(min_reach_ratio, FINGER_REACH_RATIO, 0.05, 5.0)
+    elbow_min = _bounded_float(elbow_min_degrees, FINGER_ELBOW_MIN_DEGREES, 0.0, 180.0)
+    elbow_max = _bounded_float(elbow_max_degrees, FINGER_ELBOW_MAX_DEGREES, 0.0, 180.0)
+    if elbow_max < elbow_min:
+        return FINGER_REACH_RATIO, FINGER_ELBOW_MIN_DEGREES, FINGER_ELBOW_MAX_DEGREES
+    return reach, elbow_min, elbow_max
+
+
+def _has_skeleton(kps):
+    """至少一个关键点达到几何判断用的置信度。全空、字符串都当没有骨骼。"""
+    if kps is None or isinstance(kps, (str, bytes)):
+        return False
+    try:
+        count = len(kps)
+    except TypeError:
+        return False
+    for index in range(min(count, 17)):
+        if _kp_ok(kps, index):
+            return True
+    return False
+
+
+def _joint_angle(a, b, c, min_len=8.0):
+    """点 b 处的夹角，0~180°。任一段过短则返回 None。"""
+    v1x, v1y = a[0] - b[0], a[1] - b[1]
+    v2x, v2y = c[0] - b[0], c[1] - b[1]
+    n1 = math.hypot(v1x, v1y)
+    n2 = math.hypot(v2x, v2y)
+    if n1 < min_len or n2 < min_len:
+        return None
+    cos = (v1x * v2x + v1y * v2y) / (n1 * n2)
+    cos = max(-1.0, min(1.0, cos))
+    return math.degrees(math.acos(cos))
+
+
+def _chain_angle(kps, start, joint, end):
+    if not (_kp_ok(kps, start) and _kp_ok(kps, joint) and _kp_ok(kps, end)):
+        return None
+    return _joint_angle(_kp(kps, start), _kp(kps, joint), _kp(kps, end))
+
+
+def _leg_angles(kps):
+    return (
+        ('左', _chain_angle(kps, L_HIP, L_KNEE, L_ANKLE), (L_HIP, L_KNEE, L_ANKLE)),
+        ('右', _chain_angle(kps, R_HIP, R_KNEE, R_ANKLE), (R_HIP, R_KNEE, R_ANKLE)),
+    )
+
+
+def is_desk_standing(kps, box, min_ratio=1.6, min_knee_degrees=DESK_KNEE_STRAIGHT_DEGREES):
+    """
+    考台边站立。
+    没有骨骼点则跳过。人框高宽比只是前提；达标后至少一条腿的大腿、小腿夹角伸直才算站着。
+    """
+    if not _has_skeleton(kps):
+        return False
+    if not is_standing_by_box(box, min_ratio):
+        return False
+    gate = _knee_gate(min_knee_degrees)
+    for _name, angle, _indexes in _leg_angles(kps):
+        if angle is not None and angle >= gate:
+            return True
+    return False
+
+
+def _forward_down_axis(kps):
+    """
+    躯干轴：肩中点指向髋中点。
+    高位俯视里这条轴朝画面下方，对应人朝屏幕的前下方。
+    髋画在肩上方时翻过来，使正方向朝画面下方。
+    返回 (肩中点, 单位向量)；肩或髋不够、轴太短时返回 None。
+    """
+    shoulder = _midpoint(kps, L_SHOULDER, R_SHOULDER)
+    hip = _midpoint(kps, L_HIP, R_HIP)
+    if shoulder is None or hip is None:
+        return None
+    dx = hip[0] - shoulder[0]
+    dy = hip[1] - shoulder[1]
+    if dy < 0:
+        dx = -dx
+        dy = -dy
+    length = math.hypot(dx, dy)
+    if length < 8:
+        return None
+    return shoulder, (dx / length, dy / length)
+
+
+def _wrist_reach_ratio(kps, wrist_index, axis):
+    """腕相对肩中点在前下方上的投影，再除以肩宽。"""
+    if axis is None or not _kp_ok(kps, wrist_index):
+        return None
+    origin, (ux, uy) = axis
+    wx, wy = _kp(kps, wrist_index)
+    return ((wx - origin[0]) * ux + (wy - origin[1]) * uy) / _scale(kps)
 
 
 def _head_above_torso(kps, min_ratio=0.16):
@@ -498,18 +617,39 @@ def is_fall(kps, box=None, peer_boxes=None, view=DEFAULT_MOUNT_POSITION):
     return True
 
 
-def is_finger_point(kps, require_standing=True, view=DEFAULT_MOUNT_POSITION):
-    standing = True
-    if require_standing:
-        standing = is_standing(kps, None, view)
-        if _kp_ok(kps, L_HIP) and _kp_ok(kps, L_ANKLE):
-            standing = _kp(kps, L_ANKLE)[1] > _kp(kps, L_HIP)[1] + 20
-    if require_standing and not standing:
+def is_finger_point(
+    kps, require_standing=True, view=DEFAULT_MOUNT_POSITION, box=None,
+    min_height_width=1.6, min_knee_degrees=DESK_KNEE_STRAIGHT_DEGREES,
+    min_reach_ratio=FINGER_REACH_RATIO,
+    elbow_min_degrees=FINGER_ELBOW_MIN_DEGREES,
+    elbow_max_degrees=FINGER_ELBOW_MAX_DEGREES,
+):
+    """
+    伸臂点屏幕。
+    需要站立时，用考台边站立的同一套结果（骨骼、人框高宽比、至少一条腿伸直）。
+    再看腕沿躯干前下方的前伸量，以及肘角是否在张开范围里。任一条手臂满足即可。
+    """
+    _ = view
+    if not _has_skeleton(kps):
         return False
-    for elbow, wrist in ((L_ELBOW, L_WRIST), (R_ELBOW, R_WRIST)):
-        if _kp_ok(kps, elbow) and _kp_ok(kps, wrist):
-            if _kp(kps, wrist)[1] < _kp(kps, elbow)[1] - 15:
-                return True
+    if require_standing and not is_desk_standing(kps, box, min_height_width, min_knee_degrees):
+        return False
+    axis = _forward_down_axis(kps)
+    if axis is None:
+        return False
+    reach_gate, elbow_min, elbow_max = _finger_gates(
+        min_reach_ratio, elbow_min_degrees, elbow_max_degrees,
+    )
+    for shoulder, elbow, wrist in (
+        (L_SHOULDER, L_ELBOW, L_WRIST),
+        (R_SHOULDER, R_ELBOW, R_WRIST),
+    ):
+        reach = _wrist_reach_ratio(kps, wrist, axis)
+        angle = _chain_angle(kps, shoulder, elbow, wrist)
+        if reach is None or angle is None:
+            continue
+        if reach >= reach_gate and elbow_min <= angle <= elbow_max:
+            return True
     return False
 
 
@@ -564,9 +704,9 @@ def explain_scene(btype, kps, box, spec, view):
     if btype == 'cover_mouth':
         return _explain_cover_mouth(kps, view)
     if btype == 'finger_point':
-        return _explain_finger_point(kps, bool(spec.get('require_standing', True)), view)
+        return _explain_finger_point(kps, box, spec, view)
     if btype == 'desk_stand':
-        return _explain_desk_stand(box, spec)
+        return _explain_desk_stand(kps, box, spec)
     if btype == 'smart_glasses':
         return _explain_glasses_pose(kps, spec)
     if btype == 'smart_watch':
@@ -707,44 +847,88 @@ def _explain_cover_mouth(kps, view):
     return hit, f"阈值 {gate:.2f} 个肩宽。" + '，'.join(parts)
 
 
-def _explain_finger_point(kps, require_standing, view):
-    hit = is_finger_point(kps, require_standing, view)
-    if kps is None:
-        return hit, '没有关键点'
+def _format_leg(kps, label, angle, indexes, gate):
+    if angle is None:
+        missing = _missing_names(kps, indexes)
+        if missing:
+            return f"{label}腿缺{'、'.join(missing)}"
+        return f"{label}腿线段过短"
+    state = '伸直' if angle >= gate else '弯曲'
+    return f"{label}膝 {angle:.0f}°（{state}，要 ≥ {gate:.0f}°）"
+
+
+def _explain_finger_point(kps, box, spec, view):
+    spec = spec or {}
+    require_standing = bool(spec.get('require_standing', True))
+    min_height_width = spec.get('min_height_width', 1.6)
+    min_knee = spec.get('min_knee_degrees', DESK_KNEE_STRAIGHT_DEGREES)
+    reach_gate, elbow_min, elbow_max = _finger_gates(
+        spec.get('min_reach_ratio', FINGER_REACH_RATIO),
+        spec.get('elbow_min_degrees', FINGER_ELBOW_MIN_DEGREES),
+        spec.get('elbow_max_degrees', FINGER_ELBOW_MAX_DEGREES),
+    )
+    hit = is_finger_point(
+        kps, require_standing, view, box, min_height_width, min_knee,
+        reach_gate, elbow_min, elbow_max,
+    )
+    if not _has_skeleton(kps):
+        return hit, '没有骨骼点，跳过'
     parts = []
     if require_standing:
-        standing = is_standing(kps, None, view)
-        if _kp_ok(kps, L_HIP) and _kp_ok(kps, L_ANKLE):
-            standing = _kp(kps, L_ANKLE)[1] > _kp(kps, L_HIP)[1] + 20
-        if not (_kp_ok(kps, L_HIP) and _kp_ok(kps, L_ANKLE)) and not (_kp_ok(kps, R_HIP) and _kp_ok(kps, R_ANKLE)):
-            parts.append('髋或踝不可用，站立只能看人框，这里要求脚踝低于髋')
-        elif not standing:
-            parts.append('脚踝没有低于髋，未判站立')
-        else:
-            parts.append('已判站立')
-    arms = []
-    for elbow, wrist, name in ((L_ELBOW, L_WRIST, '左'), (R_ELBOW, R_WRIST, '右')):
-        if not (_kp_ok(kps, elbow) and _kp_ok(kps, wrist)):
-            arms.append(f"{name}肘或{name}腕不可用")
+        _stand_hit, stand_reason = _explain_desk_stand(kps, box, {
+            'min_height_width': min_height_width,
+            'min_knee_degrees': min_knee,
+        })
+        parts.append('站立（与考台边同一套）：' + stand_reason)
+    axis = _forward_down_axis(kps)
+    if axis is None:
+        parts.append('肩中点或髋中点不可用，前伸算不出来')
+        return hit, '；'.join(parts)
+    for shoulder, elbow, wrist, name in (
+        (L_SHOULDER, L_ELBOW, L_WRIST, '左'),
+        (R_SHOULDER, R_ELBOW, R_WRIST, '右'),
+    ):
+        reach = _wrist_reach_ratio(kps, wrist, axis)
+        angle = _chain_angle(kps, shoulder, elbow, wrist)
+        if reach is None or angle is None:
+            missing = _missing_names(kps, (shoulder, elbow, wrist))
+            parts.append(f"{name}臂缺{'、'.join(missing or ['肩、肘或腕'])}")
             continue
-        delta = _kp(kps, elbow)[1] - _kp(kps, wrist)[1]
-        arms.append(f"{name}腕高于{name}肘 {delta:.0f}px（要 > 15）")
-    parts.extend(arms)
+        parts.append(
+            f"{name}前伸 {reach:.2f}（≥ {reach_gate:.2f}），"
+            f"肘角 {angle:.0f}°（{elbow_min:.0f}–{elbow_max:.0f}°）"
+        )
     return hit, '；'.join(parts)
 
 
-def _explain_desk_stand(box, spec):
-    ratio = box_height_width_ratio(box)
+def _ratio_gate(min_ratio):
     try:
-        gate = float((spec or {}).get('min_height_width', 1.6))
+        gate = float(min_ratio)
     except (TypeError, ValueError):
         gate = 1.6
     if gate <= 0:
         gate = 1.6
-    hit = is_standing_by_box(box, gate)
+    return gate
+
+
+def _explain_desk_stand(kps, box, spec):
+    spec = spec or {}
+    ratio_gate = _ratio_gate(spec.get('min_height_width', 1.6))
+    knee_gate = _knee_gate(spec.get('min_knee_degrees', DESK_KNEE_STRAIGHT_DEGREES))
+    hit = is_desk_standing(kps, box, ratio_gate, knee_gate)
+    if not _has_skeleton(kps):
+        return hit, '没有骨骼点，跳过站立判断'
+    ratio = box_height_width_ratio(box)
     if ratio is None:
         return hit, '没有人框，高宽比算不出来'
-    return hit, f"人框高/宽 {ratio:.2f}，站立阈值 {gate:.2f}。坐姿的脚踝也会在髋下，这条不看脚踝"
+    ratio_text = f"人框高/宽 {ratio:.2f}，前提阈值 {ratio_gate:.2f}"
+    if ratio < ratio_gate:
+        return hit, ratio_text + '，未达到，不再看腿'
+    legs = '；'.join(
+        _format_leg(kps, label, angle, indexes, knee_gate)
+        for label, angle, indexes in _leg_angles(kps)
+    )
+    return hit, ratio_text + '。' + legs
 
 
 def _explain_glasses_pose(kps, spec):

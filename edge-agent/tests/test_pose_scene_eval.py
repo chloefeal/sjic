@@ -38,6 +38,7 @@ if 'shapely.geometry' not in sys.modules:
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from algorithms.pose_behavior import PersonTracker, PoseBehaviorAlgorithm
+from algorithms.pose_geometry import is_desk_standing, is_finger_point
 
 
 class _Box:
@@ -51,6 +52,33 @@ class _Box:
 
 def _blank_kps():
     return [[0.0, 0.0, 0.0] for _ in range(17)]
+
+
+def _desk_pose(box, bent=False):
+    """高框里的伸直腿。bent 时两膝向外弯，夹角低于站立阈值。"""
+    kps = _blank_kps()
+    x1, y1, x2, y2 = float(box.x1), float(box.y1), float(box.x2), float(box.y2)
+    mid = (x1 + x2) / 2.0
+    half = max((x2 - x1) * 0.22, 6.0)
+    height = y2 - y1
+    shoulder_y = y1 + height * 0.16
+    hip_y = y1 + height * 0.40
+    knee_y = y1 + height * 0.66
+    ankle_y = y1 + height * 0.90
+    knee_shift = half * 2.4 if bent else half * 0.05
+
+    def put(index, x, y):
+        kps[index] = [x, y, 0.9]
+
+    put(5, mid - half, shoulder_y)
+    put(6, mid + half, shoulder_y)
+    put(11, mid - half * 0.45, hip_y)
+    put(12, mid + half * 0.45, hip_y)
+    put(13, mid - half * 0.45 - knee_shift, knee_y)
+    put(14, mid + half * 0.45 + knee_shift, knee_y)
+    put(15, mid - half * 0.40, ankle_y)
+    put(16, mid + half * 0.40, ankle_y)
+    return kps
 
 
 def _person(cx, half=40, box=None):
@@ -438,46 +466,123 @@ class DeskStandTest(unittest.TestCase):
     def test_still_tall_box_is_assist_cheat(self):
         still = _Box(x1=100, y1=20, x2=140, y2=180)
         nudged = _Box(x1=108, y1=24, x2=148, y2=184)
-        self._run([(still, None)], 0)
+        self.assertTrue(is_desk_standing(_desk_pose(still), still, 1.6))
+        self._run([(still, _desk_pose(still))], 0)
         self.assertEqual(self.alerts, [])
-        self._run([(nudged, None)], 5)
+        self._run([(nudged, _desk_pose(nudged))], 5)
         self.assertEqual(len(self.alerts), 1)
         self.assertEqual(self.alerts[0]['alert_type'], 'desk_stand')
         self.assertIn('辅助作弊', self.alerts[0]['message'])
         self.assertIn('站立不动 5.0s', self.alerts[0]['message'])
 
-    def test_short_box_stays_quiet_even_when_ankles_are_below_hips(self):
-        kps = _blank_kps()
-        kps[5] = [100, 100, 0.9]
-        kps[6] = [160, 100, 0.9]
-        kps[11] = [120, 140, 0.9]
-        kps[15] = [120, 200, 0.9]
+    def test_tall_box_without_skeleton_is_skipped(self):
+        still = _Box(x1=100, y1=20, x2=140, y2=180)
+        self._run([(still, None)], 0)
+        self._run([(still, None)], 8)
+        self.assertEqual(self.alerts, [])
+
+    def test_bent_knees_stay_quiet(self):
+        still = _Box(x1=100, y1=20, x2=140, y2=180)
+        pose = _desk_pose(still, bent=True)
+        self.assertFalse(is_desk_standing(pose, still, 1.6))
+        self._run([(still, pose)], 0)
+        self._run([(still, pose)], 8)
+        self.assertEqual(self.alerts, [])
+
+    def test_short_box_stays_quiet_even_with_straight_legs(self):
         sitting = _Box(x1=80, y1=80, x2=180, y2=160)
-        self._run([(sitting, kps)], 0)
-        self._run([(sitting, kps)], 8)
+        pose = _desk_pose(sitting)
+        self.assertFalse(is_desk_standing(pose, sitting, 1.6))
+        self._run([(sitting, pose)], 0)
+        self._run([(sitting, pose)], 8)
         self.assertEqual(self.alerts, [])
 
     def test_walking_restarts_until_the_person_stays(self):
         first = _Box(x1=100, y1=20, x2=140, y2=180)
         walked = _Box(x1=180, y1=20, x2=220, y2=180)
-        self._run([(first, None)], 0)
-        self._run([(walked, None)], 2)
-        self._run([(walked, None)], 6)
+        self._run([(first, _desk_pose(first))], 0)
+        self._run([(walked, _desk_pose(walked))], 2)
+        self._run([(walked, _desk_pose(walked))], 6)
         self.assertEqual(self.alerts, [])
-        self._run([(walked, None)], 7)
+        self._run([(walked, _desk_pose(walked))], 7)
         self.assertEqual(len(self.alerts), 1)
 
     def test_a_sitter_does_not_take_the_standers_alert(self):
-        stand = (_Box(x1=100, y1=20, x2=140, y2=180), None)
-        sit = (_Box(x1=400, y1=80, x2=500, y2=160), None)
+        stand_box = _Box(x1=100, y1=20, x2=140, y2=180)
+        sit_box = _Box(x1=400, y1=80, x2=500, y2=160)
+        stand = (stand_box, _desk_pose(stand_box))
+        sit = (sit_box, _desk_pose(sit_box))
         self._run([stand, sit], 0)
         self._run([stand, sit], 5)
         self.assertEqual(len(self.alerts), 1)
         self.assertEqual(len(self.algo._person_tracker.tracks), 2)
 
     def test_each_still_stander_alerts_on_their_own_track(self):
-        left = (_Box(x1=100, y1=20, x2=140, y2=180), None)
-        right = (_Box(x1=400, y1=30, x2=450, y2=210), None)
+        left_box = _Box(x1=100, y1=20, x2=140, y2=180)
+        right_box = _Box(x1=400, y1=30, x2=450, y2=210)
+        left = (left_box, _desk_pose(left_box))
+        right = (right_box, _desk_pose(right_box))
         self._run([left, right], 0)
         self._run([left, right], 5)
         self.assertEqual(len(self.alerts), 2)
+
+
+def _pointing_pose(raised=False):
+    kps = _blank_kps()
+    elbow = (200, 70) if raised else (200, 160)
+    wrist = (210, 40) if raised else (190, 250)
+    points = {
+        5: (100, 80), 6: (180, 80),
+        8: elbow, 10: wrist,
+        11: (112, 200), 12: (168, 200),
+        13: (114, 300), 14: (166, 300),
+        15: (116, 400), 16: (164, 400),
+    }
+    for index, (x, y) in points.items():
+        kps[index] = [float(x), float(y), 0.9]
+    return kps
+
+
+class FingerPointSceneTest(unittest.TestCase):
+    def setUp(self):
+        self.algo = PoseBehaviorAlgorithm()
+        self.algo.draw_alert_overlay = lambda *args, **kwargs: 'overlay'
+        self.spec = {
+            'id': 'point',
+            'type': 'finger_point',
+            'name': '手指屏幕',
+            'seconds': 1,
+            'require_standing': True,
+            'alert_type': 'finger_screen',
+        }
+        self.start = datetime(2026, 1, 1, 8, 0, 0)
+        self.state = {
+            'since': {'point': None},
+            'last': {'point': None},
+            'extra': {'point': {}},
+        }
+        self.alerts = []
+        self.box = _Box(x1=60, y1=40, x2=230, y2=430)
+
+    def _run(self, pose, second):
+        _eval(
+            self.algo, [self.spec], [(self.box, pose)],
+            self.start + timedelta(seconds=second),
+            self.state, self.alerts,
+        )
+
+    def test_forward_reach_while_standing_alerts(self):
+        pose = _pointing_pose()
+        self.assertTrue(is_finger_point(pose, True, 'back_top', self.box))
+        self._run(pose, 0)
+        self.assertEqual(self.alerts, [])
+        self._run(pose, 1)
+        self.assertEqual(len(self.alerts), 1)
+        self.assertEqual(self.alerts[0]['alert_type'], 'finger_screen')
+
+    def test_raised_wrist_does_not_alert(self):
+        pose = _pointing_pose(raised=True)
+        self.assertFalse(is_finger_point(pose, True, 'back_top', self.box))
+        self._run(pose, 0)
+        self._run(pose, 3)
+        self.assertEqual(self.alerts, [])

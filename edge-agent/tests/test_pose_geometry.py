@@ -10,6 +10,8 @@ from pose_geometry import (
     accumulate_rising_count,
     explain_scene,
     is_cover_mouth,
+    is_desk_standing,
+    is_finger_point,
     keypoint_debug_rows,
     is_fall,
     is_finger_click_watch,
@@ -27,6 +29,7 @@ L_SHOULDER, R_SHOULDER = 5, 6
 L_ELBOW, R_ELBOW = 7, 8
 L_WRIST, R_WRIST = 9, 10
 L_HIP, R_HIP = 11, 12
+L_KNEE, R_KNEE = 13, 14
 L_ANKLE, R_ANKLE = 15, 16
 
 
@@ -38,6 +41,7 @@ def kps(**points):
         'l_elbow': L_ELBOW, 'r_elbow': R_ELBOW,
         'l_wrist': L_WRIST, 'r_wrist': R_WRIST,
         'l_hip': L_HIP, 'r_hip': R_HIP,
+        'l_knee': L_KNEE, 'r_knee': R_KNEE,
         'l_ankle': L_ANKLE, 'r_ankle': R_ANKLE,
     }
     for name, xyz in points.items():
@@ -326,6 +330,96 @@ class StandingByBoxTest(unittest.TestCase):
         box = _Box(0, 0, 100, 150)
         self.assertFalse(is_standing_by_box(box, 1.6))
         self.assertTrue(is_standing_by_box(box, 1.5))
+
+
+def _straight_legs(**extra):
+    base = dict(
+        l_shoulder=(100, 80, 0.9),
+        r_shoulder=(180, 80, 0.9),
+        l_hip=(112, 200, 0.9),
+        r_hip=(168, 200, 0.9),
+        l_knee=(114, 300, 0.9),
+        r_knee=(166, 300, 0.9),
+        l_ankle=(116, 400, 0.9),
+        r_ankle=(164, 400, 0.9),
+    )
+    base.update(extra)
+    return kps(**base)
+
+
+TALL_BOX = _Box(60, 40, 230, 430)
+SHORT_BOX = _Box(60, 80, 260, 200)
+
+
+class DeskStandingTest(unittest.TestCase):
+    def test_no_skeleton_skips_even_when_the_box_is_tall(self):
+        self.assertFalse(is_desk_standing(None, TALL_BOX, 1.6))
+        blank = [[0.0, 0.0, 0.0] for _ in range(17)]
+        self.assertFalse(is_desk_standing(blank, TALL_BOX, 1.6))
+        hit, reason = explain_scene('desk_stand', None, TALL_BOX, {'min_height_width': 1.6}, 'back_top')
+        self.assertFalse(hit)
+        self.assertIn('没有骨骼点', reason)
+
+    def test_tall_box_and_one_straight_leg_is_standing(self):
+        points = _straight_legs(
+            l_knee=(40, 250, 0.9),
+            l_ankle=(112, 320, 0.9),
+        )
+        self.assertTrue(is_desk_standing(points, TALL_BOX, 1.6))
+
+    def test_both_knees_bent_is_not_standing(self):
+        points = _straight_legs(
+            l_knee=(40, 250, 0.9),
+            l_ankle=(112, 320, 0.9),
+            r_knee=(240, 250, 0.9),
+            r_ankle=(168, 320, 0.9),
+        )
+        self.assertFalse(is_desk_standing(points, TALL_BOX, 1.6))
+        _hit, reason = explain_scene('desk_stand', points, TALL_BOX, {'min_height_width': 1.6}, 'back_top')
+        self.assertIn('弯曲', reason)
+
+    def test_short_box_blocks_a_straight_leg(self):
+        self.assertFalse(is_desk_standing(_straight_legs(), SHORT_BOX, 1.6))
+        _hit, reason = explain_scene('desk_stand', _straight_legs(), SHORT_BOX, {'min_height_width': 1.6}, 'back_top')
+        self.assertIn('不再看腿', reason)
+
+
+class FingerPointTest(unittest.TestCase):
+    def _reaching(self, **extra):
+        return _straight_legs(
+            r_elbow=(200, 160, 0.9),
+            r_wrist=(190, 250, 0.9),
+            **extra,
+        )
+
+    def test_forward_reach_with_open_elbow_counts(self):
+        points = self._reaching()
+        self.assertTrue(is_finger_point(points, True, 'back_top', TALL_BOX))
+        hit, reason = explain_scene('finger_point', points, TALL_BOX, {'require_standing': True}, 'back_top')
+        self.assertTrue(hit)
+        self.assertIn('前伸', reason)
+
+    def test_wrist_above_elbow_is_not_a_reach(self):
+        points = self._reaching(r_elbow=(200, 70, 0.9), r_wrist=(210, 40, 0.9))
+        self.assertFalse(is_finger_point(points, True, 'back_top', TALL_BOX))
+
+    def test_folded_elbow_is_not_a_point(self):
+        points = self._reaching(r_elbow=(230, 200, 0.9), r_wrist=(150, 190, 0.9))
+        self.assertFalse(is_finger_point(points, True, 'back_top', TALL_BOX))
+
+    def test_reach_without_standing_is_rejected(self):
+        self.assertFalse(is_finger_point(self._reaching(), True, 'back_top', SHORT_BOX))
+
+    def test_reach_can_skip_the_standing_check(self):
+        points = kps(
+            l_shoulder=(100, 80, 0.9),
+            r_shoulder=(180, 80, 0.9),
+            l_hip=(112, 200, 0.9),
+            r_hip=(168, 200, 0.9),
+            r_elbow=(200, 160, 0.9),
+            r_wrist=(190, 250, 0.9),
+        )
+        self.assertTrue(is_finger_point(points, False, 'back_top', SHORT_BOX))
 
 
 class ExplainSceneTest(unittest.TestCase):

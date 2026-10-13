@@ -18,6 +18,10 @@ from .base import BaseAlgorithm, effective_confidence
 from .detection_preview import offer_detection_preview
 from .object_detection import ObjectDetectionAlgorithm
 from .pose_geometry import (
+    DESK_KNEE_STRAIGHT_DEGREES,
+    FINGER_ELBOW_MAX_DEGREES,
+    FINGER_ELBOW_MIN_DEGREES,
+    FINGER_REACH_RATIO,
     L_HIP,
     L_SHOULDER,
     R_HIP,
@@ -27,13 +31,13 @@ from .pose_geometry import (
     accumulate_rising_count,
     explain_scene,
     is_cover_mouth,
+    is_desk_standing,
     is_finger_click_watch,
     is_finger_point,
     is_gaze_away,
     is_head_down,
     is_looking_aside,
     is_standing,
-    is_standing_by_box,
     is_wrist_near_ear,
     normalize_mount_position,
     person_has_glasses,
@@ -61,7 +65,17 @@ def _eval_behavior(btype, kps, box, spec, view):
     if btype == 'cover_mouth':
         return is_cover_mouth(kps, view)
     if btype == 'finger_point':
-        return is_finger_point(kps, bool(spec.get('require_standing', True)), view)
+        return is_finger_point(
+            kps,
+            bool(spec.get('require_standing', True)),
+            view,
+            box,
+            spec.get('min_height_width', 1.6),
+            spec.get('min_knee_degrees', DESK_KNEE_STRAIGHT_DEGREES),
+            spec.get('min_reach_ratio', FINGER_REACH_RATIO),
+            spec.get('elbow_min_degrees', FINGER_ELBOW_MIN_DEGREES),
+            spec.get('elbow_max_degrees', FINGER_ELBOW_MAX_DEGREES),
+        )
     return False
 
 
@@ -406,9 +420,10 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
         return True, sample_box, standing_n
 
     def _desk_stand_ready(self, persons, spec, bid, now):
-        """人框高宽比达到阈值视为站立。同一轨迹停在原地达到 seconds 才返回。"""
+        """没有骨骼点则跳过。人框高宽比达标且至少一条腿伸直才算站立。同一轨迹停在原地达到 seconds 才返回。"""
         seconds = _positive_float(spec, 'seconds', 10)
         min_ratio = _positive_float(spec, 'min_height_width', 1.6)
+        min_knee = spec.get('min_knee_degrees', DESK_KNEE_STRAIGHT_DEGREES)
         move_ratio = _positive_float(spec, 'max_move_ratio', 1.0)
         in_scene = set()
         ready = []
@@ -418,7 +433,7 @@ class PoseBehaviorAlgorithm(BaseAlgorithm):
                 continue
             in_scene.add(track.id)
             center, width = _box_center_width(box)
-            if center is None or not is_standing_by_box(box, min_ratio):
+            if center is None or not is_desk_standing(kps, box, min_ratio, min_knee):
                 track.since.pop(bid, None)
                 track.place.pop(bid, None)
                 continue
