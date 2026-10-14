@@ -2,15 +2,52 @@
 摄像头管理路由蓝图
 """
 from flask import Blueprint, jsonify, request, Response, current_app
+from sqlalchemy.orm.attributes import flag_modified
 from app.extensions import db
-from app.models import Camera, Task, EdgeNode
+from app.models import Alert, Camera, Task, EdgeNode
 from app.models.camera import MOUNT_POSITIONS, DEFAULT_MOUNT_POSITION
 from app.middleware.auth import token_required
-from app.services.mqtt_service import mqtt_service
 from app.services.license_service import license_service
+from app.utils.db_compat import ensure_alert_camera_optional
 import cv2
 
 camera_bp = Blueprint('camera', __name__)
+
+
+def _tasks_blocking_camera_delete(camera):
+    """视频源上还有任务时，不允许删除，避免把任务一起清掉。"""
+    tasks = (
+        Task.query.filter_by(cameraId=camera.id)
+        .order_by(Task.id.asc())
+        .all()
+    )
+    if not tasks:
+        return None
+    names = "、".join(task.name for task in tasks)
+    return (
+        f"视频源「{camera.name}」已绑定任务：{names}。"
+        "请先到任务模块删除这些任务后再删除视频源。"
+    )
+
+
+def _unbind_camera_from_nodes(camera_id):
+    for node in EdgeNode.query.all():
+        if not isinstance(node.bound_cameras, list):
+            continue
+        kept = []
+        removed = False
+        for raw in node.bound_cameras:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value == camera_id:
+                removed = True
+                continue
+            kept.append(value)
+        if removed:
+            node.bound_cameras = kept
+            flag_modified(node, 'bound_cameras')
 
 
 @camera_bp.route('/api/cameras', methods=['GET'])
@@ -133,25 +170,32 @@ def delete_camera(camera_id):
     responses:
       204:
         description: 删除成功
+      400:
+        description: 仍有绑定任务，需先删除任务
     """
+    ensure_alert_camera_optional()
     camera = Camera.query.get_or_404(camera_id)
-    related_tasks = Task.query.filter_by(cameraId=camera_id).all()
+    blocked = _tasks_blocking_camera_delete(camera)
+    if blocked:
+        return jsonify({'error': blocked}), 400
+
+    camera_name = camera.name
 
     try:
-      # Delete cloud task records and proactively stop edge runtime tasks.
-      for task in related_tasks:
-        if task.edge_node_id:
-          edge_node = EdgeNode.query.get(task.edge_node_id)
-          if edge_node:
-            mqtt_service.publish_task_stop(edge_node.mac_address, task.id)
-        db.session.delete(task)
+        # 保留告警和图片，只解开外键。名称先记下来，页面上仍能看出是哪一路。
+        alerts = Alert.query.filter(Alert.camera_id == camera_id).all()
+        for alert in alerts:
+            if not (alert.camera_name or '').strip():
+                alert.camera_name = camera_name
+        db.session.flush()
 
-      db.session.delete(camera)
-      db.session.commit()
+        _unbind_camera_from_nodes(camera_id)
+        db.session.delete(camera)
+        db.session.commit()
     except Exception as e:
-      db.session.rollback()
-      current_app.logger.error(f"Failed to delete camera {camera_id}: {str(e)}", exc_info=True)
-      return jsonify({'error': str(e)}), 500
+        db.session.rollback()
+        current_app.logger.error(f"Failed to delete camera {camera_id}: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
     return '', 204
 

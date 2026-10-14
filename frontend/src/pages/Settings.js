@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Grid, TextField, Button, Typography, Snackbar, Alert,
-  Card, CardContent, Box, Avatar, Stack
+  Card, CardContent, Box, Avatar, Stack, FormControlLabel, Switch
 } from '@mui/material';
-import { Save, CloudUpload, Delete, RestartAlt } from '@mui/icons-material';
+import { Save, CloudUpload, Delete, RestartAlt, Upgrade } from '@mui/icons-material';
 import axios, { getBaseUrl } from '../utils/axios';
 import { UI_THEME_OPTIONS, DEFAULT_UI_THEME } from '../theme';
 
@@ -15,7 +15,8 @@ const DEFAULT_SETTINGS = {
   },
   alert: {
     retention_days: 30,
-    image_quality: 95
+    image_quality: 95,
+    show_skeleton: false
   },
   system: {
     log_level: 'INFO',
@@ -38,6 +39,9 @@ function Settings() {
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [restartingBackend, setRestartingBackend] = useState(false);
+  const [upgradeInfo, setUpgradeInfo] = useState(null);
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const canUpgrade = isVendor || isCustomerAdmin;
 
   const showMsg = (type, content) => {
     setMessage({ type, content });
@@ -84,13 +88,31 @@ function Settings() {
     }
   }, []);
 
+  const fetchUpgrade = useCallback(async () => {
+    if (!canUpgrade) return;
+    try {
+      const data = await axios.get('/api/admin/upgrades');
+      setUpgradeInfo(data);
+    } catch (error) {
+      setUpgradeInfo(null);
+    }
+  }, [canUpgrade]);
+
   useEffect(() => {
     fetchLicense();
     fetchSettings();
+    fetchUpgrade();
     const onLicense = () => fetchLicense();
     window.addEventListener('license-updated', onLicense);
     return () => window.removeEventListener('license-updated', onLicense);
-  }, [fetchLicense, fetchSettings]);
+  }, [fetchLicense, fetchSettings, fetchUpgrade]);
+
+  useEffect(() => {
+    const state = upgradeInfo?.platform?.state;
+    if (state !== 'queued' && state !== 'running') return undefined;
+    const timer = setInterval(fetchUpgrade, 3000);
+    return () => clearInterval(timer);
+  }, [upgradeInfo, fetchUpgrade]);
 
   const handleSave = async () => {
     try {
@@ -182,6 +204,46 @@ function Settings() {
       showMsg('error', '重启失败: ' + (error.response?.data?.error || error.message));
       setRestartingBackend(false);
     }
+  };
+
+  const uploadRelease = async (component, file) => {
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    setUpgradeBusy(true);
+    try {
+      const result = await axios.post(`/api/admin/upgrades/${component}`, form, { timeout: 300000 });
+      showMsg('success', result.message || '安装包已校验');
+      fetchUpgrade();
+    } catch (error) {
+      showMsg('error', error.response?.data?.error || error.message);
+    } finally {
+      setUpgradeBusy(false);
+    }
+  };
+
+  const applyPlatformUpgrade = async () => {
+    if (!window.confirm('确定升级管理平台？升级过程中页面会短暂无法访问，失败会自动退回上一版。')) {
+      return;
+    }
+    setUpgradeBusy(true);
+    try {
+      const result = await axios.post('/api/admin/upgrades/platform/apply');
+      showMsg('success', result.message || '已提交升级');
+      fetchUpgrade();
+    } catch (error) {
+      showMsg('error', error.response?.data?.error || error.message);
+    } finally {
+      setUpgradeBusy(false);
+    }
+  };
+
+  const upgradeStateLabel = {
+    idle: '空闲',
+    queued: '等待升级器',
+    running: '正在升级',
+    success: '成功',
+    failed: '失败',
   };
 
   const logoSrc = settings.branding.logo_url
@@ -378,6 +440,29 @@ function Settings() {
               <option value="WARNING">WARNING</option>
               <option value="ERROR">ERROR</option>
             </TextField>
+            <FormControlLabel
+              sx={{ mt: 1, ml: 0, alignItems: 'center' }}
+              control={(
+                <Switch
+                  checked={Boolean(settings.alert.show_skeleton)}
+                  onChange={(event) => {
+                    const showSkeleton = event.target.checked;
+                    setSettings((prev) => ({
+                      ...prev,
+                      alert: {
+                        ...prev.alert,
+                        show_skeleton: showSkeleton,
+                      },
+                    }));
+                  }}
+                  disabled={!licenseValid}
+                />
+              )}
+              label="告警图显示骨骼点线条"
+            />
+            <Typography variant="body2" color="text.secondary">
+              默认关闭。打开后，新产生的姿态告警截图会画出骨骼点和连线；已经保存的告警图片不会改变。点击下方「保存设置」后，在线边缘节点立即按新开关绘制。
+            </Typography>
           </CardContent>
         </Card>
       </Grid>
@@ -400,6 +485,51 @@ function Settings() {
               >
                 {restartingBackend ? '正在重启…' : '重启管理平台后端'}
               </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
+      {canUpgrade && (
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>系统升级</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                当前版本 {upgradeInfo?.version || '-'}。
+                平台升级由宿主机执行；边缘安装包上传后，到「节点」页按台下发。
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                平台状态：{upgradeStateLabel[upgradeInfo?.platform?.state] || '空闲'}
+                {upgradeInfo?.platform?.staged_version ? `，已上传 ${upgradeInfo.platform.staged_version}` : ''}
+                {upgradeInfo?.platform?.message ? `（${upgradeInfo.platform.message}）` : ''}
+                {upgradeInfo?.edge?.staged_version ? `。边缘包 ${upgradeInfo.edge.staged_version}` : ''}
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Button variant="outlined" component="label" startIcon={<CloudUpload />} disabled={upgradeBusy || !licenseValid}>
+                  上传平台包
+                  <input type="file" hidden accept=".gz,.tgz,application/gzip" onChange={(event) => {
+                    uploadRelease('platform', event.target.files?.[0]);
+                    event.target.value = '';
+                  }} />
+                </Button>
+                <Button variant="outlined" component="label" startIcon={<CloudUpload />} disabled={upgradeBusy || !licenseValid}>
+                  上传边缘包
+                  <input type="file" hidden accept=".gz,.tgz,application/gzip" onChange={(event) => {
+                    uploadRelease('edge', event.target.files?.[0]);
+                    event.target.value = '';
+                  }} />
+                </Button>
+                <Button
+                  variant="contained"
+                  color="warning"
+                  startIcon={<Upgrade />}
+                  onClick={applyPlatformUpgrade}
+                  disabled={upgradeBusy || !licenseValid || !upgradeInfo?.platform?.staged_version}
+                >
+                  升级本机
+                </Button>
+              </Stack>
             </CardContent>
           </Card>
         </Grid>

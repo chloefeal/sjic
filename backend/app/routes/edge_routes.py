@@ -1,12 +1,124 @@
 from flask import Blueprint, jsonify, request, current_app
 from app.extensions import db, socketio
-from app.models import Alert, EdgeNode
+from app.models import Alert, Camera, EdgeNode, Task
 from app.middleware.auth import token_required
 import os
 from datetime import datetime
 from config import Config
 
 edge_bp = Blueprint('edge', __name__)
+
+
+def _camera_id_set(values):
+    ids = set()
+    if not isinstance(values, list):
+        return ids
+    for raw in values:
+        try:
+            ids.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+def _normalize_bound_camera_ids(ids):
+    """解析节点绑定的视频源。返回 (新列表或 None, 错误信息)。None 表示清空绑定。"""
+    if ids in ("", None):
+        return None, None
+    if not isinstance(ids, list):
+        return None, "bound_camera_ids 必须是数组"
+    normalized = []
+    for raw in ids:
+        if raw in ("", None):
+            continue
+        try:
+            normalized.append(int(raw))
+        except (TypeError, ValueError):
+            return None, f"bound_camera_ids 包含非法值: {raw}"
+    return sorted(set(normalized)), None
+
+
+def _tasks_blocking_camera_unbind(node, removed_camera_ids):
+    """节点上仍有任务占用这些视频源时，不允许取消绑定。"""
+    if not removed_camera_ids:
+        return None
+    tasks = (
+        Task.query.filter(
+            Task.edge_node_id == node.id,
+            Task.cameraId.in_(removed_camera_ids),
+        )
+        .order_by(Task.cameraId.asc(), Task.id.asc())
+        .all()
+    )
+    if not tasks:
+        return None
+    camera_names = {
+        row.id: row.name
+        for row in Camera.query.filter(Camera.id.in_(removed_camera_ids)).all()
+    }
+    grouped = {}
+    order = []
+    for task in tasks:
+        if task.cameraId not in grouped:
+            order.append(task.cameraId)
+            grouped[task.cameraId] = []
+        grouped[task.cameraId].append(task.name)
+    if len(order) == 1:
+        camera_id = order[0]
+        camera_name = camera_names.get(camera_id) or f"#{camera_id}"
+        names = "、".join(grouped[camera_id])
+        return (
+            f"节点「{node.name}」在视频源「{camera_name}」上还有任务：{names}。"
+            "请先到任务模块删除后再取消绑定。"
+        )
+    parts = []
+    for camera_id in order:
+        camera_name = camera_names.get(camera_id) or f"#{camera_id}"
+        names = "、".join(grouped[camera_id])
+        parts.append(f"视频源「{camera_name}」：{names}")
+    detail = "；".join(parts)
+    return f"节点「{node.name}」上还有未删除的任务，请先到任务模块删除后再取消绑定：{detail}。"
+
+@edge_bp.route('/api/edge/display-config', methods=['GET'])
+def get_display_config():
+    """边缘节点启动时读取告警图是否绘制骨骼。未配置时默认不画。"""
+    from app.models.setting import Setting
+    try:
+        row = Setting.query.first()
+        enabled = Setting.skeleton_overlay_enabled(row.config if row else None)
+        return jsonify({'show_skeleton': enabled})
+    except Exception as e:
+        current_app.logger.error(f"Error getting display config: {str(e)}")
+        return jsonify({'show_skeleton': False})
+
+
+@edge_bp.route('/api/edge/tasks/<int:task_id>/preview', methods=['POST'])
+def receive_task_preview(task_id):
+    """边缘回传正在推理的那一帧。没人看预览时直接丢掉。"""
+    import json
+    from app.services.detection_preview import preview_hub
+
+    image = request.files.get('image')
+    if image is None:
+        return jsonify({'error': 'image required'}), 400
+    blob = image.read()
+    if not blob:
+        return jsonify({'error': 'empty image'}), 400
+    if len(blob) > 1_500_000:
+        return jsonify({'error': 'image too large'}), 413
+    raw_stats = request.form.get('stats') or '{}'
+    if len(raw_stats) > 32000:
+        stats = {}
+    else:
+        try:
+            stats = json.loads(raw_stats)
+        except json.JSONDecodeError:
+            stats = {}
+    if not isinstance(stats, dict):
+        stats = {}
+    preview_hub.ingest(task_id, blob, stats)
+    return '', 204
+
 
 @edge_bp.route('/api/edge/alerts', methods=['POST'])
 def receive_alert():
@@ -65,17 +177,28 @@ def receive_alert():
         image_url = ""
         
         if image_file:
-            # 保存到警报文件夹
+            # 保存到警报文件夹。带框图进页面；同名 _raw 原图只落盘，供回溯标注。
             save_dir = Config.ALERT_FOLDER
             os.makedirs(save_dir, exist_ok=True)
             filename = f"edge_alert_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
             filepath = os.path.join(save_dir, filename)
             image_file.save(filepath)
             image_url = filename
+            raw_file = request.files.get('raw_image')
+            if raw_file:
+                stem, ext = os.path.splitext(filename)
+                raw_file.save(os.path.join(save_dir, f"{stem}_raw{ext or '.jpg'}"))
 
-        # 写入数据库
+        # 写入数据库。名称一并记下，视频源日后删除时告警仍能显示来源。
+        camera = None
+        if camera_id not in (None, ''):
+            try:
+                camera = Camera.query.get(int(camera_id))
+            except (TypeError, ValueError):
+                camera = None
         alert = Alert(
             camera_id=camera_id,
+            camera_name=camera.name if camera else None,
             task_id=int(task_id) if task_id else None,
             algorithm_id=int(algorithm_id) if algorithm_id else None,
             alert_type=alert_type,
@@ -161,30 +284,27 @@ def update_node(node_id):
             return jsonify({"error": "Node not found"}), 404
             
         data = request.json or {}
+        update_bound = False
+        new_bound = None
+        if 'bound_camera_ids' in data:
+            new_bound, error = _normalize_bound_camera_ids(data.get('bound_camera_ids'))
+            if error:
+                return jsonify({"error": error}), 400
+            removed_camera_ids = _camera_id_set(node.bound_cameras) - _camera_id_set(new_bound)
+            blocked = _tasks_blocking_camera_unbind(node, removed_camera_ids)
+            if blocked:
+                return jsonify({"error": blocked}), 400
+            update_bound = True
+
         if 'name' in data:
             node.name = data['name']
-        # 新版：节点可用视频源列表（多选）
-        if 'bound_camera_ids' in data:
-            ids = data.get('bound_camera_ids')
-            if ids in ("", None):
-                node.bound_cameras = None
-            elif not isinstance(ids, list):
-                return jsonify({"error": "bound_camera_ids 必须是数组"}), 400
-            else:
-                normalized = []
-                for x in ids:
-                    if x in ("", None):
-                        continue
-                    try:
-                        normalized.append(int(x))
-                    except Exception:
-                        return jsonify({"error": f"bound_camera_ids 包含非法值: {x}"}), 400
-                # 去重并排序，便于一致性展示
-                node.bound_cameras = sorted(list(set(normalized)))
+        if update_bound:
+            node.bound_cameras = new_bound
 
         db.session.commit()
         return jsonify(node.to_dict()), 200
     except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
 @edge_bp.route('/api/nodes/<int:node_id>', methods=['DELETE'])

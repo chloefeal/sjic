@@ -2,9 +2,11 @@
 日志管理路由蓝图
 """
 from flask import Blueprint, jsonify, request
+from sqlalchemy import or_
 from app.extensions import db
-from app.models import Log
-from app.middleware.auth import token_required
+from app.models import Log, OperationLog
+from app.middleware.auth import get_token_payload, token_required
+from app.services.audit import CUSTOMER_HIDDEN_MODULES, modules_for_role
 
 log_bp = Blueprint('log', __name__)
 
@@ -90,3 +92,55 @@ def delete_log(id):
     db.session.delete(log)
     db.session.commit()
     return jsonify({"status": "success"})
+
+
+@log_bp.route('/api/operation-logs', methods=['GET'])
+@token_required
+def get_operation_logs():
+    """分页查询创建、修改、删除、登录、登出等操作日志。"""
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int) or 20, 100)
+    action = (request.args.get('action') or '').strip()
+    module = (request.args.get('module') or '').strip()
+    keyword = (request.args.get('keyword') or '').strip()
+    role = (get_token_payload() or {}).get('role')
+    allowed_modules = modules_for_role(role)
+
+    query = OperationLog.query
+    if role != 'vendor':
+        query = query.filter(or_(
+            OperationLog.username.is_(None),
+            OperationLog.username == '',
+            OperationLog.username != 'super_admin',
+        ))
+        query = query.filter(or_(
+            OperationLog.role.is_(None),
+            OperationLog.role == '',
+            OperationLog.role != 'vendor',
+        ))
+        query = query.filter(~OperationLog.module.in_(CUSTOMER_HIDDEN_MODULES))
+    if action:
+        query = query.filter(OperationLog.action == action)
+    if module:
+        if module not in allowed_modules:
+            return jsonify({'error': '没有权限查看该模块的日志'}), 403
+        query = query.filter(OperationLog.module == module)
+    if keyword:
+        like = f'%{keyword}%'
+        query = query.filter(
+            db.or_(
+                OperationLog.summary.like(like),
+                OperationLog.username.like(like),
+            )
+        )
+
+    logs = query.order_by(OperationLog.created_at.desc(), OperationLog.id.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    return jsonify({
+        'items': [item.to_dict() for item in logs.items],
+        'total': logs.total,
+        'pages': logs.pages,
+        'current_page': logs.page,
+        'modules': allowed_modules,
+    })

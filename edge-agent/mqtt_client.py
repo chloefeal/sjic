@@ -63,8 +63,11 @@ class EdgeMqttClient:
             # 订阅与自己相关的指令
             client.subscribe(f"{self.topic_prefix}/task/start")
             client.subscribe(f"{self.topic_prefix}/task/stop")
+            client.subscribe(f"{self.topic_prefix}/task/preview")
             client.subscribe(f"{self.topic_prefix}/agent/restart")
             client.subscribe(f"{self.topic_prefix}/agent/power")
+            client.subscribe(f"{self.topic_prefix}/agent/upgrade")
+            client.subscribe("sjic/edge/config")
         else:
             logger.error(f"Failed to connect, return code {rc}")
 
@@ -77,16 +80,30 @@ class EdgeMqttClient:
         logger.info(f"Received message on topic {msg.topic}")
         try:
             data = json.loads(payload_str) if payload_str.strip() else {}
+            if msg.topic == "sjic/edge/config":
+                from algorithms.base import set_show_pose_skeleton, show_pose_skeleton
+                set_show_pose_skeleton((data or {}).get("show_skeleton"))
+                logger.info(f"Pose skeleton overlay set to {show_pose_skeleton()}")
+                return
             if msg.topic.endswith("/task/start"):
                 self.task_manager.start_task(data)
             elif msg.topic.endswith("/task/stop"):
                 task_id = data.get("task_id")
                 if task_id:
                     self.task_manager.stop_task(task_id)
+            elif msg.topic.endswith("/task/preview"):
+                from algorithms.detection_preview import set_preview
+                set_preview(
+                    data.get("task_id"),
+                    enabled=bool(data.get("enabled")),
+                    labelmap=data.get("labelmap"),
+                )
             elif msg.topic.endswith("/agent/restart"):
                 self._handle_agent_restart(data)
             elif msg.topic.endswith("/agent/power"):
                 self._handle_agent_power(data)
+            elif msg.topic.endswith("/agent/upgrade"):
+                self._handle_agent_upgrade(data)
         except Exception as e:
             logger.error(f"Error handling message: {str(e)}")
 
@@ -143,6 +160,37 @@ class EdgeMqttClient:
                     self._power_lock.release()
 
         threading.Thread(target=_power, name=f"agent-{action}", daemon=True).start()
+
+    def publish_upgrade_status(self, status, message='', version=''):
+        payload = {
+            'edge_id': self.edge_id,
+            'status': status,
+            'message': message,
+            'version': version,
+        }
+        self.client.publish(f"{self.topic_prefix}/upgrade/status", json.dumps(payload), qos=1)
+
+    def _handle_agent_upgrade(self, data):
+        if not self._power_lock.acquire(blocking=False):
+            logger.warning('Agent upgrade ignored because power/restart/upgrade is already running')
+            return
+        logger.warning('Agent upgrade requested via MQTT version=%s', (data or {}).get('version'))
+
+        def _run():
+            try:
+                from utils.upgrade import run_upgrade
+                run_upgrade(self, self.config, self.task_manager, data)
+            except Exception as exc:
+                logger.error(f'Agent upgrade failed: {exc}')
+                try:
+                    self.publish_upgrade_status('failed', '升级失败', '')
+                except Exception:
+                    pass
+            finally:
+                if self._power_lock.locked():
+                    self._power_lock.release()
+
+        threading.Thread(target=_run, name='agent-upgrade', daemon=True).start()
 
     def publish_heartbeat(self, status_payload):
         topic = f"{self.topic_prefix}/heartbeat"

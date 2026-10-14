@@ -219,6 +219,10 @@ export function createAppTheme(themeId = DEFAULT_UI_THEME) {
             backgroundSize: 'auto, auto, 48px 48px, 48px 48px',
             backgroundAttachment: 'fixed',
           },
+          // 浏览器原生时间/日期图标默认是黑色；深色背景上反色为白色
+          'input::-webkit-calendar-picker-indicator': isLight
+            ? { opacity: 1, cursor: 'pointer' }
+            : { filter: 'invert(1)', opacity: 1, cursor: 'pointer' },
         },
       },
       MuiAppBar: {
@@ -307,6 +311,16 @@ export function createAppTheme(themeId = DEFAULT_UI_THEME) {
             '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
               borderColor: t.primary,
             },
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          stickyHeader: {
+            backgroundColor: t.paper,
+            backgroundImage: isLight
+              ? 'none'
+              : `linear-gradient(${alpha('#ffffff', 0.05)}, ${alpha('#ffffff', 0.05)})`,
           },
         },
       },

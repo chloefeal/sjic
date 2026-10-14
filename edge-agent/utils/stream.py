@@ -338,10 +338,16 @@ class RtspCapture:
 
 
 def open_rtsp_capture(rtsp_url, buffer_size=1, warmup_grabs=5):
-    """打开 RTSP。grab/read 时跳到最新帧，无后台读流线程。"""
-    if not rtsp_url:
+    """打开 RTSP。grab/read 时跳到最新帧，无后台读流线程。
+
+    image-set: 是平台图片测试流：边缘拉一张静图后反复送出，不走解码。
+    """
+    if rtsp_url is None or (isinstance(rtsp_url, str) and not rtsp_url.strip()):
         raise ValueError("rtsp_url is empty")
     _ = buffer_size, warmup_grabs
+    if isinstance(rtsp_url, str) and rtsp_url.strip().startswith('image-set:'):
+        from utils.image_set import open_image_set_capture
+        return open_image_set_capture(rtsp_url.strip())
     return RtspCapture(rtsp_url).start()
 
 

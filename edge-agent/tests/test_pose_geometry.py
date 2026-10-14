@@ -1,18 +1,26 @@
 """Synthetic COCO-17 keypoints covering exam-hall camera views."""
 import unittest
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'algorithms'))
 
 from pose_geometry import (
-    is_chin_rest,
+    accumulate_rising_count,
+    explain_scene,
     is_cover_mouth,
+    is_desk_standing,
+    is_finger_point,
+    keypoint_debug_rows,
     is_fall,
+    is_finger_click_watch,
     is_gaze_away,
     is_head_down,
+    is_head_up,
     is_looking_aside,
     is_standing,
+    is_standing_by_box,
     normalize_mount_position,
 )
 
@@ -21,6 +29,7 @@ L_SHOULDER, R_SHOULDER = 5, 6
 L_ELBOW, R_ELBOW = 7, 8
 L_WRIST, R_WRIST = 9, 10
 L_HIP, R_HIP = 11, 12
+L_KNEE, R_KNEE = 13, 14
 L_ANKLE, R_ANKLE = 15, 16
 
 
@@ -32,6 +41,7 @@ def kps(**points):
         'l_elbow': L_ELBOW, 'r_elbow': R_ELBOW,
         'l_wrist': L_WRIST, 'r_wrist': R_WRIST,
         'l_hip': L_HIP, 'r_hip': R_HIP,
+        'l_knee': L_KNEE, 'r_knee': R_KNEE,
         'l_ankle': L_ANKLE, 'r_ankle': R_ANKLE,
     }
     for name, xyz in points.items():
@@ -89,7 +99,22 @@ class BackTopExamSittingTest(unittest.TestCase):
             r_ear=(170, 168, 0.6),
         )
         self.assertFalse(is_looking_aside(face, view='back_top'))
+        self.assertTrue(is_head_up(face, view='back_top'))
         self.assertTrue(is_gaze_away(face, view='back_top'))
+
+    def test_hunched_at_screen_is_head_down_not_gaze_away(self):
+        """伏案看屏会把头顶压近肩膀。这是低头，不是不看屏幕。"""
+        hunched = sitting_torso(
+            l_ear=(115, 195, 0.85),
+            r_ear=(165, 195, 0.85),
+            nose=(140, 192, 0.7),
+            l_eye=(128, 190, 0.6),
+            r_eye=(152, 190, 0.6),
+        )
+        self.assertTrue(is_head_down(hunched, view='back_top'))
+        self.assertFalse(is_head_up(hunched, view='back_top'))
+        self.assertFalse(is_looking_aside(hunched, view='back_top'))
+        self.assertFalse(is_gaze_away(hunched, view='back_top'))
 
 
 class FrontTopTest(unittest.TestCase):
@@ -114,7 +139,21 @@ class FrontTopTest(unittest.TestCase):
             l_ear=(110, 155, 0.8),
             r_ear=(170, 155, 0.8),
         )
+        self.assertTrue(is_head_up(cam, view='front_top'))
         self.assertTrue(is_gaze_away(cam, view='front_top'))
+
+    def test_level_gaze_is_not_gaze_away(self):
+        """平视还没到明显抬头。鼻与肩中线几乎齐平。"""
+        level = sitting_torso(
+            nose=(140, 200, 0.9),
+            l_eye=(125, 190, 0.85),
+            r_eye=(155, 190, 0.85),
+            l_ear=(110, 185, 0.8),
+            r_ear=(170, 185, 0.8),
+        )
+        self.assertFalse(is_head_up(level, view='front_top'))
+        self.assertFalse(is_looking_aside(level, view='front_top'))
+        self.assertFalse(is_gaze_away(level, view='front_top'))
 
     def test_turn_right_is_look_aside(self):
         aside = sitting_torso(
@@ -149,6 +188,18 @@ class SideTopTest(unittest.TestCase):
         )
         self.assertTrue(is_looking_aside(frontal, view='side_top'))
 
+    def test_nose_above_ear_is_head_up(self):
+        raised = sitting_torso(
+            l_shoulder=(120, 200, 0.9),
+            r_shoulder=(150, 205, 0.45),
+            nose=(175, 140, 0.85),
+            l_eye=(160, 150, 0.8),
+            l_ear=(125, 165, 0.85),
+        )
+        self.assertTrue(is_head_up(raised, view='side_top'))
+        self.assertFalse(is_looking_aside(raised, view='side_top'))
+        self.assertTrue(is_gaze_away(raised, view='side_top'))
+
 
 class TopViewTest(unittest.TestCase):
     def test_head_toward_desk_is_not_aside(self):
@@ -170,16 +221,6 @@ class TopViewTest(unittest.TestCase):
 
 
 class HandsAndFallTest(unittest.TestCase):
-    def test_chin_rest(self):
-        rest = sitting_torso(
-            nose=(140, 170, 0.9),
-            l_ear=(115, 165, 0.8),
-            r_ear=(165, 165, 0.8),
-            l_wrist=(138, 185, 0.9),
-        )
-        self.assertTrue(is_chin_rest(rest, view='front_top'))
-        self.assertTrue(is_chin_rest(rest, view='back_top'))
-
     def test_cover_mouth(self):
         cover = sitting_torso(
             nose=(140, 170, 0.9),
@@ -208,6 +249,196 @@ class HandsAndFallTest(unittest.TestCase):
             r_ear=(90, 202, 0.7),
         )
         self.assertTrue(is_fall(lie, view='back_top'))
+
+
+class _Box:
+    def __init__(self, x1, y1, x2, y2):
+        self.x1, self.y1, self.x2, self.y2 = x1, y1, x2, y2
+
+
+class FingerClickWatchTest(unittest.TestCase):
+    """肩宽 80。手表在左手腕，右手靠近才算点击。"""
+
+    def setUp(self):
+        self.watch = _Box(80, 240, 100, 260)
+
+    def _person(self, right_wrist):
+        return sitting_torso(
+            l_wrist=(90, 250, 0.9),
+            r_wrist=(*right_wrist, 0.9),
+        )
+
+    def test_other_hand_on_watch_is_click(self):
+        self.assertTrue(is_finger_click_watch(self._person((125, 250)), [self.watch]))
+
+    def test_wearing_without_other_hand_is_not_click(self):
+        self.assertFalse(is_finger_click_watch(self._person((170, 260)), [self.watch]))
+
+    def test_missing_wrist_is_not_click(self):
+        kps_one_hand = sitting_torso(l_wrist=(90, 250, 0.9))
+        self.assertFalse(is_finger_click_watch(kps_one_hand, [self.watch]))
+
+    def test_no_watch_box_is_not_click(self):
+        self.assertFalse(is_finger_click_watch(self._person((125, 250)), []))
+
+
+class RisingCountTest(unittest.TestCase):
+    def test_one_click_triggers_immediately(self):
+        state = {}
+        now = datetime(2026, 10, 8, 9, 0, 0)
+        self.assertTrue(accumulate_rising_count(state, True, now, 1, 30, hold_contact=True))
+        self.assertFalse(accumulate_rising_count(
+            state, True, now + timedelta(seconds=1), 1, 30, hold_contact=True
+        ))
+        self.assertFalse(accumulate_rising_count(
+            state, False, now + timedelta(seconds=2), 1, 30, hold_contact=True
+        ))
+        self.assertTrue(accumulate_rising_count(
+            state, True, now + timedelta(seconds=3), 1, 30, hold_contact=True
+        ))
+
+    def test_glasses_needs_three_separate_touches(self):
+        state = {}
+        now = datetime(2026, 10, 8, 9, 0, 0)
+        self.assertFalse(accumulate_rising_count(state, True, now, 3, 30))
+        self.assertFalse(accumulate_rising_count(state, True, now + timedelta(seconds=1), 3, 30))
+        self.assertFalse(accumulate_rising_count(state, False, now + timedelta(seconds=2), 3, 30))
+        self.assertFalse(accumulate_rising_count(state, True, now + timedelta(seconds=3), 3, 30))
+        self.assertFalse(accumulate_rising_count(state, False, now + timedelta(seconds=4), 3, 30))
+        self.assertTrue(accumulate_rising_count(state, True, now + timedelta(seconds=5), 3, 30))
+
+    def test_window_resets_old_clicks(self):
+        state = {}
+        now = datetime(2026, 10, 8, 9, 0, 0)
+        self.assertFalse(accumulate_rising_count(state, True, now, 2, 30, hold_contact=True))
+        self.assertFalse(accumulate_rising_count(
+            state, False, now + timedelta(seconds=31), 2, 30, hold_contact=True
+        ))
+        self.assertFalse(accumulate_rising_count(
+            state, True, now + timedelta(seconds=32), 2, 30, hold_contact=True
+        ))
+
+
+class StandingByBoxTest(unittest.TestCase):
+    def test_tall_box_is_standing(self):
+        self.assertTrue(is_standing_by_box(_Box(10, 10, 50, 130), 1.6))
+
+    def test_short_box_is_sitting(self):
+        self.assertFalse(is_standing_by_box(_Box(10, 10, 110, 90), 1.6))
+
+    def test_threshold_is_configurable(self):
+        box = _Box(0, 0, 100, 150)
+        self.assertFalse(is_standing_by_box(box, 1.6))
+        self.assertTrue(is_standing_by_box(box, 1.5))
+
+
+def _straight_legs(**extra):
+    base = dict(
+        l_shoulder=(100, 80, 0.9),
+        r_shoulder=(180, 80, 0.9),
+        l_hip=(112, 200, 0.9),
+        r_hip=(168, 200, 0.9),
+        l_knee=(114, 300, 0.9),
+        r_knee=(166, 300, 0.9),
+        l_ankle=(116, 400, 0.9),
+        r_ankle=(164, 400, 0.9),
+    )
+    base.update(extra)
+    return kps(**base)
+
+
+TALL_BOX = _Box(60, 40, 230, 430)
+SHORT_BOX = _Box(60, 80, 260, 200)
+
+
+class DeskStandingTest(unittest.TestCase):
+    def test_no_skeleton_skips_even_when_the_box_is_tall(self):
+        self.assertFalse(is_desk_standing(None, TALL_BOX, 1.6))
+        blank = [[0.0, 0.0, 0.0] for _ in range(17)]
+        self.assertFalse(is_desk_standing(blank, TALL_BOX, 1.6))
+        hit, reason = explain_scene('desk_stand', None, TALL_BOX, {'min_height_width': 1.6}, 'back_top')
+        self.assertFalse(hit)
+        self.assertIn('没有骨骼点', reason)
+
+    def test_tall_box_and_one_straight_leg_is_standing(self):
+        points = _straight_legs(
+            l_knee=(40, 250, 0.9),
+            l_ankle=(112, 320, 0.9),
+        )
+        self.assertTrue(is_desk_standing(points, TALL_BOX, 1.6))
+
+    def test_both_knees_bent_is_not_standing(self):
+        points = _straight_legs(
+            l_knee=(40, 250, 0.9),
+            l_ankle=(112, 320, 0.9),
+            r_knee=(240, 250, 0.9),
+            r_ankle=(168, 320, 0.9),
+        )
+        self.assertFalse(is_desk_standing(points, TALL_BOX, 1.6))
+        _hit, reason = explain_scene('desk_stand', points, TALL_BOX, {'min_height_width': 1.6}, 'back_top')
+        self.assertIn('弯曲', reason)
+
+    def test_short_box_blocks_a_straight_leg(self):
+        self.assertFalse(is_desk_standing(_straight_legs(), SHORT_BOX, 1.6))
+        _hit, reason = explain_scene('desk_stand', _straight_legs(), SHORT_BOX, {'min_height_width': 1.6}, 'back_top')
+        self.assertIn('不再看腿', reason)
+
+
+class FingerPointTest(unittest.TestCase):
+    def _reaching(self, **extra):
+        pose = dict(
+            r_elbow=(200, 160, 0.9),
+            r_wrist=(190, 250, 0.9),
+        )
+        pose.update(extra)
+        return _straight_legs(**pose)
+
+    def test_forward_reach_with_open_elbow_counts(self):
+        points = self._reaching()
+        self.assertTrue(is_finger_point(points, True, 'back_top', TALL_BOX))
+        hit, reason = explain_scene('finger_point', points, TALL_BOX, {'require_standing': True}, 'back_top')
+        self.assertTrue(hit)
+        self.assertIn('前伸', reason)
+
+    def test_wrist_above_elbow_is_not_a_reach(self):
+        points = self._reaching(r_elbow=(200, 70, 0.9), r_wrist=(210, 40, 0.9))
+        self.assertFalse(is_finger_point(points, True, 'back_top', TALL_BOX))
+
+    def test_folded_elbow_is_not_a_point(self):
+        points = self._reaching(r_elbow=(230, 200, 0.9), r_wrist=(150, 190, 0.9))
+        self.assertFalse(is_finger_point(points, True, 'back_top', TALL_BOX))
+
+    def test_reach_without_standing_is_rejected(self):
+        self.assertFalse(is_finger_point(self._reaching(), True, 'back_top', SHORT_BOX))
+
+    def test_reach_can_skip_the_standing_check(self):
+        points = kps(
+            l_shoulder=(100, 80, 0.9),
+            r_shoulder=(180, 80, 0.9),
+            l_hip=(112, 200, 0.9),
+            r_hip=(168, 200, 0.9),
+            r_elbow=(200, 160, 0.9),
+            r_wrist=(190, 250, 0.9),
+        )
+        self.assertTrue(is_finger_point(points, False, 'back_top', SHORT_BOX))
+
+
+class ExplainSceneTest(unittest.TestCase):
+    def test_missing_shoulders_says_points_are_incomplete(self):
+        points = kps(nose=(140, 160, 0.9))
+        hit, reason = explain_scene('head_down', points, None, {'pitch_degrees': 30}, 'front_top')
+        self.assertFalse(hit)
+        self.assertIn('缺', reason)
+        self.assertFalse(is_head_down(points, 30, 'front_top'))
+
+    def test_keypoint_rows_mark_low_confidence_unusable(self):
+        points = kps(nose=(10, 20, 0.1), l_shoulder=(8, 40, 1), r_shoulder=(56, 40, 1))
+        rows = keypoint_debug_rows(points)
+        self.assertEqual(len(rows), 17)
+        self.assertFalse(rows[0]['ok'])
+        self.assertEqual(rows[0]['c'], 0.1)
+        self.assertTrue(rows[5]['ok'])
+        self.assertEqual(rows[5]['x'], 8.0)
 
 
 if __name__ == '__main__':

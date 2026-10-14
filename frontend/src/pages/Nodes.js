@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
+    Paper, Table, TableBody, TableCell, TableContainer, TableHead,
     TableRow, Button, IconButton, Typography, Box, Dialog, DialogTitle,
-    DialogContent, DialogActions, TextField, Chip, Select, MenuItem, OutlinedInput,
-    Menu, ListItemIcon, ListItemText, Divider, LinearProgress, Tooltip, Snackbar, Alert, Stack,
-    FormControl, InputLabel
+    DialogContent, DialogActions,     TextField, Chip, MenuItem, Checkbox, FormGroup, FormControlLabel, FormLabel,
+    Menu, ListItemIcon, ListItemText, Divider, LinearProgress, Tooltip, Snackbar, Alert, Stack
 } from '@mui/material';
 import {
-    Edit, Delete, Circle, RestartAlt, PowerSettingsNew, WifiTethering, SettingsBackupRestore, ContentCopy
+    Edit, Delete, Circle, RestartAlt, PowerSettingsNew, WifiTethering, SettingsBackupRestore, ContentCopy, Upgrade
 } from '@mui/icons-material';
 import axios from '../utils/axios';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 function Nodes() {
     const canPower = ['customer', 'vendor'].includes(localStorage.getItem('user_role'));
@@ -21,12 +21,16 @@ function Nodes() {
     const [powerBusyId, setPowerBusyId] = useState(null);
     const [powerMenu, setPowerMenu] = useState({ anchor: null, node: null });
     const [copyMsg, setCopyMsg] = useState({ open: false, type: 'success', text: '' });
+    const [edgeRelease, setEdgeRelease] = useState('');
 
     useEffect(() => {
         fetchNodes();
         fetchCameras();
-        // 自动刷新心跳状态
-        const interval = setInterval(fetchNodes, 5000);
+        fetchEdgeRelease();
+        const interval = setInterval(() => {
+            fetchNodes();
+            fetchEdgeRelease();
+        }, 5000);
         return () => clearInterval(interval);
     }, []);
 
@@ -48,6 +52,16 @@ function Nodes() {
         }
     };
 
+    const fetchEdgeRelease = async () => {
+        if (!canPower) return;
+        try {
+            const data = await axios.get('/api/admin/upgrades');
+            setEdgeRelease(data?.edge?.staged_version || '');
+        } catch (error) {
+            setEdgeRelease('');
+        }
+    };
+
     const handleEdit = (node) => {
         setEditingNode(node);
         setFormData({ name: node.name, bound_camera_ids: Array.isArray(node.bound_camera_ids) ? node.bound_camera_ids : [] });
@@ -63,7 +77,7 @@ function Nodes() {
             setOpenDialog(false);
             fetchNodes();
         } catch (error) {
-            console.error('Error updating node:', error);
+            window.alert(error.response?.data?.error || '保存节点失败');
         }
     };
 
@@ -119,6 +133,32 @@ function Nodes() {
         }
     };
 
+    const handleNodeUpgrade = async (node) => {
+        closePowerMenu();
+        if (!edgeRelease) return;
+        if (!window.confirm(`确定将「${node.name}」升级到 ${edgeRelease}？\n任务会短暂停止，失败时盒子会退回上一版。`)) {
+            return;
+        }
+        setPowerBusyId(node.id);
+        try {
+            const result = await axios.post(`/api/nodes/${node.id}/upgrade`);
+            window.alert(result.message || '升级指令已下发');
+            fetchNodes();
+        } catch (error) {
+            window.alert('升级失败: ' + (error.response?.data?.error || error.message));
+        } finally {
+            setPowerBusyId(null);
+        }
+    };
+
+    const upgradeLabel = {
+        queued: '等待',
+        downloading: '下载中',
+        installing: '安装中',
+        success: '成功',
+        failed: '失败',
+    };
+
     const getStatusColor = (status, lastHeartbeat) => {
         if (status !== 'online') return 'error';
         if (!lastHeartbeat) return 'warning';
@@ -141,6 +181,12 @@ function Nodes() {
         return '离线';
     };
 
+    /** 在线 / 失联：主机多半已开机；离线：视为关机，仅允许远程开机 */
+    const isHostLikelyOn = (node) => {
+        if (!node) return false;
+        return getStatusColor(node.status, node.last_heartbeat) !== 'error';
+    };
+
     const formatLastOnline = (lastHeartbeat) => {
         if (!lastHeartbeat) return '-';
         const timeStr = typeof lastHeartbeat === 'string' ? lastHeartbeat.replace(/-/g, '/') : lastHeartbeat;
@@ -154,6 +200,11 @@ function Nodes() {
         if (pct >= 70) return 'warning';
         return 'primary';
     };
+
+    const powerMenuNode = powerMenu.node
+        ? (nodes.find((n) => n.id === powerMenu.node.id) || powerMenu.node)
+        : null;
+    const hostLikelyOn = isHostLikelyOn(powerMenuNode);
 
     const UsageBar = ({ label, value, hint }) => {
         if (value == null || Number.isNaN(Number(value)) || Number(value) < 0) {
@@ -188,7 +239,7 @@ function Nodes() {
             gpu = (Number(hw.musa_mem_used_mb) / Number(hw.musa_mem_total_mb)) * 100;
         }
         if (hw.cpu_usage == null && hw.mem_usage == null && gpu == null) {
-            return <Typography variant="caption" color="text.secondary">暂无数据</Typography>;
+            return <Typography variant="caption" color="text.secondary">-</Typography>;
         }
         const gpuLabel = String(node.architecture || '').toLowerCase().includes('rk3588') ? 'NPU' : 'GPU';
         const gpuWindow = Number(hw.gpu_usage_window_sec) > 0 ? Number(hw.gpu_usage_window_sec) : 30;
@@ -202,22 +253,24 @@ function Nodes() {
     };
 
     return (
-        <Grid container spacing={3}>
-            <Grid item xs={12}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <>
+        <ScrollableDataPage
+            header={(
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <Typography variant="h5">节点</Typography>
                 </div>
-            </Grid>
-
-            <Grid item xs={12}>
-                <TableContainer component={Paper}>
-                    <Table>
+            )}
+        >
+                <TableContainer component={Paper} sx={scrollTableContainerSx}>
+                    <Table stickyHeader>
                         <TableHead>
                             <TableRow>
+                                <TableCell sx={{ width: 64 }}>序号</TableCell>
                                 <TableCell>状态</TableCell>
                                 <TableCell>名称</TableCell>
                                 <TableCell>IP 地址</TableCell>
                                 <TableCell>机器型号</TableCell>
+                                <TableCell>版本</TableCell>
                                 <TableCell>资源占用</TableCell>
                                 <TableCell>绑定视频源</TableCell>
                                 <TableCell>最近更新时间</TableCell>
@@ -225,7 +278,7 @@ function Nodes() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {nodes.map((node) => {
+                            {nodes.map((node, index) => {
                                 const statusColor = getStatusColor(node.status, node.last_heartbeat);
                                 const statusLabel = getStatusLabel(node.status, node.last_heartbeat);
                                 const boundIds = Array.isArray(node.bound_camera_ids) ? node.bound_camera_ids : [];
@@ -233,6 +286,7 @@ function Nodes() {
                                     .map(id => cameras.find(c => c.id === id)?.name || `ID=${id}`);
                                 return (
                                     <TableRow key={node.id}>
+                                        <TableCell>{index + 1}</TableCell>
                                         <TableCell>
                                             <Chip
                                                 icon={<Circle fontSize="small" />}
@@ -245,6 +299,15 @@ function Nodes() {
                                         <TableCell><b>{node.name}</b></TableCell>
                                         <TableCell>{node.ip_address || "-"}</TableCell>
                                         <TableCell>{node.architecture || "-"}</TableCell>
+                                        <TableCell>
+                                            <Typography variant="body2">{node.agent_version || '-'}</Typography>
+                                            {node.upgrade_status && (
+                                                <Typography variant="caption" color={node.upgrade_status === 'failed' ? 'error' : 'text.secondary'} display="block">
+                                                    {upgradeLabel[node.upgrade_status] || node.upgrade_status}
+                                                    {node.upgrade_message ? ` ${node.upgrade_message}` : ''}
+                                                </Typography>
+                                            )}
+                                        </TableCell>
                                         <TableCell>{renderHardware(node)}</TableCell>
                                         <TableCell>
                                             {boundNames.length === 0 ? '-' : (
@@ -279,7 +342,7 @@ function Nodes() {
                             })}
                             {nodes.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={9} align="center" sx={{ py: 5 }}>
+                                    <TableCell colSpan={10} align="center" sx={{ py: 5 }}>
                                         <Typography color="textSecondary">
                                             暂无注册的边缘节点。请在下位机中配置 MQTT 连接并启动 Edge Agent。
                                         </Typography>
@@ -289,29 +352,63 @@ function Nodes() {
                         </TableBody>
                     </Table>
                 </TableContainer>
-            </Grid>
+        </ScrollableDataPage>
 
             <Menu
                 anchorEl={powerMenu.anchor}
                 open={Boolean(powerMenu.anchor)}
                 onClose={closePowerMenu}
             >
-                <MenuItem onClick={() => powerMenu.node && handleNodePower(powerMenu.node, 'reboot')}>
+                <MenuItem
+                    disabled={!hostLikelyOn}
+                    onClick={() => powerMenuNode && handleNodePower(powerMenuNode, 'reboot')}
+                >
                     <ListItemIcon><RestartAlt fontSize="small" /></ListItemIcon>
-                    <ListItemText primary="重启主机" />
+                    <ListItemText
+                        primary="重启主机"
+                        secondary={!hostLikelyOn ? '节点离线，无法下发' : undefined}
+                    />
                 </MenuItem>
-                <MenuItem onClick={() => powerMenu.node && handleNodePower(powerMenu.node, 'shutdown')}>
+                <MenuItem
+                    disabled={!hostLikelyOn}
+                    onClick={() => powerMenuNode && handleNodePower(powerMenuNode, 'shutdown')}
+                >
                     <ListItemIcon><PowerSettingsNew fontSize="small" /></ListItemIcon>
-                    <ListItemText primary="关机" secondary="关闭后需现场开机或远程开机" />
+                    <ListItemText
+                        primary="关机"
+                        secondary={!hostLikelyOn ? '节点离线，无法下发' : '关闭后需现场开机或远程开机'}
+                    />
                 </MenuItem>
-                <MenuItem onClick={() => powerMenu.node && handleNodePower(powerMenu.node, 'wake')}>
+                <MenuItem
+                    disabled={hostLikelyOn}
+                    onClick={() => powerMenuNode && handleNodePower(powerMenuNode, 'wake')}
+                >
                     <ListItemIcon><WifiTethering fontSize="small" /></ListItemIcon>
-                    <ListItemText primary="远程开机" />
+                    <ListItemText
+                        primary="远程开机"
+                        secondary={hostLikelyOn ? '主机已开机（在线/失联），无需唤醒' : undefined}
+                    />
                 </MenuItem>
                 <Divider />
-                <MenuItem onClick={() => powerMenu.node && handleAgentRestart(powerMenu.node)}>
+                <MenuItem
+                    disabled={!hostLikelyOn}
+                    onClick={() => powerMenuNode && handleAgentRestart(powerMenuNode)}
+                >
                     <ListItemIcon><SettingsBackupRestore fontSize="small" /></ListItemIcon>
-                    <ListItemText primary="重启程序" secondary="仅重启程序，不关闭主机" />
+                    <ListItemText
+                        primary="重启程序"
+                        secondary={!hostLikelyOn ? '节点离线，无法下发' : '仅重启程序，不关闭主机'}
+                    />
+                </MenuItem>
+                <MenuItem
+                    disabled={!hostLikelyOn || !edgeRelease}
+                    onClick={() => powerMenuNode && handleNodeUpgrade(powerMenuNode)}
+                >
+                    <ListItemIcon><Upgrade fontSize="small" /></ListItemIcon>
+                    <ListItemText
+                        primary="升级程序"
+                        secondary={!hostLikelyOn ? '节点离线，无法下发' : (edgeRelease ? `安装 ${edgeRelease}` : '请先在系统设置上传边缘安装包')}
+                    />
                 </MenuItem>
             </Menu>
 
@@ -326,31 +423,49 @@ function Nodes() {
                             value={formData.name}
                             onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                         />
-                        <FormControl fullWidth sx={{ mt: 2 }}>
-                            <InputLabel id="bound-cameras-label">绑定视频源（可多选）</InputLabel>
-                            <Select
-                                labelId="bound-cameras-label"
-                                label="绑定视频源（可多选）"
-                                multiple
-                                value={formData.bound_camera_ids}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    setFormData(prev => ({ ...prev, bound_camera_ids: typeof value === 'string' ? value.split(',') : value }));
-                                }}
-                                input={<OutlinedInput label="绑定视频源（可多选）" />}
-                                renderValue={(selected) => {
-                                    if (!selected || selected.length === 0) return '未选择';
-                                    const names = selected.map(id => cameras.find(c => c.id === id)?.name || `ID=${id}`);
-                                    return names.join(', ');
-                                }}
-                            >
-                                {cameras.map((camera) => (
-                                    <MenuItem key={camera.id} value={camera.id}>
-                                        {camera.name}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                        </FormControl>
+                        <FormLabel sx={{ display: 'block', mt: 2.5, mb: 1 }}>绑定视频源（可多选）</FormLabel>
+                        <FormGroup
+                            sx={{
+                                maxHeight: 280,
+                                overflow: 'auto',
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                borderRadius: 1,
+                                px: 1.5,
+                                py: 0.5,
+                            }}
+                        >
+                            {cameras.length === 0 && (
+                                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                                    暂无视频源
+                                </Typography>
+                            )}
+                            {cameras.map((camera) => {
+                                const checked = (formData.bound_camera_ids || []).some(
+                                    (id) => String(id) === String(camera.id)
+                                );
+                                return (
+                                    <FormControlLabel
+                                        key={camera.id}
+                                        control={(
+                                            <Checkbox
+                                                checked={checked}
+                                                onChange={(e) => {
+                                                    setFormData((prev) => {
+                                                        const current = prev.bound_camera_ids || [];
+                                                        const next = e.target.checked
+                                                            ? [...current.filter((id) => String(id) !== String(camera.id)), camera.id]
+                                                            : current.filter((id) => String(id) !== String(camera.id));
+                                                        return { ...prev, bound_camera_ids: next };
+                                                    });
+                                                }}
+                                            />
+                                        )}
+                                        label={camera.name}
+                                    />
+                                );
+                            })}
+                        </FormGroup>
                     </Box>
                 </DialogContent>
                 <DialogActions>
@@ -370,7 +485,7 @@ function Nodes() {
                     {copyMsg.text}
                 </Alert>
             </Snackbar>
-        </Grid>
+        </>
     );
 }
 

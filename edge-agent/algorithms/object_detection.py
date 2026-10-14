@@ -1,4 +1,5 @@
-from .base import BaseAlgorithm
+from .base import BaseAlgorithm, effective_confidence
+from .detection_preview import offer_detection_preview
 from .rules import build_rules
 import cv2
 import time
@@ -68,7 +69,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 return
 
             rtsp_url = config_dict.get('camera', {}).get('rtsp_url')
-            confidence = float(parameters.get('confidence', 0.5))
+            task_confidence = float(parameters.get('confidence', 0.5))
             algorithm_parameters = parameters.get('algorithm_parameters') or {}
             alert_threshold = int(parameters.get('alertThreshold', 10))
             task_sched_start = parameters.get('schedule_start') or algorithm_parameters.get('schedule_start')
@@ -118,6 +119,16 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                 def transform_roi(region):
                     return self._transform_roi(region, new_h, new_w, top, left, logger)
 
+                active_specs = [
+                    spec for spec in raw_rules
+                    if isinstance(spec, dict) and spec.get('enabled', True) is not False
+                ]
+                for spec in active_specs:
+                    spec['_min_confidence'] = effective_confidence(spec, task_confidence)
+                confidence = min(
+                    (spec['_min_confidence'] for spec in active_specs),
+                    default=task_confidence,
+                )
                 rules = build_rules(
                     raw_rules,
                     transform_roi,
@@ -193,6 +204,14 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                         fps_window_t = last_log
                         fps_window_n = 0
 
+                    offer_detection_preview(
+                        config_dict.get('task_id'),
+                        processed,
+                        boxes=boxes,
+                        object_threshold=confidence,
+                        infer_ms=infer_ms,
+                    )
+
                     for rule in rules:
                         if not is_item_active_now(now, rule.spec, task_sched_start, task_sched_end):
                             rule._state_since = None
@@ -216,6 +235,7 @@ class ObjectDetectionAlgorithm(BaseAlgorithm):
                             confidence=hit['confidence'],
                             image_frame=alert_frame,
                             message=message,
+                            raw_frame=processed,
                         )
             finally:
                 pump.release()

@@ -10,10 +10,12 @@ class Task(db.Model):
     name = db.Column(db.String(100), nullable=False)
     confidence = db.Column(db.Float, default=0.5)  # 通用参数
     alertThreshold = db.Column(db.Integer, default=5)  # 通用参数
-    notificationEnabled = db.Column(db.Boolean, default=True)  # 通用参数
     modelId = db.Column(db.Integer, db.ForeignKey('detection_models.id'))
     cameraId = db.Column(db.Integer, db.ForeignKey('cameras.id'))
     algorithm_id = db.Column(db.Integer, db.ForeignKey('algorithms.id'))
+    # 混合任务：各最多绑定一个已发布算法（一个模型）。单算法任务这两列为空。
+    od_algorithm_id = db.Column(db.Integer, db.ForeignKey('algorithms.id'), nullable=True)
+    pose_algorithm_id = db.Column(db.Integer, db.ForeignKey('algorithms.id'), nullable=True)
     algorithm_parameters = db.Column(db.JSON)  # 所有算法特定参数
     status = db.Column(db.String(20), default='stopped')
     # 边缘架构新增字段
@@ -29,6 +31,9 @@ class Task(db.Model):
     def has_schedule(self):
         return bool((self.schedule_start or '').strip() and (self.schedule_end or '').strip())
 
+    def is_exam_pipeline(self):
+        return bool(self.od_algorithm_id or self.pose_algorithm_id)
+
     def to_dict(self):
         algo = None
         if self.algorithm_id:
@@ -39,11 +44,13 @@ class Task(db.Model):
             'name': self.name,
             'confidence': self.confidence,
             'alertThreshold': self.alertThreshold,
-            'notificationEnabled': self.notificationEnabled,
             'cameraId': self.cameraId,
             'algorithm_id': self.algorithm_id,
             'algorithm_type': algo.type if algo else None,
-            'algorithm_engine': algo.resolved_engine() if algo else None,
+            'algorithm_engine': algo.resolved_engine() if algo else ('exam_pipeline' if self.is_exam_pipeline() else None),
+            'od_algorithm_id': self.od_algorithm_id,
+            'pose_algorithm_id': self.pose_algorithm_id,
+            'pipeline': 'exam' if self.is_exam_pipeline() else 'single',
             'edge_node_id': self.edge_node_id,
             'run_status': self.run_status,
             'algorithm_parameters': self.algorithm_parameters,

@@ -5,6 +5,36 @@ import os
 from shapely.geometry import Point, Polygon
 import numpy as np
 
+# 告警截图是否绘制骨骼点和连线。平台未下发时默认不画。
+_show_pose_skeleton = False
+
+
+def set_show_pose_skeleton(enabled):
+    global _show_pose_skeleton
+    if isinstance(enabled, str):
+        _show_pose_skeleton = enabled.strip().lower() in ('1', 'true', 'yes', 'on')
+        return
+    _show_pose_skeleton = bool(enabled)
+
+
+def show_pose_skeleton():
+    return _show_pose_skeleton
+
+def effective_confidence(spec, task_confidence, default=0.5):
+    """场景单独设置了置信度时以场景为准，否则用任务置信度。"""
+    try:
+        task_v = float(task_confidence)
+    except (TypeError, ValueError):
+        task_v = float(default)
+    raw = spec.get('confidence') if isinstance(spec, dict) else None
+    if raw is None or raw == '':
+        return task_v
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return task_v
+
+
 class BaseAlgorithm(ABC):
     """边缘端算法纯净抽象基类，不依赖任何数据库和 Web 框架"""
 
@@ -78,34 +108,79 @@ class BaseAlgorithm(ABC):
 
         return frame
 
-    def draw_alert_overlay(self, frame, boxes=None, roi_points=None, caption=None):
-        """在告警截图上画规则 ROI、检测框和说明文字。"""
+    def draw_alert_overlay(self, frame, boxes=None, roi_points=None, caption=None, skeletons=None):
+        """在告警截图上画规则 ROI、检测框和说明文字。骨骼点和连线仅在系统设置开启时绘制。"""
         vis = frame.copy()
+        if show_pose_skeleton():
+            _draw_pose_skeletons(vis, skeletons)
         if roi_points and len(roi_points) >= 3:
             pts = np.array(roi_points, dtype=np.int32).reshape((-1, 1, 2))
             overlay = vis.copy()
             cv2.fillPoly(overlay, [pts], (0, 255, 255))
             vis = cv2.addWeighted(overlay, 0.18, vis, 0.82, 0)
-            cv2.polylines(vis, [pts], isClosed=True, color=(0, 255, 255), thickness=2)
+            cv2.polylines(vis, [pts], isClosed=True, color=(0, 255, 255), thickness=1)
 
         for box in boxes or []:
             x1, y1, x2, y2 = int(box.x1), int(box.y1), int(box.x2), int(box.y2)
-            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            label = f"cls{getattr(box, 'class_id', 0)}:{float(box.confidence):.2f}"
-            vis = _put_text(vis, label, (x1, max(y1 - 22, 4)), color_bgr=(0, 255, 0))
+            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 1)
+            label = f"{float(box.confidence):.2f}"
+            vis = _put_text(vis, label, (x1, max(y1 - 16, 2)), color_bgr=(0, 255, 0))
             if hasattr(box, 'foot_center'):
                 fx, fy = box.foot_center
-                cv2.circle(vis, (int(fx), int(fy)), 4, (0, 0, 255), -1)
+                cv2.circle(vis, (int(fx), int(fy)), 2, (0, 0, 255), 1, cv2.LINE_AA)
 
         if caption:
             vis = _put_text(vis, caption, (8, 8), color_bgr=(255, 255, 255))
         return vis
 
 
+# COCO-17：头、肩、手臂、躯干、腿。与姿态判断使用的关键点一致。
+_POSE_EDGES = (
+    (0, 1), (0, 2), (1, 3), (2, 4),
+    (5, 6),
+    (5, 7), (7, 9),
+    (6, 8), (8, 10),
+    (5, 11), (6, 12), (11, 12),
+    (11, 13), (13, 15),
+    (12, 14), (14, 16),
+)
+
+
+def _pose_points(kps, min_conf=0.25):
+    if kps is None:
+        return []
+    points = []
+    for i in range(len(kps)):
+        row = kps[i]
+        x, y = float(row[0]), float(row[1])
+        conf = float(row[2]) if len(row) > 2 else 1.0
+        points.append((x, y, conf >= min_conf and x > 0 and y > 0))
+    return points
+
+
+def _draw_pose_skeletons(vis, skeletons, min_conf=0.25):
+    """把用于判断的可见骨骼点和连线画到告警图上。"""
+    if vis is None or not skeletons:
+        return vis
+    for kps in skeletons:
+        pts = _pose_points(kps, min_conf)
+        for a, b in _POSE_EDGES:
+            if a >= len(pts) or b >= len(pts) or not (pts[a][2] and pts[b][2]):
+                continue
+            p1 = (int(pts[a][0]), int(pts[a][1]))
+            p2 = (int(pts[b][0]), int(pts[b][1]))
+            cv2.line(vis, p1, p2, (255, 200, 0), 1, cv2.LINE_AA)
+        for x, y, ok in pts:
+            if not ok:
+                continue
+            cv2.circle(vis, (int(x), int(y)), 2, (0, 140, 255), 1, cv2.LINE_AA)
+    return vis
+
+
 _FONT_CACHE = {}
 
 
-def _load_cjk_font(size=20):
+def _load_cjk_font(size=14):
     if size in _FONT_CACHE:
         return _FONT_CACHE[size]
     try:
@@ -143,7 +218,7 @@ def _put_text(img, text, origin, color_bgr=(255, 255, 255)):
     if not text:
         return img
     x, y = int(origin[0]), int(origin[1])
-    font = _load_cjk_font(20)
+    font = _load_cjk_font(14)
     if font is not None:
         try:
             from PIL import Image, ImageDraw
@@ -156,8 +231,8 @@ def _put_text(img, text, origin, color_bgr=(255, 255, 255)):
                 tw, th = draw.textsize(text, font=font)
                 bbox = (x, y, x + tw, y + th)
             draw.rectangle(
-                [bbox[0] - 4, bbox[1] - 2, bbox[2] + 4, bbox[3] + 2],
-                fill=(0, 0, 0, 160),
+                [bbox[0] - 2, bbox[1] - 1, bbox[2] + 2, bbox[3] + 1],
+                fill=(0, 0, 0, 120),
             )
             draw.text(
                 (x, y),
@@ -175,7 +250,7 @@ def _put_text(img, text, origin, color_bgr=(255, 255, 255)):
         ascii_only = all(ord(ch) < 128 for ch in str(text))
     if ascii_only:
         cv2.putText(
-            img, text, (x, y + 16),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_bgr, 1, cv2.LINE_AA,
+            img, text, (x, y + 12),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.4, color_bgr, 1, cv2.LINE_AA,
         )
     return img

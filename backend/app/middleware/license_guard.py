@@ -22,6 +22,7 @@ REASON_MESSAGES = {
 # Paths that remain usable without a valid license (login + license import UX).
 _LICENSE_EXEMPT_PREFIXES = (
     '/api/login',
+    '/api/logout',
     '/api/license/',
     '/api/branding',
 )
@@ -29,6 +30,8 @@ _LICENSE_EXEMPT_PREFIXES = (
 
 def _is_license_exempt(path):
     if not path:
+        return True
+    if path == '/api/health':
         return True
     if path.startswith('/api/license'):
         return True

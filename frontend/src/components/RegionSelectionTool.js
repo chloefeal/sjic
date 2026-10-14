@@ -15,6 +15,7 @@ function RegionSelectionTool({ cameraId, onSelect, existingRegion, buttonLabel =
 
   const canvasRef = useRef(null);
   const snapshotImgRef = useRef(null);
+  const seededRef = useRef(false);
   const {
     isStreaming,
     imageUrl,
@@ -32,6 +33,13 @@ function RegionSelectionTool({ cameraId, onSelect, existingRegion, buttonLabel =
 
   // 加载已有的区域数据
   useEffect(() => {
+    if (!open) {
+      seededRef.current = false;
+      return;
+    }
+    // 任务列表每 5 秒刷新会使 existingRegion 换成新对象。只在打开弹窗时灌入一次，避免把正在编辑的顶点盖回去。
+    if (seededRef.current) return;
+    seededRef.current = true;
     if (open && existingRegion && existingRegion.detection_region) {
       if (existingRegion.calibration && existingRegion.calibration.image_data) {
         setImageUrl(existingRegion.calibration.image_data);
@@ -50,8 +58,6 @@ function RegionSelectionTool({ cameraId, onSelect, existingRegion, buttonLabel =
   // 开始预览
   const handleStartPreview = () => {
     clearImage();
-    setPoints([]);
-    setIsComplete(false);
     startStreaming();
   };
 
@@ -210,7 +216,7 @@ function RegionSelectionTool({ cameraId, onSelect, existingRegion, buttonLabel =
           <Paper sx={{ p: 2, mb: 2, bgcolor: '#2f2f2f', color: '#ffffff' }}>
             <Typography variant="subtitle2">操作说明：</Typography>
             <ol style={{ fontSize: '0.85rem' }}>
-              <li>点击"开始预览"查看实时画面</li>
+              <li>点击"开始预览"查看实时画面，已有区域会叠在画面上</li>
               <li>点击"暂停并截帧"冻结当前画面，然后开始标注区域</li>
               <li>点击画面添加顶点，右键或点击起始点完成闭合</li>
             </ol>
@@ -223,12 +229,31 @@ function RegionSelectionTool({ cameraId, onSelect, existingRegion, buttonLabel =
           </Paper>
           <Box sx={{ width: '100%', maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
             {isStreaming && !imageUrl && (
-              <img
-                ref={videoRef}
-                src={mjpegUrl}
-                alt="Live"
-                style={{ width: '100%', border: '1px solid #ccc' }}
-              />
+              <Box sx={{ position: 'relative', width: '100%' }}>
+                <img
+                  ref={videoRef}
+                  src={mjpegUrl}
+                  alt="Live"
+                  style={{ width: '100%', display: 'block', border: '1px solid #ccc' }}
+                />
+                {points.length > 0 && (
+                  <svg
+                    viewBox={`0 0 ${frameSize.width} ${frameSize.height}`}
+                    preserveAspectRatio="none"
+                    style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+                  >
+                    <polygon
+                      points={points.map((p) => `${p.x},${p.y}`).join(' ')}
+                      fill={isComplete ? 'rgba(255, 255, 0, 0.2)' : 'none'}
+                      stroke="yellow"
+                      strokeWidth="2"
+                    />
+                    {points.map((p, i) => (
+                      <circle key={i} cx={p.x} cy={p.y} r="4" fill="red" stroke="white" />
+                    ))}
+                  </svg>
+                )}
+              </Box>
             )}
             {imageUrl && (
               <canvas

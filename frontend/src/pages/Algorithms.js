@@ -18,26 +18,26 @@ import {
   Select,
   MenuItem,
   IconButton,
-  Autocomplete,
   Chip,
   Box,
   Tooltip,
   Alert,
   Tabs,
   Tab,
+  Checkbox,
+  FormControlLabel,
+  FormGroup,
+  FormLabel,
 } from '@mui/material';
 import { Edit, Delete, Publish, ContentCopy } from '@mui/icons-material';
 import axios from '../utils/axios';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 const FALLBACK_ENGINES = [
   { value: 'object_detection', label: '目标检测' },
   { value: 'pose_behavior', label: '姿态行为检测' },
   { value: 'camera_health', label: '画面健康检测' },
   { value: 'mouse_idle', label: '鼠标空闲检测' },
-  { value: 'belt_broken', label: '皮带破损检测' },
-  { value: 'belt_deviation_detection', label: '皮带跑偏检测' },
-  { value: 'belt_broken_series', label: '皮带撕裂序列检测' },
-  { value: 'belt_broken_high', label: '高精度皮带撕裂检测' },
 ];
 
 function Algorithms() {
@@ -198,11 +198,22 @@ function Algorithms() {
     return true;
   })();
 
+  const toggleLabel = (id, checked) => {
+    setFormData((prev) => {
+      const current = Array.isArray(prev.labels) ? prev.labels : [];
+      const next = checked
+        ? [...current.filter((item) => String(item) !== String(id)), id]
+        : current.filter((item) => String(item) !== String(id));
+      return { ...prev, labels: next };
+    });
+  };
+
   const renderTemplateTable = (rows) => (
-    <TableContainer component={Paper}>
-      <Table size="small">
+    <TableContainer component={Paper} sx={scrollTableContainerSx}>
+      <Table size="small" stickyHeader>
         <TableHead>
           <TableRow>
+            <TableCell sx={{ width: 64 }}>序号</TableCell>
             <TableCell>名称</TableCell>
             <TableCell>引擎</TableCell>
             <TableCell>分类</TableCell>
@@ -212,19 +223,20 @@ function Algorithms() {
         <TableBody>
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4}>
+              <TableCell colSpan={5}>
                 <Typography variant="body2" color="text.secondary">
                   暂无系统模板（重启后端同步目录后出现）
                 </Typography>
               </TableCell>
             </TableRow>
           )}
-          {rows.map((algorithm) => {
+          {rows.map((algorithm, index) => {
             const presetCount = Array.isArray(algorithm.parameter_schema?.scene_presets)
               ? algorithm.parameter_schema.scene_presets.length
               : 0;
             return (
               <TableRow key={algorithm.id}>
+                <TableCell>{index + 1}</TableCell>
                 <TableCell>
                   {algorithm.name}
                   {presetCount > 0 && (
@@ -258,10 +270,11 @@ function Algorithms() {
   );
 
   const renderInstanceTable = (rows) => (
-    <TableContainer component={Paper}>
-      <Table size="small">
+    <TableContainer component={Paper} sx={scrollTableContainerSx}>
+      <Table size="small" stickyHeader>
         <TableHead>
           <TableRow>
+            <TableCell sx={{ width: 64 }}>序号</TableCell>
             <TableCell>名称</TableCell>
             {isSuperAdmin && <TableCell>引擎</TableCell>}
             <TableCell>分类</TableCell>
@@ -274,20 +287,21 @@ function Algorithms() {
         <TableBody>
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={isSuperAdmin ? 7 : 2}>
+              <TableCell colSpan={isSuperAdmin ? 8 : 3}>
                 <Typography variant="body2" color="text.secondary">
                   {isSuperAdmin ? '暂无上架算法，请到「系统模板」页签派生' : '暂无可用算法'}
                 </Typography>
               </TableCell>
             </TableRow>
           )}
-          {rows.map((algorithm) => {
+          {rows.map((algorithm, index) => {
             const amodel = models.find((m) => String(m.id) === String(algorithm.model_id));
             const presetCount = Array.isArray(algorithm.parameter_schema?.scene_presets)
               ? algorithm.parameter_schema.scene_presets.length
               : 0;
             return (
               <TableRow key={algorithm.id}>
+                <TableCell>{index + 1}</TableCell>
                 <TableCell>
                   {algorithm.name}
                   {presetCount > 0 && (
@@ -355,59 +369,51 @@ function Algorithms() {
   );
 
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Box>
+    <>
+    <ScrollableDataPage
+      header={(
+        <Box sx={{ mb: 2 }}>
           <Typography variant="h5" gutterBottom sx={{ userSelect: 'none' }}>
             算法清单
             {isSuperAdmin && <Chip size="small" color="primary" label="服务商超管" sx={{ ml: 2 }} />}
           </Typography>
           <Typography variant="body2" color="textSecondary">
             {isSuperAdmin
-              ? '系统模板提供场景预设，不可直接发布。从模板「派生上架」后绑定一个模型再发布；同一引擎若要换模型规格，再派生一条实例即可（同一时刻一条实例只绑一个模型）。'
+              ? '系统模板提供场景预设，不可直接发布。从模板「派生上架」后绑定一个模型再发布；同一引擎若要换模型规格，再派生一条实例即可。'
               : '以下为已发布可用算法，仅供查看；建任务时在「任务」页选择即可。'}
           </Typography>
+          {isSuperAdmin ? (
+            <Tabs
+              value={tab}
+              onChange={(_, v) => setTab(v)}
+              sx={{ borderBottom: 1, borderColor: 'divider', mt: 1 }}
+            >
+              <Tab label={`上架算法（${instances.length}）`} />
+              <Tab label={`系统模板（${templates.length}）`} />
+            </Tabs>
+          ) : (
+            <Typography variant="h6" sx={{ mt: 2 }}>可用算法</Typography>
+          )}
+          {isSuperAdmin && tab === 0 && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              上架算法流程：系统模板 → 派生 → 编辑绑定模型 → 发布。客户建任务时只能选已发布项。
+            </Alert>
+          )}
+          {isSuperAdmin && tab === 1 && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              由产品目录同步，含场景预设；不可绑模型、不可发布。点击「派生」生成可上架算法。
+            </Typography>
+          )}
         </Box>
-      </Grid>
-
-      {isSuperAdmin ? (
-        <Grid item xs={12}>
-          <Tabs
-            value={tab}
-            onChange={(_, v) => setTab(v)}
-            sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-          >
-            <Tab label={`上架算法（${instances.length}）`} />
-            <Tab label={`系统模板（${templates.length}）`} />
-          </Tabs>
-
-          {tab === 0 && (
-            <Box>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                上架算法流程：系统模板 → 派生 → 编辑绑定模型 → 发布。客户建任务时只能选已发布项。
-              </Alert>
-              {renderInstanceTable(instances)}
-            </Box>
-          )}
-
-          {tab === 1 && (
-            <Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                由产品目录同步，含场景预设；不可绑模型、不可发布。点击「派生」生成可上架算法。
-              </Typography>
-              {renderTemplateTable(templates)}
-            </Box>
-          )}
-        </Grid>
-      ) : (
-        <Grid item xs={12}>
-          <Typography variant="h6" gutterBottom>可用算法</Typography>
-          {renderInstanceTable(instances)}
-        </Grid>
       )}
+    >
+      {isSuperAdmin && tab === 0 && renderInstanceTable(instances)}
+      {isSuperAdmin && tab === 1 && renderTemplateTable(templates)}
+      {!isSuperAdmin && renderInstanceTable(instances)}
+    </ScrollableDataPage>
 
       {isSuperAdmin && (
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           {formData.is_system_template ? `系统模板：${formData.name}` : `编辑上架算法：${formData.name}`}
         </DialogTitle>
@@ -479,32 +485,45 @@ function Algorithms() {
                   value={formData.infer_fps}
                   onChange={(e) => setFormData({ ...formData, infer_fps: e.target.value })}
                   inputProps={{ min: 0.5, max: 30, step: 0.5 }}
-                  helperText="边缘每秒推理次数；目标检测常用 2～5，跌倒类姿态建议 ≥5"
+                  helperText="边缘每秒推理次数；目标检测常用 2～5，姿态行为建议 ≥5"
                 />
               </Grid>
             )}
 
             {selectedModel && Array.isArray(selectedModel.labelmap) && selectedModel.labelmap.length > 0 && (
               <Grid item xs={12}>
-                <Autocomplete
-                  multiple
-                  options={selectedModel.labelmap}
-                  getOptionLabel={(option) => option.name || String(option.id)}
-                  value={selectedModel.labelmap.filter((l) => (formData.labels || []).includes(l.id))}
-                  onChange={(event, newValue) => {
-                    setFormData({ ...formData, labels: newValue.map((v) => v.id) });
+                <FormLabel component="legend">默认关注的检测目标</FormLabel>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1 }}>
+                  勾选后，创建任务里的检测场景只能从这些类别中选择。都不勾选则显示模型的全部类别。
+                </Typography>
+                <FormGroup
+                  row
+                  sx={{
+                    flexWrap: 'wrap',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    px: 1.5,
+                    py: 0.5,
                   }}
-                  renderInput={(params) => (
-                    <TextField {...params} variant="outlined" label="默认关注的检测目标（可选）" />
-                  )}
-                  renderTags={(value, getTagProps) =>
-                    value.map((option, index) => (
-                      <Chip variant="outlined" label={option.name || String(option.id)} {...getTagProps({ index })} />
-                    ))
-                  }
-                  isOptionEqualToValue={(option, value) => String(option.id) === String(value.id)}
-                  disabled={formData.is_system_template}
-                />
+                >
+                  {selectedModel.labelmap.map((label) => {
+                    const checked = (formData.labels || []).some((id) => String(id) === String(label.id));
+                    return (
+                      <FormControlLabel
+                        key={label.id}
+                        disabled={formData.is_system_template}
+                        control={(
+                          <Checkbox
+                            checked={checked}
+                            onChange={(e) => toggleLabel(label.id, e.target.checked)}
+                          />
+                        )}
+                        label={`${label.name || label.id}（${label.id}）`}
+                      />
+                    );
+                  })}
+                </FormGroup>
               </Grid>
             )}
           </Grid>
@@ -518,7 +537,7 @@ function Algorithms() {
         </DialogActions>
       </Dialog>
       )}
-    </Grid>
+    </>
   );
 }
 

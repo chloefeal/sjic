@@ -1,6 +1,7 @@
 version: '3.8'
 
-# 私有化模型下发：backend 写 ./models，frontend Nginx 托管 /static-models（secure_link）
+# 开发 / 首次构建镜像：docker compose up -d --build
+# 现场挂载升级：见 deploy/README.md，使用 deploy/platform/docker-compose.yml
 # Edge 侧在 edge-agent/config.yaml 配置平台地址，自行拼接模型下载基址
 
 services:
@@ -8,6 +9,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: sjic-backend:runtime
     container_name: sjic-backend
     restart: unless-stopped
     ports:
@@ -22,7 +24,7 @@ services:
       - ./logs:/app/logs
       - ./branding:/app/branding
       # Linux 生产环境建议挂载，授权绑定宿主机/虚机；Windows Docker Desktop 请勿启用
-      # - /etc/machine-id:/host/etc/machine-id:ro
+      - /etc/machine-id:/host/etc/machine-id:ro
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
@@ -45,6 +47,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    image: sjic-frontend:runtime
     container_name: sjic-frontend
     restart: unless-stopped
     ports:

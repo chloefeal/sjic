@@ -18,6 +18,8 @@ class TaskManager:
         self.stop_events = {}     # task_id -> threading.Event()
         self.mqtt_client = None   # 将被注入
         self.api_base_url = self.config['platform']['api_base_url']
+        from algorithms.detection_preview import configure_preview
+        configure_preview(self.api_base_url)
         self.persistence_file = os.path.join(self.config['paths']['models_dir'], 'tasks.json')
         os.makedirs(self.config['paths']['models_dir'], exist_ok=True)
         self.active_configs = {}  # task_id -> config dictionary for persistence
@@ -71,21 +73,27 @@ class TaskManager:
 
         logger.info(f"Initializing task {task_id} ({task_config.get('task_name')})")
         task_config.setdefault('paths', self.config.get('paths') or {})
+        task_config.setdefault('architecture', self.config.get('architecture'))
 
         # 1. 检查并下载模型（部分引擎无需模型）
         from algorithms import NO_MODEL_ENGINES
         algo_type = task_config.get('algorithm_type')
-        model_info = task_config.get('model', {}) or {}
-        needs_model = model_info.get('required', algo_type not in NO_MODEL_ENGINES)
-
         model_path = None
-        if needs_model:
-            model_path = self._ensure_model_exists(model_info)
-            if not model_path:
-                self._report_status(task_id, "failed", "Model download failed")
+        if algo_type == 'exam_pipeline':
+            err = self._prepare_pipeline_models(task_id, task_config)
+            if err:
+                self._report_status(task_id, "failed", err)
                 return
         else:
-            logger.info(f"Task {task_id} engine={algo_type} does not require a model")
+            model_info = task_config.get('model', {}) or {}
+            needs_model = model_info.get('required', algo_type not in NO_MODEL_ENGINES)
+            if needs_model:
+                model_path = self._ensure_model_exists(model_info)
+                if not model_path:
+                    self._report_status(task_id, "failed", "Model download failed")
+                    return
+            else:
+                logger.info(f"Task {task_id} engine={algo_type} does not require a model")
 
         # 2. 准备运行 (创建线程)
         stop_event = threading.Event()
@@ -141,6 +149,24 @@ class TaskManager:
                 thread.join(timeout=remaining)
             except Exception:
                 pass
+
+    def _prepare_pipeline_models(self, task_id, task_config):
+        """下载混合任务实际会用到的模型。返回错误文案，成功则返回 None。"""
+        models = task_config.get('models') or {}
+        local = {}
+        for key in ('object_detection', 'pose_behavior'):
+            info = models.get(key) or {}
+            if not info.get('required'):
+                continue
+            path = self._ensure_model_exists(info)
+            if not path:
+                return f"Model download failed: {key}"
+            local[key] = path
+        if not local:
+            return "mixed task has no models"
+        task_config['model_local_paths'] = local
+        logger.info(f"Task {task_id} pipeline models: {local}")
+        return None
 
     def _ensure_model_exists(self, model_info):
         """如果本地没有 `.engine` 或 `.onnx`，从云端下载"""
@@ -205,15 +231,16 @@ class TaskManager:
             task_config['model_local_path'] = model_path
 
             # 定义告警回调
-            def handle_alert(alert_type, confidence, image_frame, message=None):
+            def handle_alert(alert_type, confidence, image_frame, message=None, raw_frame=None, algorithm_id=None):
                 self._upload_alert(
                     task_config['camera']['id'],
                     alert_type,
                     confidence,
                     image_frame=image_frame,
+                    raw_frame=raw_frame,
                     message=message,
                     task_id=task_config.get('task_id'),
-                    algorithm_id=task_config.get('algorithm_id'),
+                    algorithm_id=algorithm_id if algorithm_id is not None else task_config.get('algorithm_id'),
                 )
 
             # 让纯业务代码接管！彻底剥离调度！
@@ -261,6 +288,20 @@ class TaskManager:
             logger.debug(f"Saved {len(self.active_configs)} task configs to {self.persistence_file}")
         except Exception as e:
             logger.error(f"Failed to save tasks: {str(e)}")
+
+    def sync_display_config(self):
+        """启动时向平台读取骨骼绘制开关。失败则保持默认不画。"""
+        from algorithms.base import set_show_pose_skeleton, show_pose_skeleton
+        url = f"{self.api_base_url.rstrip('/')}/display-config"
+        try:
+            res = requests.get(url, timeout=3)
+            if not res.ok:
+                logger.warning(f"Display config request failed: HTTP {res.status_code}")
+                return
+            set_show_pose_skeleton((res.json() or {}).get('show_skeleton'))
+            logger.info(f"Pose skeleton overlay from platform: {show_pose_skeleton()}")
+        except Exception as e:
+            logger.warning(f"Display config sync failed, skeleton overlay stays hidden: {e}")
 
     def reload_tasks(self):
         """重启后重新加载任务，通过与云端校验差集防留痕"""
@@ -318,7 +359,7 @@ class TaskManager:
             }
             self.mqtt_client.publish_task_status(payload)
 
-    def _upload_alert(self, camera_id, alert_type, confidence, image_frame=None, image_path=None, message=None, task_id=None, algorithm_id=None):
+    def _upload_alert(self, camera_id, alert_type, confidence, image_frame=None, image_path=None, raw_frame=None, message=None, task_id=None, algorithm_id=None):
         """HTTP POST 上传告警到云端"""
         url = f"{self.api_base_url}/alerts"
         try:
@@ -342,6 +383,11 @@ class TaskManager:
                 success, encoded_image = cv2.imencode('.jpg', image_frame)
                 if success:
                     files['image'] = ('alert.jpg', encoded_image.tobytes(), 'image/jpeg')
+            if raw_frame is not None and hasattr(raw_frame, 'any') and raw_frame.any():
+                import cv2
+                success, encoded_raw = cv2.imencode('.jpg', raw_frame)
+                if success:
+                    files['raw_image'] = ('alert_raw.jpg', encoded_raw.tobytes(), 'image/jpeg')
 
             response = requests.post(url, data=data, files=files if files else None, timeout=5)
             if response.ok:

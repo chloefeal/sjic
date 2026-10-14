@@ -1,0 +1,66 @@
+name: sjic-platform
+
+# 初次构建镜像仍用仓库根目录的 docker-compose.yml（打上 sjic-backend:runtime / sjic-frontend:runtime）。
+# 本文件只挂载 /opt/sjic/current 里的应用目录，升级时不重新构建镜像。
+
+services:
+  backend:
+    image: sjic-backend:runtime
+    container_name: sjic-backend
+    restart: unless-stopped
+    ports:
+      - "38881:38881"
+      - "38883:38883"
+    volumes:
+      - /opt/sjic/current/backend:/app
+      - /opt/sjic/data/instance:/app/instance
+      - /opt/sjic/data/data:/app/data
+      - /opt/sjic/data/alerts:/app/alerts
+      - /opt/sjic/data/models:/app/models
+      - /opt/sjic/data/videos:/app/videos
+      - /opt/sjic/data/logs:/app/logs
+      - /opt/sjic/data/branding:/app/branding
+      - /opt/sjic/data/upgrades:/opt/sjic/data/upgrades
+      - /opt/sjic/incoming:/opt/sjic/incoming
+      - /opt/sjic/updater:/opt/sjic/updater:ro
+      - /etc/machine-id:/host/etc/machine-id:ro
+    environment:
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Shanghai
+      - DATABASE_URL=sqlite:///instance/app.db
+      - ALERT_STORAGE_PATH=/app/alerts
+      - BRANDING_STORAGE_PATH=/app/branding
+      - MQTT_BROKER_URL=127.0.0.1
+      - MQTT_BROKER_PORT=38883
+      - STORAGE_TYPE=${STORAGE_TYPE:-NGINX}
+      - DOWNLOAD_SECURE_KEY=${DOWNLOAD_SECURE_KEY:-my-super-secret-key-for-nginx}
+      - LICENSE_SIGNING_KEY=${LICENSE_SIGNING_KEY:-change-me-sjic-license-signing-key}
+      - SJIC_IN_CONTAINER=1
+      - SJIC_UPGRADES=/opt/sjic/data/upgrades
+      - SJIC_INCOMING=/opt/sjic/incoming
+      - HOST_MACHINE_ID=${HOST_MACHINE_ID:-}
+    networks:
+      - sjic-network
+
+  frontend:
+    image: sjic-frontend:runtime
+    container_name: sjic-frontend
+    restart: unless-stopped
+    ports:
+      - "38880:38880"
+    volumes:
+      - /opt/sjic/current/frontend/build:/usr/share/nginx/html:ro
+      - /opt/sjic/data/models:/usr/share/nginx/models:ro
+      - /opt/sjic/data/upgrades:/usr/share/nginx/upgrades:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - DOWNLOAD_SECURE_KEY=${DOWNLOAD_SECURE_KEY:-my-super-secret-key-for-nginx}
+    depends_on:
+      - backend
+    networks:
+      - sjic-network
+
+networks:
+  sjic-network:
+    driver: bridge

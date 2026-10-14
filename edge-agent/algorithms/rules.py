@@ -8,9 +8,15 @@ def _class_ok(box, class_ids):
     return int(getattr(box, 'class_id', 0)) in class_ids
 
 
-def _boxes_in_roi(boxes, class_ids, roi_polygon):
+def _boxes_in_roi(boxes, class_ids, roi_polygon, min_confidence=None):
     matched = []
     for box in boxes:
+        if min_confidence is not None:
+            try:
+                if float(getattr(box, 'confidence', 0) or 0) < float(min_confidence):
+                    continue
+            except (TypeError, ValueError):
+                continue
         if not _class_ok(box, class_ids):
             continue
         if roi_polygon is not None:
@@ -37,6 +43,7 @@ class BaseRule:
             self.class_ids = [0]
         else:
             self.class_ids = [int(x) for x in raw_ids]
+        self.min_confidence = self.spec.get('_min_confidence')
         self._last_alert_time = None
         self._state_since = None
         if roi_points and len(roi_points) >= 3:
@@ -65,7 +72,7 @@ class BaseRule:
 
 class PresenceRule(BaseRule):
     def evaluate(self, boxes, now, logger):
-        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon)
+        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon, self.min_confidence)
         if not matched or not self._cooldown_ok(now):
             return None
         conf = max(b.confidence for b in matched)
@@ -79,7 +86,7 @@ class LingerRule(BaseRule):
         self.linger_seconds = float(self.spec.get('linger_seconds', 5))
 
     def evaluate(self, boxes, now, logger):
-        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon)
+        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon, self.min_confidence)
         if not matched:
             self._state_since = None
             return None
@@ -101,7 +108,7 @@ class AbsenceRule(BaseRule):
         self.absent_seconds = float(self.spec.get('absent_seconds', 600))
 
     def evaluate(self, boxes, now, logger):
-        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon)
+        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon, self.min_confidence)
         if matched:
             self._state_since = None
             return None
@@ -125,7 +132,7 @@ class CrowdCountRule(BaseRule):
         self.seconds = float(self.spec.get('seconds', 10))
 
     def evaluate(self, boxes, now, logger):
-        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon)
+        matched = _boxes_in_roi(boxes, self.class_ids, self._roi_polygon, self.min_confidence)
         if len(matched) < self.min_count:
             self._state_since = None
             return None
@@ -150,6 +157,59 @@ RULE_CLASS_MAP = {
     'absence': AbsenceRule,
     'crowd_count': CrowdCountRule,
 }
+
+# 只统计姿态检出的人，不看关键点姿态。class_ids 清空后，每条姿态框都算一个人。
+PERSON_COUNT_TYPES = frozenset({'absence', 'linger', 'crowd_count'})
+
+
+def person_count_specs(behaviors):
+    specs = []
+    for spec in behaviors or []:
+        if not isinstance(spec, dict) or spec.get('type') not in PERSON_COUNT_TYPES:
+            continue
+        copied = dict(spec)
+        copied['class_ids'] = []
+        specs.append(copied)
+    return specs
+
+
+def filter_persons_roi(persons, roi_polygon):
+    """推理后过滤。没有多边形时保留全部检出的人。"""
+    if roi_polygon is None:
+        return list(persons or [])
+    kept = []
+    for box, kps in persons or []:
+        if box is None:
+            continue
+        foot = getattr(box, 'foot_center', None)
+        if foot is None:
+            continue
+        if roi_polygon.contains(Point(foot)):
+            kept.append((box, kps))
+    return kept
+
+
+def behavior_rois(behaviors, transform_roi):
+    """每个姿态场景一块区域。未标注时多边形为空，表示整帧。"""
+    rois = {}
+    for spec in behaviors or []:
+        if not isinstance(spec, dict):
+            continue
+        bid = spec.get('id') or spec.get('type')
+        points = transform_roi(spec.get('detection_region'))
+        polygon = Polygon(points) if points and len(points) >= 3 else None
+        rois[bid] = (polygon, points if polygon is not None else None)
+    return rois
+
+
+def person_count_message(spec, btype, hit):
+    name = (spec or {}).get('name') or btype
+    count = len((hit or {}).get('boxes') or [])
+    if btype == 'absence':
+        return f"行为[{name}] 持续无人"
+    if btype == 'linger':
+        return f"行为[{name}] 持续有人 {count} 人"
+    return f"行为[{name}] 人数 {count} ≥ {(spec or {}).get('min_count', 5)}"
 
 
 def build_rules(raw_rules, transform_roi, alert_cooldown_sec, is_point_in_roi, logger):

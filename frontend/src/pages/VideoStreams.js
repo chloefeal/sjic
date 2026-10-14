@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Grid, Card, CardContent, Typography, Button, Dialog, DialogTitle,
+  Box, Typography, Button, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Alert, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Paper, IconButton,
   FormControl, InputLabel, Select, MenuItem, FormHelperText
@@ -8,6 +8,7 @@ import {
 import { Add, Visibility, Delete, Close, Edit } from '@mui/icons-material';
 import axios, { getBaseUrl, getWebSocketUrl } from '../utils/axios';
 import VideoPlayer from '../components/VideoPlayer';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 import JSMpeg from '@cycjimmy/jsmpeg-player';
 
 const EMPTY_STREAM = { name: '', url: '', mount_position: 'back_top' };
@@ -102,20 +103,36 @@ function VideoStreams() {
     setPreviewingCamera(null);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (stream) => {
+    try {
+      const tasks = await axios.get('/api/tasks');
+      const bound = (tasks || []).filter((task) => Number(task.cameraId) === Number(stream.id));
+      if (bound.length > 0) {
+        const names = bound.map((task) => task.name).filter(Boolean).join('、');
+        const detail = names ? `：${names}` : '';
+        window.alert(`视频源「${stream.name}」已绑定任务${detail}。请先到任务模块删除这些任务后再删除视频源。`);
+        return;
+      }
+    } catch (error) {
+      // 任务列表拉不到时仍交给删除接口判断
+    }
     if (!window.confirm('确定要删除该视频源吗？此操作不可恢复。')) return;
     try {
-      await axios.delete(`/api/cameras/${id}`);
+      await axios.delete(`/api/cameras/${stream.id}`);
       fetchStreams();
     } catch (error) {
       console.error('Error deleting stream:', error);
+      const msg = error.response?.data?.error || '删除视频源失败';
+      setError(msg);
+      window.alert(msg);
     }
   };
 
   return (
     <>
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
+      <ScrollableDataPage
+        header={(
+          <Box sx={{ mb: 2 }}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
               {error}
@@ -129,12 +146,14 @@ function VideoStreams() {
               setFormError(null);
               setOpenDialog(true);
             }}
-            sx={{ mb: 2 }}
           >
             添加视频源
           </Button>
-          <TableContainer component={Paper}>
-            <Table>
+          </Box>
+        )}
+      >
+          <TableContainer component={Paper} sx={scrollTableContainerSx}>
+            <Table stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell>ID</TableCell>
@@ -172,7 +191,7 @@ function VideoStreams() {
                       </IconButton>
                       <IconButton
                         color="error"
-                        onClick={() => handleDelete(stream.id)}
+                        onClick={() => handleDelete(stream)}
                         title="删除"
                       >
                         <Delete />
@@ -183,8 +202,7 @@ function VideoStreams() {
               </TableBody>
             </Table>
           </TableContainer>
-        </Grid>
-      </Grid>
+      </ScrollableDataPage>
 
       {/* 添加视频源对话框 */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
@@ -219,7 +237,7 @@ function VideoStreams() {
             </Select>
             <FormHelperText>
               {CAMERA_MOUNT_POSITIONS.find((p) => p.value === (newStream.mount_position || 'back_top'))?.hint}
-              。姿态检测会按此位置使用不同判断逻辑。改完后请重新启动相关姿态任务。
+              。改完后请重新启动相关任务。
             </FormHelperText>
           </FormControl>
           <TextField

@@ -45,6 +45,13 @@ def _serialize_algorithm(algorithm, include_internal=False):
     except Exception:
         pass
 
+    data['model_labelmap'] = None
+    if algorithm.model_id:
+        from app.models import DetectionModel
+        model = DetectionModel.query.get(algorithm.model_id)
+        if model is not None:
+            data['model_labelmap'] = model.labelmap
+
     if not include_internal:
         data.pop('model_id', None)
     else:
@@ -76,6 +83,12 @@ def get_algorithms():
     algorithms = Algorithm.query.order_by(Algorithm.id.asc()).all()
     if allowed_types:
         algorithms = [a for a in algorithms if a.type in allowed_types]
+
+    from app.utils.algorithm_catalog import is_hidden_algorithm
+    algorithms = [
+        a for a in algorithms
+        if not is_hidden_algorithm(a.resolved_engine(), a.type, a.category)
+    ]
 
     payload = get_token_payload() or {}
     is_vendor = payload.get('role') == 'vendor'

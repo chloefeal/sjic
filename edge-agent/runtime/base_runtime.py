@@ -53,7 +53,7 @@ class DetectionResult:
         for box in self.boxes:
             color = (0, 255, 0)
             cv2.rectangle(vis, (box.x1, box.y1), (box.x2, box.y2), color, 2)
-            label = f"cls{box.class_id}: {box.confidence:.2f}"
+            label = f"{box.confidence:.2f}"
             cv2.putText(vis, label, (box.x1, box.y1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
         return vis

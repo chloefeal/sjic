@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Switch, FormControlLabel, Select, MenuItem, IconButton,
+  TextField, Select, MenuItem, IconButton, FormControl,
   Typography, Divider, Box, InputAdornment, Alert, Chip
 } from '@mui/material';
 import { Add, Edit, Delete, PlayArrow, Stop, Info, Search } from '@mui/icons-material';
@@ -11,6 +11,9 @@ import BeltCalibrationTool from '../components/BeltCalibrationTool';
 import BeltDeviationCalibrationTool from '../components/BeltDeviationCalibrationTool';
 import DetectionRulesEditor from '../components/DetectionRulesEditor';
 import PoseBehaviorEditor from '../components/PoseBehaviorEditor';
+import FusionScenesEditor from '../components/FusionScenesEditor';
+import DetectionPreviewDialog, { taskPreviewEngines } from '../components/DetectionPreviewDialog';
+import ScrollableDataPage, { scrollTableContainerSx } from '../components/ScrollableDataPage';
 
 function mergeAlgoDefaults(algorithm, prevParams = {}) {
   const defaults = algorithm?.parameter_schema?.default_task_params || {};
@@ -28,12 +31,76 @@ function mergeAlgoDefaults(algorithm, prevParams = {}) {
   return next;
 }
 
+function sceneMissingClass(item) {
+  return item && item.enabled !== false && (!Array.isArray(item.class_ids) || item.class_ids.length === 0);
+}
+
+function detectionClassError(params) {
+  const rules = Array.isArray(params?.rules) ? params.rules : [];
+  const fusions = Array.isArray(params?.fusions) ? params.fusions : [];
+  const missing = rules.find(sceneMissingClass) || fusions.find(sceneMissingClass);
+  if (!missing) return '';
+  return `检测场景「${missing.name || '未命名'}」需要选择类别`;
+}
+
+function taskFieldErrors(formData) {
+  return {
+    name: !String(formData.name || '').trim(),
+    node: !formData.edge_node_id,
+    camera: !formData.cameraId,
+    algorithm: formData.pipeline === 'exam'
+      ? (!formData.od_algorithm_id && !formData.pose_algorithm_id)
+      : !formData.algorithm_id,
+    classMessage: detectionClassError(formData.algorithm_parameters),
+  };
+}
+
+function hasTaskFieldErrors(errors) {
+  return errors.name || errors.node || errors.camera || errors.algorithm || Boolean(errors.classMessage);
+}
+
+function cameraShareWarning(tasks, formData, editingTask) {
+  if (formData?.pipeline !== 'exam' || !formData.cameraId) return '';
+  const others = (tasks || []).filter((task) => (
+    task.cameraId === formData.cameraId && task.id !== editingTask?.id
+  ));
+  const hit = others.filter((task) => (
+    task.od_algorithm_id
+    || task.pose_algorithm_id
+    || task.algorithm_engine === 'object_detection'
+    || task.algorithm_engine === 'pose_behavior'
+  ));
+  if (!hit.length) return '';
+  return `该摄像头已有任务「${hit.map((task) => task.name).join('、')}」在使用目标检测或姿态，同时运行会各拉一路视频`;
+}
+
+function taskAlgorithmLabel(task, algorithms) {
+  if (task?.pipeline === 'exam' || task?.od_algorithm_id || task?.pose_algorithm_id) {
+    const names = [];
+    if (task.od_algorithm_id) {
+      names.push(algorithms.find((item) => item.id === task.od_algorithm_id)?.name || '目标检测');
+    }
+    if (task.pose_algorithm_id) {
+      names.push(algorithms.find((item) => item.id === task.pose_algorithm_id)?.name || '姿态行为检测');
+    }
+    return names.join(' + ') || '混合';
+  }
+  return algorithms.find((item) => item.id === task?.algorithm_id)?.name || '';
+}
+
+function isDroppedPoseBehavior(item) {
+  return item?.type === 'chin_rest'
+    || item?.scene_preset_id === 'chin_rest'
+    || item?.alert_type === 'chin_rest';
+}
+
 function getTaskSceneNames(task) {
   const params = task?.algorithm_parameters || {};
   const items = [
     ...(Array.isArray(params.rules) ? params.rules : []),
     ...(Array.isArray(params.behaviors) ? params.behaviors : []),
-  ];
+    ...(Array.isArray(params.fusions) ? params.fusions : []),
+  ].filter((item) => !isDroppedPoseBehavior(item));
   return items
     .filter((item) => item && item.enabled !== false)
     .map((item) => item.name || item.type)
@@ -54,8 +121,10 @@ function Tasks() {
     cameraId: '',
     edge_node_id: '',
     confidence: 0.5,
-    notificationEnabled: true,
+    pipeline: 'single',
     algorithm_id: '',
+    od_algorithm_id: '',
+    pose_algorithm_id: '',
     schedule_start: '',
     schedule_end: '',
     algorithm_parameters: {
@@ -69,8 +138,10 @@ function Tasks() {
     }
   });
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
+  const [previewTask, setPreviewTask] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [formError, setFormError] = useState('');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   // Filtering States
   const [filterNodeId, setFilterNodeId] = useState('all');
@@ -79,6 +150,9 @@ function Tasks() {
 
   const taskAlgorithms = algorithms.filter((a) => a.published === true);
   const selectedAlgorithm = algorithms.find((a) => a.id === formData.algorithm_id);
+  const odAlgorithms = taskAlgorithms.filter((a) => (a.engine || a.type) === 'object_detection');
+  const poseAlgorithms = taskAlgorithms.filter((a) => (a.engine || a.type) === 'pose_behavior');
+  const isExamPipeline = formData.pipeline === 'exam';
 
   const extractApiError = (error, fallback) => {
     const data = error?.response?.data;
@@ -142,10 +216,39 @@ function Tasks() {
     }
   };
 
-  const handleCreate = async () => {
+  const buildTaskPayload = (source) => {
+    const payload = {
+      ...source,
+      algorithm_parameters: { ...(source.algorithm_parameters || {}) },
+    };
+    delete payload.pipeline;
+    delete payload.id;
+    if (source.pipeline === 'exam') {
+      payload.algorithm_id = null;
+      payload.od_algorithm_id = source.od_algorithm_id || null;
+      payload.pose_algorithm_id = source.pose_algorithm_id || null;
+    } else {
+      payload.od_algorithm_id = null;
+      payload.pose_algorithm_id = null;
+    }
+    return payload;
+  };
+
+  const rejectIfIncomplete = () => {
+    setSubmitAttempted(true);
+    const errors = taskFieldErrors(formData);
+    if (hasTaskFieldErrors(errors)) {
+      setFormError('请补全标红的必填项');
+      return true;
+    }
     setFormError('');
+    return false;
+  };
+
+  const handleCreate = async () => {
+    if (rejectIfIncomplete()) return;
     try {
-      const response = await axios.post('/api/tasks', formData);
+      const response = await axios.post('/api/tasks', buildTaskPayload(formData));
       setTasks([...tasks, response]);
       setOpenDialog(false);
       resetForm();
@@ -157,9 +260,9 @@ function Tasks() {
   };
 
   const handleUpdate = async () => {
-    setFormError('');
+    if (rejectIfIncomplete()) return;
     try {
-      await axios.put(`/api/tasks/${editingTask.id}`, formData);
+      await axios.put(`/api/tasks/${editingTask.id}`, buildTaskPayload(formData));
       setOpenDialog(false);
       resetForm();
       fetchTasks();
@@ -181,15 +284,18 @@ function Tasks() {
 
   const handleEdit = (task) => {
     setFormError('');
+    setSubmitAttempted(false);
     setFormData({
       id: task.id,
       name: task.name,
       cameraId: task.cameraId,
-      algorithm_id: task.algorithm_id,
+      pipeline: (task.pipeline === 'exam' || task.od_algorithm_id || task.pose_algorithm_id) ? 'exam' : 'single',
+      algorithm_id: task.algorithm_id || '',
+      od_algorithm_id: task.od_algorithm_id || '',
+      pose_algorithm_id: task.pose_algorithm_id || '',
       edge_node_id: task.edge_node_id || '',
       confidence: task.confidence,
       alertThreshold: task.alertThreshold,
-      notificationEnabled: task.notificationEnabled,
       schedule_start: task.schedule_start || '',
       schedule_end: task.schedule_end || '',
       algorithm_parameters: task.algorithm_parameters || {}
@@ -202,14 +308,17 @@ function Tasks() {
   const resetForm = () => {
     setEditingTask(null);
     setFormError('');
+    setSubmitAttempted(false);
     setFormData({
       name: '',
       cameraId: '',
       edge_node_id: (filterNodeId !== 'all' && filterNodeId !== 'unassigned') ? filterNodeId : '',
       confidence: 0.5,
       alertThreshold: 3,
-      notificationEnabled: true,
+      pipeline: 'single',
       algorithm_id: '',
+      od_algorithm_id: '',
+      pose_algorithm_id: '',
       schedule_start: '',
       schedule_end: '',
       algorithm_parameters: {
@@ -221,7 +330,8 @@ function Tasks() {
         },
         regions: [],
         rules: [],
-        behaviors: []
+        behaviors: [],
+        fusions: []
       }
     });
   };
@@ -303,6 +413,14 @@ function Tasks() {
   };
 
   const renderAlgorithmParams = (task) => {
+    if (task.pipeline === 'exam' || task.od_algorithm_id || task.pose_algorithm_id) {
+      const scenes = getTaskSceneNames(task);
+      return (
+        <Typography variant="body2">
+          {scenes.length ? scenes.join('、') : '尚未添加场景'}
+        </Typography>
+      );
+    }
     const algorithm = algorithms.find(a => a.id === task.algorithm_id);
     if (!algorithm) return null;
 
@@ -341,6 +459,8 @@ function Tasks() {
                     {rule.type === 'linger' ? ` · 驻留 ${rule.linger_seconds ?? 5} 秒` : ''}
                     {rule.type === 'absence' ? ` · 缺席 ${rule.absent_seconds ?? 600} 秒` : ''}
                     {rule.type === 'crowd_count' ? ` · ≥${rule.min_count ?? 5}人 / ${rule.seconds ?? 10}秒` : ''}
+                    {rule.confidence != null && rule.confidence !== '' ? ` · 置信度 ${rule.confidence}` : ''}
+                    {Array.isArray(rule.class_ids) && rule.class_ids.length ? ` · 类别 ${rule.class_ids.join(',')}` : ''}
                     {` · 告警 ${rule.alert_type || '-'}`}
                     {rule.detection_region?.points?.length ? ` · ROI ${rule.detection_region.points.length} 点` : ' · 整帧'}
                     {rule.schedule_start && rule.schedule_end ? ` · 时段 ${rule.schedule_start}–${rule.schedule_end}` : ''}
@@ -354,15 +474,23 @@ function Tasks() {
           );
         }
         case 'pose_behavior': {
-          const behaviors = Array.isArray(task.algorithm_parameters?.behaviors) ? task.algorithm_parameters.behaviors : [];
+          const behaviors = (Array.isArray(task.algorithm_parameters?.behaviors) ? task.algorithm_parameters.behaviors : [])
+            .filter((item) => !isDroppedPoseBehavior(item));
           return (
             <>
               <Typography variant="subtitle2" gutterBottom>姿态行为：</Typography>
               {behaviors.map((b, idx) => (
                 <Typography key={b.id || idx}>
-                  {b.name || b.type} · {b.seconds ?? '-'} 秒
-                  {b.type === 'smart_glasses' ? ` · ≥${b.min_touches ?? 3}次触碰` : ''}
+                  {b.name || b.type}
+                  {b.type === 'absence' ? ` · 缺席 ${b.absent_seconds ?? 600} 秒` : ''}
+                  {b.type === 'linger' ? ` · 滞留 ${b.linger_seconds ?? 300} 秒` : ''}
+                  {b.type === 'crowd_count' ? ` · ≥${b.min_count ?? 5}人 / ${b.seconds ?? 10}秒` : ''}
+                  {b.type !== 'absence' && b.type !== 'linger' && b.type !== 'crowd_count' ? ` · ${b.seconds ?? '-'} 秒` : ''}
+                  {b.type === 'smart_glasses' ? ` · ≥${b.min_touches ?? 3}次触碰 · 耳距 ${b.ear_dist_ratio ?? 0.28}` : ''}
+                  {b.confidence != null && b.confidence !== '' ? ` · 置信度 ${b.confidence}` : ''}
                   {b.type === 'invigilator_absent' ? ` · 站立≥${b.min_standing ?? 2}` : ''}
+                  {b.type === 'desk_stand' ? ` · 长高比≥${b.min_height_width ?? 1.6} · 膝角≥${b.min_knee_degrees ?? 150}° · 静止≤${b.max_move_ratio ?? 1}倍框宽` : ''}
+                  {b.detection_region?.points?.length ? ` · ROI ${b.detection_region.points.length} 点` : ''}
                   {b.schedule_start && b.schedule_end ? ` · 时段 ${b.schedule_start}–${b.schedule_end}` : ''}
                   {b.enabled === false ? '（已关闭）' : ''}
                 </Typography>
@@ -522,7 +650,61 @@ function Tasks() {
   };
 
   // 渲染算法特定参数
+  const renderExamPipelineParams = () => {
+    const odAlgorithm = algorithms.find((item) => item.id === formData.od_algorithm_id);
+    const poseAlgorithm = algorithms.find((item) => item.id === formData.pose_algorithm_id);
+    const patchParams = (nextParams) => setFormData((prev) => ({
+      ...prev,
+      algorithm_parameters: nextParams,
+    }));
+    return (
+      <>
+        {odAlgorithm && (
+          <Grid item xs={12}>
+            <DetectionRulesEditor
+              cameraId={formData.cameraId}
+              algorithm={odAlgorithm}
+              algorithmParameters={formData.algorithm_parameters}
+              catalogPresets={catalog?.od_scene_presets}
+              taskConfidence={formData.confidence}
+              labelmap={odAlgorithm.model_labelmap}
+              highlightMissing={submitAttempted}
+              onChange={patchParams}
+            />
+          </Grid>
+        )}
+        {poseAlgorithm && (
+          <Grid item xs={12}>
+            <PoseBehaviorEditor
+              algorithm={poseAlgorithm}
+              algorithmParameters={formData.algorithm_parameters}
+              catalogPresets={catalog?.pose_scene_presets}
+              taskConfidence={formData.confidence}
+              cameraId={formData.cameraId}
+              excludePresetIds={['smart_glasses', 'smart_watch', 'chin_rest']}
+              onChange={patchParams}
+            />
+          </Grid>
+        )}
+        {odAlgorithm && poseAlgorithm && (
+          <Grid item xs={12}>
+            <FusionScenesEditor
+              algorithmParameters={formData.algorithm_parameters}
+              catalogPresets={catalog?.fusion_scene_presets}
+              taskConfidence={formData.confidence}
+              labelmap={odAlgorithm.model_labelmap}
+              allowedLabelIds={odAlgorithm.labels}
+              highlightMissing={submitAttempted}
+              onChange={patchParams}
+            />
+          </Grid>
+        )}
+      </>
+    );
+  };
+
   const renderAlgorithmSpecificParams = () => {
+    if (isExamPipeline) return renderExamPipelineParams();
     if (!formData.algorithm_id) return null;
 
     const algorithm = algorithms.find(a => a.id === formData.algorithm_id);
@@ -539,6 +721,9 @@ function Tasks() {
               algorithm={algorithm}
               algorithmParameters={formData.algorithm_parameters}
               catalogPresets={catalog?.od_scene_presets}
+              taskConfidence={formData.confidence}
+              labelmap={algorithm.model_labelmap}
+              highlightMissing={submitAttempted}
               onChange={(nextParams) => setFormData((prev) => ({
                 ...prev,
                 algorithm_parameters: nextParams,
@@ -554,6 +739,8 @@ function Tasks() {
           algorithm={algorithm}
           algorithmParameters={formData.algorithm_parameters}
           catalogPresets={catalog?.pose_scene_presets}
+          taskConfidence={formData.confidence}
+          cameraId={formData.cameraId}
           onChange={(nextParams) => setFormData((prev) => ({
             ...prev,
             algorithm_parameters: nextParams,
@@ -647,6 +834,10 @@ function Tasks() {
   };
 
 
+  const previewingTask = previewTask
+    ? (tasks.find((item) => item.id === previewTask.id) || previewTask)
+    : null;
+
   const filteredTasks = tasks.filter(t => {
     // 1. By Node
     if (filterNodeId === 'unassigned' && t.edge_node_id) return false;
@@ -662,8 +853,10 @@ function Tasks() {
   });
 
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
+    <>
+    <ScrollableDataPage
+      header={(
+        <Box sx={{ mb: 2 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <Typography variant="h5" sx={{ fontWeight: 'bold' }}>调度任务中心</Typography>
           <Button
@@ -678,7 +871,7 @@ function Tasks() {
           </Button>
         </div>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          同一摄像头按引擎建任务：目标检测挂多条规则，姿态检测挂多个行为；不要为每个小场景单独建任务。
+          驾考可以建一个混合任务，同一路视频里同时配置检测场景和姿态场景。画面健康等仍是单独任务。
         </Typography>
 
         {/* 高级过滤栏 */}
@@ -695,7 +888,7 @@ function Tasks() {
                 </InputAdornment>
               ),
             }}
-            sx={{ flexGrow: 1, minWidth: 200 }}
+            sx={{ minWidth: 220}}
           />
 
           <Select
@@ -718,8 +911,8 @@ function Tasks() {
             displayEmpty
             sx={{ minWidth: 220 }}
           >
-            <MenuItem value="all">部署节点 (全平台)</MenuItem>
-            <MenuItem value="unassigned">⚠️ 尚未分配节点的任务</MenuItem>
+            <MenuItem value="all">节点 (全部)</MenuItem>
+            <MenuItem value="unassigned">未分配节点的任务</MenuItem>
             {nodes.map(node => (
               <MenuItem key={node.id} value={node.id}>
                 🖥️ {node.name}
@@ -727,13 +920,14 @@ function Tasks() {
             ))}
           </Select>
         </Paper>
-      </Grid>
-
-      <Grid item xs={12}>
-        <TableContainer component={Paper}>
-          <Table>
+        </Box>
+      )}
+    >
+        <TableContainer component={Paper} sx={scrollTableContainerSx}>
+          <Table stickyHeader>
             <TableHead>
               <TableRow>
+                <TableCell sx={{ width: 64 }}>序号</TableCell>
                 <TableCell>名称</TableCell>
                 <TableCell>视频源</TableCell>
                 <TableCell>算力节点</TableCell>
@@ -744,8 +938,9 @@ function Tasks() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredTasks.map((task) => (
+              {filteredTasks.map((task, index) => (
                 <TableRow key={task.id}>
+                  <TableCell>{index + 1}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                       <span>{task.name}</span>
@@ -769,7 +964,7 @@ function Tasks() {
                     })()}
                   </TableCell>
                   <TableCell>{nodes.find(n => n.id === task.edge_node_id)?.name || "无"}</TableCell>
-                  <TableCell>{algorithms.find(a => a.id === task.algorithm_id)?.name}</TableCell>
+                  <TableCell>{taskAlgorithmLabel(task, algorithms)}</TableCell>
                   <TableCell>
                     {(() => {
                       const scenes = getTaskSceneNames(task);
@@ -800,6 +995,11 @@ function Tasks() {
                         <PlayArrow />
                       </IconButton>
                     )}
+                    {taskPreviewEngines(task).length > 0 && (
+                      <Button size="small" variant="outlined" onClick={() => setPreviewTask(task)} sx={{ mx: 0.5 }}>
+                        预览
+                      </Button>
+                    )}
                     <IconButton onClick={() => handleViewDetail(task)}>
                       <Info />
                     </IconButton>
@@ -809,7 +1009,7 @@ function Tasks() {
             </TableBody>
           </Table>
         </TableContainer>
-      </Grid>
+    </ScrollableDataPage>
 
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
         <DialogTitle>
@@ -822,14 +1022,29 @@ function Tasks() {
                 <Alert severity="error">{formError}</Alert>
               </Grid>
             )}
-            <Grid item xs={12}>
-              <TextField
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth error={submitAttempted && !formData.edge_node_id}>
+              <Select
                 fullWidth
-                label="任务名称"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                margin="normal"
-              />
+                value={formData.edge_node_id || ''}
+                onChange={(e) => {
+                  const edge_node_id = e.target.value;
+                  setFormData((prev) => ({
+                    ...prev,
+                    edge_node_id,
+                    cameraId: '',
+                  }));
+                }}
+                displayEmpty
+              >
+                <MenuItem value="">选择运算节点</MenuItem>
+                {nodes.map(node => (
+                  <MenuItem key={node.id} value={node.id}>
+                    {node.name} ({node.status === 'online' ? '🟢 在线' : '🔴 离线'})
+                  </MenuItem>
+                ))}
+              </Select>
+              </FormControl>
             </Grid>
 
             <Grid item xs={12} md={6}>
@@ -843,13 +1058,15 @@ function Tasks() {
                   </Alert>
                 );
               })()}
+              <FormControl fullWidth error={submitAttempted && !formData.cameraId}>
               <Select
                 fullWidth
                 value={formData.cameraId}
                 onChange={(e) => setFormData({ ...formData, cameraId: e.target.value })}
                 displayEmpty
+                disabled={!formData.edge_node_id}
               >
-                <MenuItem value="">选择视频源</MenuItem>
+                <MenuItem value="">{formData.edge_node_id ? '选择视频源' : '请先选择运算节点'}</MenuItem>
                 {(() => {
                   const boundIds = getNodeBoundCameraIds();
                   const filtered = Array.isArray(boundIds) && boundIds.length > 0
@@ -864,9 +1081,114 @@ function Tasks() {
                   ));
                 })()}
               </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="任务名称"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                margin="normal"
+                error={submitAttempted && !String(formData.name || '').trim()}
+              />
             </Grid>
 
             <Grid item xs={12} md={6}>
+              <Select
+                fullWidth
+                value={formData.pipeline || 'single'}
+                onChange={(e) => {
+                  const pipeline = e.target.value;
+                  setFormError('');
+                  setFormData((prev) => ({
+                    ...prev,
+                    pipeline,
+                    algorithm_id: '',
+                    od_algorithm_id: '',
+                    pose_algorithm_id: '',
+                    algorithm_parameters: {
+                      ...(prev.algorithm_parameters || {}),
+                      rules: [],
+                      behaviors: [],
+                      fusions: [],
+                    },
+                  }));
+                }}
+              >
+                <MenuItem value="single">单算法</MenuItem>
+                <MenuItem value="exam">混合（检测 + 姿态）</MenuItem>
+              </Select>
+            </Grid>
+
+            {isExamPipeline ? (
+              <>
+                <Grid item xs={12} md={6}>
+                  <FormControl fullWidth error={submitAttempted && !formData.od_algorithm_id && !formData.pose_algorithm_id}>
+                  <Select
+                    fullWidth
+                    value={formData.od_algorithm_id || ''}
+                    onChange={(e) => {
+                      setFormError('');
+                      setFormData((prev) => ({
+                        ...prev,
+                        od_algorithm_id: e.target.value,
+                        algorithm_parameters: {
+                          ...(prev.algorithm_parameters || {}),
+                          rules: [],
+                          fusions: [],
+                        },
+                      }));
+                    }}
+                    displayEmpty
+                  >
+                    <MenuItem value="">目标检测算法（可选）</MenuItem>
+                    {odAlgorithms.map((algorithm) => (
+                      <MenuItem key={algorithm.id} value={algorithm.id}>{algorithm.name}</MenuItem>
+                    ))}
+                  </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <FormControl fullWidth error={submitAttempted && !formData.od_algorithm_id && !formData.pose_algorithm_id}>
+                  <Select
+                    fullWidth
+                    value={formData.pose_algorithm_id || ''}
+                    onChange={(e) => {
+                      setFormError('');
+                      setFormData((prev) => ({
+                        ...prev,
+                        pose_algorithm_id: e.target.value,
+                        algorithm_parameters: {
+                          ...(prev.algorithm_parameters || {}),
+                          behaviors: [],
+                        },
+                      }));
+                    }}
+                    displayEmpty
+                  >
+                    <MenuItem value="">姿态算法（可选）</MenuItem>
+                    {poseAlgorithms.map((algorithm) => (
+                      <MenuItem key={algorithm.id} value={algorithm.id}>{algorithm.name}</MenuItem>
+                    ))}
+                  </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <Alert severity="info">
+                    智能眼镜、智能手表需要同时选择目标检测和姿态算法，并指定类别。智能手表默认点击 1 次即有作弊嫌疑。
+                  </Alert>
+                  {cameraShareWarning(tasks, formData, editingTask) && (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                      {cameraShareWarning(tasks, formData, editingTask)}
+                    </Alert>
+                  )}
+                </Grid>
+              </>
+            ) : (
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth error={submitAttempted && !formData.algorithm_id}>
               <Select
                 fullWidth
                 value={formData.algorithm_id}
@@ -894,13 +1216,14 @@ function Tasks() {
                   </MenuItem>
                 ))}
               </Select>
+              </FormControl>
               {(() => {
                 const selectedAlg = selectedAlgorithm;
                 if (!selectedAlg) {
                   if (algorithms.length > 0 && taskAlgorithms.length === 0) {
                     return (
                       <Alert severity="warning" sx={{ mt: 1 }}>
-                        当前没有已发布的算法。请先到「算法」页绑定模型并发布（姿态算法需 YOLO-Pose 模型）。
+                        当前没有已发布的算法。请先到「算法」页绑定模型并发布。
                       </Alert>
                     );
                   }
@@ -913,7 +1236,6 @@ function Tasks() {
                     </Alert>
                   );
                 }
-                // vendor 响应含 model_id；未绑模型时提前提示
                 if (
                   selectedAlg.needs_model
                   && Object.prototype.hasOwnProperty.call(selectedAlg, 'model_id')
@@ -927,30 +1249,15 @@ function Tasks() {
                 }
                 const engine = selectedAlg.engine || selectedAlg.type;
                 const tip = engine === 'object_detection'
-                  ? '可在下方添加多条检测规则/场景（缺席、手机、帽子等），同一任务只推理一次。'
+                  ? '可在下方添加多条检测场景。倒地用目标检测。人员缺席、滞留、聚集请在姿态场景里添加。'
                   : engine === 'pose_behavior'
-                    ? '可在下方添加多个姿态行为/场景（张望、手托下巴等），同一任务只推理一次。姿态算法需已绑定并发布 Pose 模型。'
+                    ? '可在下方添加多个姿态场景。智能眼镜、智能手表请用混合任务。'
                     : null;
                 if (!tip) return null;
                 return <Alert severity="info" sx={{ mt: 1 }}>{tip}</Alert>;
               })()}
             </Grid>
-
-            <Grid item xs={12} md={6}>
-              <Select
-                fullWidth
-                value={formData.edge_node_id || ''}
-                onChange={(e) => setFormData({ ...formData, edge_node_id: e.target.value })}
-                displayEmpty
-              >
-                <MenuItem value="">选择运算节点</MenuItem>
-                {nodes.map(node => (
-                  <MenuItem key={node.id} value={node.id}>
-                    {node.name} ({node.status === 'online' ? '🟢 在线' : '🔴 离线'})
-                  </MenuItem>
-                ))}
-              </Select>
-            </Grid>
+            )}
 
             <Grid item xs={12} md={6}>
               <TextField
@@ -960,6 +1267,7 @@ function Tasks() {
                 value={formData.confidence}
                 onChange={(e) => setFormData({ ...formData, confidence: parseFloat(e.target.value) })}
                 inputProps={{ step: 0.1, min: 0, max: 1 }}
+                helperText="场景未单独设置时使用；场景有值时以场景为准"
               />
             </Grid>
 
@@ -1000,18 +1308,6 @@ function Tasks() {
                     ? '已设为定时任务（场景时段优先）'
                     : '留空则需手动启停'
                 }
-              />
-            </Grid>
-
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.notificationEnabled}
-                    onChange={(e) => setFormData({ ...formData, notificationEnabled: e.target.checked })}
-                  />
-                }
-                label="启用通知"
               />
             </Grid>
 
@@ -1058,7 +1354,7 @@ function Tasks() {
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography>
-                      算法：{algorithms.find(a => a.id === selectedTask.algorithm_id)?.name}
+                      算法：{taskAlgorithmLabel(selectedTask, algorithms)}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
@@ -1086,7 +1382,9 @@ function Tasks() {
           <Button onClick={() => setOpenDetailDialog(false)}>关闭</Button>
         </DialogActions>
       </Dialog>
-    </Grid>
+
+      <DetectionPreviewDialog task={previewingTask} onClose={() => setPreviewTask(null)} />
+    </>
   );
 }
 

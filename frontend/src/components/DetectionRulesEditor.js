@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Box, Button, Chip, FormControlLabel, Grid, MenuItem, Paper, Select,
+  Box, Button, Chip, FormControl, FormControlLabel, Grid, InputLabel, MenuItem, Paper, Select,
   Switch, TextField, Typography, IconButton
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
@@ -14,7 +14,30 @@ const TYPE_FIELDS = {
   crowd_count: ['min_count', 'seconds'],
 };
 
-function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChange, catalogPresets }) {
+function normalizeLabelmap(raw) {
+  if (Array.isArray(raw)) {
+    return raw.filter((item) => item && Number.isInteger(item.id));
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw)
+      .map(([id, name]) => ({ id: Number(id), name: String(name) }))
+      .filter((item) => Number.isInteger(item.id));
+  }
+  return [];
+}
+
+function labelsForScenes(labelmap, allowedIds) {
+  const all = normalizeLabelmap(labelmap);
+  const selected = (Array.isArray(allowedIds) ? allowedIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id));
+  if (!selected.length) return all;
+  const allowed = new Set(selected);
+  const filtered = all.filter((item) => allowed.has(item.id));
+  return filtered.length ? filtered : selected.map((id) => ({ id, name: String(id) }));
+}
+
+function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChange, catalogPresets, taskConfidence, labelmap, highlightMissing = false }) {
   const [addPreset, setAddPreset] = useState('');
 
   const scenePresets = useMemo(() => {
@@ -24,6 +47,10 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
   }, [algorithm, catalogPresets]);
 
   const rules = Array.isArray(algorithmParameters?.rules) ? algorithmParameters.rules : [];
+  const labels = useMemo(
+    () => labelsForScenes(labelmap, algorithm?.labels),
+    [labelmap, algorithm],
+  );
 
   const updateRules = (nextRules) => {
     onChange({
@@ -41,6 +68,7 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       name: preset.name,
       scene_preset_id: preset.id,
       ...(preset.defaults || {}),
+      class_ids: [],
       enabled: true,
       detection_region: null,
       schedule_start: '',
@@ -63,7 +91,7 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       <Grid item xs={12}>
         <Typography variant="subtitle2" gutterBottom>检测场景</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          从预设添加场景（如人员缺席、识别手机）。同一任务只推理一次；场景可单独设置运行时段（优先于任务时段）。
+          从预设添加场景。每个场景都要选择检测类别。场景时段、置信度优先于任务。人员缺席、滞留、聚集请在姿态场景里添加。
         </Typography>
       </Grid>
 
@@ -76,6 +104,10 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
       {rules.map((rule, index) => {
         const fields = TYPE_FIELDS[rule.type] || [];
         const hasRegion = Boolean(rule.detection_region?.points?.length);
+        const selectedClass = Array.isArray(rule.class_ids) && rule.class_ids.length
+          ? Number(rule.class_ids[0])
+          : '';
+        const classMissing = rule.enabled !== false && (selectedClass === '' || !Number.isInteger(selectedClass));
         return (
           <Grid item xs={12} key={rule.id || index}>
             <Paper variant="outlined" sx={{ p: 2 }}>
@@ -104,6 +136,45 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
               </Box>
 
               <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  {labels.length > 0 ? (
+                    <FormControl fullWidth size="small" error={highlightMissing && classMissing}>
+                      <InputLabel>类别</InputLabel>
+                      <Select
+                        label="类别"
+                        value={selectedClass}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          patchRule(index, { class_ids: id === '' ? [] : [Number(id)] });
+                        }}
+                      >
+                        <MenuItem value="">选择类别</MenuItem>
+                        {labels.map((label) => (
+                          <MenuItem key={label.id} value={label.id}>
+                            {label.name}（{label.id}）
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  ) : (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="类别 ID"
+                      value={selectedClass === '' ? '' : String(selectedClass)}
+                      onChange={(e) => {
+                        const raw = e.target.value.trim();
+                        if (!raw) {
+                          patchRule(index, { class_ids: [] });
+                          return;
+                        }
+                        const id = parseInt(raw, 10);
+                        patchRule(index, { class_ids: Number.isInteger(id) ? [id] : [] });
+                      }}
+                      error={highlightMissing && classMissing}
+                    />
+                  )}
+                </Grid>
                 {fields.includes('linger_seconds') && (
                   <Grid item xs={12} md={4}>
                     <TextField
@@ -156,6 +227,22 @@ function DetectionRulesEditor({ cameraId, algorithm, algorithmParameters, onChan
                     />
                   </Grid>
                 )}
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="场景置信度"
+                    value={rule.confidence ?? ''}
+                    placeholder={taskConfidence != null ? String(taskConfidence) : '跟随任务'}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      patchRule(index, { confidence: v === '' ? null : parseFloat(v) });
+                    }}
+                    inputProps={{ step: 0.05, min: 0, max: 1 }}
+                    helperText="留空用任务置信度"
+                  />
+                </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField
                     fullWidth
