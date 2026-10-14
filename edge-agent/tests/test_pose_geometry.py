@@ -386,11 +386,12 @@ class DeskStandingTest(unittest.TestCase):
 
 class FingerPointTest(unittest.TestCase):
     def _reaching(self, **extra):
-        return _straight_legs(
+        pose = dict(
             r_elbow=(200, 160, 0.9),
             r_wrist=(190, 250, 0.9),
-            **extra,
         )
+        pose.update(extra)
+        return _straight_legs(**pose)
 
     def test_forward_reach_with_open_elbow_counts(self):
         points = self._reaching()
